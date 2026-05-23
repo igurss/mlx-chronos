@@ -1,0 +1,108 @@
+name: Validate Benchmark Result
+
+on:
+  pull_request:
+    paths:
+      - 'results/submitted/**.json'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pydantic
+
+      - name: Validate submitted results
+        run: |
+          python - <<'EOF'
+          import json
+          import sys
+          from pathlib import Path
+          from pydantic import BaseModel, Field, ValidationError
+          from typing import Optional
+
+          class Hardware(BaseModel):
+              chip: str
+              memory_gb: float
+              macos_version: str
+              python_version: str
+
+          class Engine(BaseModel):
+              name: str
+              version: str
+
+          class Model(BaseModel):
+              name: str
+              quantization: str
+              size_gb: float
+
+          class TrialStats(BaseModel):
+              mean: float
+              stddev: float
+              min: float
+              max: float
+
+          class Metrics(BaseModel):
+              ttft_cold: TrialStats
+              ttft_cached: TrialStats
+              tokens_per_second: TrialStats
+              ram_peak_gb: float
+
+          class Trials(BaseModel):
+              count: int
+              ttft_cold_raw: list[float]
+              ttft_cached_raw: list[float]
+              tokens_per_second_raw: list[float]
+
+          class Meta(BaseModel):
+              chronos_version: str
+              timestamp: str
+              notes: Optional[str] = None
+
+          class BenchmarkResult(BaseModel):
+              hardware: Hardware
+              engine: Engine
+              model: Model
+              metrics: Metrics
+              trials: Trials
+              meta: Meta
+
+          results_dir = Path("results/submitted")
+          json_files = list(results_dir.glob("*.json"))
+
+          if not json_files:
+              print("No JSON files found in results/submitted/")
+              sys.exit(1)
+
+          errors = []
+          for path in json_files:
+              try:
+                  data = json.loads(path.read_text())
+                  BenchmarkResult(**data)
+                  # Consistency check
+                  t = data["trials"]
+                  if not (t["count"] == len(t["ttft_cold_raw"]) == len(t["ttft_cached_raw"]) == len(t["tokens_per_second_raw"])):
+                      raise ValueError(f"trials.count does not match raw data lengths in {path.name}")
+                  print(f"OK: {path.name}")
+              except ValidationError as e:
+                  print(f"FAIL: {path.name}")
+                  print(e)
+                  errors.append(path.name)
+              except Exception as e:
+                  print(f"FAIL: {path.name} — {e}")
+                  errors.append(path.name)
+
+          if errors:
+              print(f"\n{len(errors)} file(s) failed validation.")
+              sys.exit(1)
+          else:
+              print(f"\nAll {len(json_files)} file(s) validated successfully.")
+          EOF
