@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime
 
 
 class Hardware(BaseModel):
@@ -21,12 +20,25 @@ class Model(BaseModel):
     size_gb: float = Field(..., description="Model size on disk in GB")
 
 
+class TrialStats(BaseModel):
+    mean: float = Field(..., description="Mean across trials")
+    stddev: float = Field(..., description="Standard deviation across trials")
+    min: float = Field(..., description="Minimum observed value")
+    max: float = Field(..., description="Maximum observed value")
+
+
 class Metrics(BaseModel):
-    ttft_cold: float = Field(..., description="Time to first token, cold start (seconds)")
-    ttft_cached: Optional[float] = Field(None, description="Time to first token, cached (seconds)")
-    tokens_per_second: float = Field(..., description="Generation throughput (tok/s)")
-    tool_calling_rate: Optional[float] = Field(None, description="Tool calling success rate (0.0 to 1.0)")
+    ttft_cold: TrialStats = Field(..., description="Time to first token, cold (seconds)")
+    ttft_cached: TrialStats = Field(..., description="Time to first token, cached (seconds)")
+    tokens_per_second: TrialStats = Field(..., description="Generation throughput (tok/s)")
     ram_peak_gb: float = Field(..., description="Peak RAM usage during inference (GB)")
+
+
+class Trials(BaseModel):
+    count: int = Field(..., description="Number of trials run")
+    ttft_cold_raw: list[float] = Field(..., description="Raw cold TTFT values per trial")
+    ttft_cached_raw: list[float] = Field(..., description="Raw cached TTFT values per trial")
+    tokens_per_second_raw: list[float] = Field(..., description="Raw tok/s values per trial")
 
 
 class Meta(BaseModel):
@@ -40,6 +52,7 @@ class BenchmarkResult(BaseModel):
     engine: Engine
     model: Model
     metrics: Metrics
+    trials: Trials
     meta: Meta
 
 
@@ -53,31 +66,35 @@ EXAMPLE_RESULT = {
     },
     "engine": {
         "name": "omlx",
-        "version": "0.3.8"
+        "version": "0.3.9"
     },
     "model": {
-        "name": "Qwen3.5-4B",
+        "name": "Qwen3.5-4B-OptiQ-4bit",
         "quantization": "4bit",
-        "size_gb": 2.4
+        "size_gb": 3.2
     },
     "metrics": {
-        "ttft_cold": 0.32,
-        "ttft_cached": 0.16,
-        "tokens_per_second": 98.5,
-        "tool_calling_rate": 1.0,
-        "ram_peak_gb": 3.1
+        "ttft_cold": {"mean": 0.041, "stddev": 0.015, "min": 0.028, "max": 0.066},
+        "ttft_cached": {"mean": 0.010, "stddev": 0.002, "min": 0.007, "max": 0.012},
+        "tokens_per_second": {"mean": 18.44, "stddev": 0.097, "min": 18.27, "max": 18.51},
+        "ram_peak_gb": 7.22
+    },
+    "trials": {
+        "count": 5,
+        "ttft_cold_raw": [0.044, 0.066, 0.028, 0.039, 0.030],
+        "ttft_cached_raw": [0.011, 0.007, 0.008, 0.010, 0.012],
+        "tokens_per_second_raw": [18.48, 18.27, 18.51, 18.48, 18.46]
     },
     "meta": {
         "chronos_version": "0.1.0",
-        "timestamp": "2026-05-23T10:00:00Z",
-        "notes": "Tested with default oMLX settings"
+        "timestamp": "2026-05-23T15:08:36Z",
+        "notes": "Test run"
     }
 }
 
 
 if __name__ == "__main__":
     import json
-    # Validate the example result against the schema
     result = BenchmarkResult(**EXAMPLE_RESULT)
     print(json.dumps(result.model_dump(), indent=2))
     print("\nSchema validation: OK")

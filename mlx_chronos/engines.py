@@ -139,7 +139,6 @@ class OMLXEngine(BaseEngine):
 
     # Standard prompts used across all engines for consistency
     COLD_PROMPT = "Explain the concept of unified memory in Apple Silicon in one sentence."
-    THROUGHPUT_PROMPT = "Write a detailed explanation of how transformer attention works."
 
     def is_installed(self) -> bool:
         """Check if omlx CLI is available."""
