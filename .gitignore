@@ -221,3 +221,6 @@ __marimo__/
 
 # mlx-chronos local results (not yet submitted)
 results/local/
+
+# Local test results — not for submission
+results/submitted/*.json
