@@ -90,12 +90,11 @@ def save_result(result: BenchmarkResult) -> Path:
 
 
 if __name__ == "__main__":
-    # Quick test — runs only if oMLX server is already running
     result = run_benchmark(
         engine_name="omlx",
-        model_name="Qwen3.5-4B",
+        model_name="Qwen3.5-4B-OptiQ-4bit",
         model_quantization="4bit",
-        model_size_gb=2.4,
+        model_size_gb=3.2,
         notes="Test run from mlx-chronos development"
     )
 

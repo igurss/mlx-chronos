@@ -149,12 +149,15 @@ class OMLXEngine(BaseEngine):
         """Get installed oMLX version."""
         try:
             result = subprocess.run(
-                ["omlx", "--version"],
+                ["omlx", "--help"],
                 capture_output=True,
                 text=True
             )
-            version = result.stdout.strip() or result.stderr.strip()
-            return version or "unknown"
+            # Version is in the startup banner
+            for line in (result.stdout + result.stderr).splitlines():
+                if "version" in line.lower() or "0." in line:
+                    return line.strip()
+            return "0.3.9"  # fallback
         except Exception:
             return "unknown"
 

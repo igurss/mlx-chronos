@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "mlx-chronos"
+version = "0.1.0"
+description = "Benchmark suite and community leaderboard for local LLM inference on Apple Silicon"
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.24.0",
+    "psutil>=5.9.0",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+mlx-chronos = "mlx_chronos.cli:main"
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mlx_chronos*"]

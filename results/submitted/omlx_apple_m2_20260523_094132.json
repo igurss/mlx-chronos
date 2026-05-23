@@ -1,0 +1,29 @@
+{
+  "hardware": {
+    "chip": "Apple M2",
+    "memory_gb": 8.0,
+    "macos_version": "26.5",
+    "python_version": "3.14.4"
+  },
+  "engine": {
+    "name": "omlx",
+    "version": "0.3.9"
+  },
+  "model": {
+    "name": "Qwen3.5-4B-OptiQ-4bit",
+    "quantization": "4bit",
+    "size_gb": 3.2
+  },
+  "metrics": {
+    "ttft_cold": 0.071,
+    "ttft_cached": 0.007,
+    "tokens_per_second": 9.43,
+    "tool_calling_rate": null,
+    "ram_peak_gb": 7.32
+  },
+  "meta": {
+    "chronos_version": "0.1.0",
+    "timestamp": "2026-05-23T09:41:32.569253+00:00",
+    "notes": "Test run from mlx-chronos development"
+  }
+}
