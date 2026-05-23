@@ -70,7 +70,7 @@ mlx-chronos report
 - [x] Project structure
 - [x] Hardware detection (chip, RAM, macOS)
 - [x] JSON result schema (Pydantic)
-- [ ] oMLX integration
+- [X] oMLX integration
 - [ ] Rapid-MLX integration
 - [ ] mlx-lm integration
 - [ ] GitHub Actions result validator
