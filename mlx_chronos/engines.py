@@ -4,6 +4,7 @@ import shutil
 import json
 import httpx
 import psutil
+import warnings
 from abc import ABC, abstractmethod
 
 
@@ -111,6 +112,11 @@ class BaseEngine(ABC):
             pass
 
         mem = psutil.virtual_memory()
+        # Fallback: could not find engine process — warn and return system used memory
+        warnings.warn(
+            f"Could not locate engine process listening on port {self.port}; returning system used memory as fallback",
+            UserWarning,
+        )
         used_gb = (mem.total - mem.available) / (1024 ** 3)
         return round(used_gb, 2)
 
@@ -165,6 +171,14 @@ class OMLXEngine(BaseEngine):
 
         print(f"  Running cold TTFT...")
         ttft_cold = self.measure_ttft(self.COLD_PROMPT, model=model)
+
+        # Warm up to encourage cache population before measuring cached TTFT
+        print(f"  Warmup call to populate caches...")
+        try:
+            _ = self.measure_ttft(self.COLD_PROMPT, model=model)
+        except Exception:
+            # ignore warmup failures; proceed to cached measurement
+            pass
 
         print(f"  Running cached TTFT...")
         ttft_cached = self.measure_ttft(self.COLD_PROMPT, model=model)  # same prompt = cache hit
