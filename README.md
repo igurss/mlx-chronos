@@ -23,10 +23,30 @@ contribute to the community leaderboard.
 - [mlx-lm](https://github.com/ml-explore/mlx-examples)
 
 **Metrics measured:**
-- **TTFT** — Time to First Token (cold and cached)
-- **tok/s** — Generation throughput
-- **Tool calling** — Success rate across model families
+- **TTFT** — Time to First Token (cold and cached, with statistics)
+- **tok/s** — Generation throughput (mean, stddev, min, max across trials)
 - **RAM usage** — Peak memory during inference
+- **Tool calling** — Success rate *(coming in v0.2)*
+
+---
+
+## How It Works
+
+When you run mlx-Chronos, it executes four measurements against the running engine:
+
+**Cold TTFT** — sends a prompt to the model and measures the time from request
+to first real token. Each trial uses a unique prompt to avoid cache hits.
+
+**Cached TTFT** — sends the same fixed prompt on every trial. A priming call
+loads it into cache first. This measures true cache performance.
+
+**Throughput (tok/s)** — measures tokens generated per second using a standard
+fixed prompt, identical across all engines and versions.
+
+**RAM peak** — measures memory used by the engine process during inference.
+
+All metrics are run over multiple trials and reported with mean, stddev, min,
+and max. Results are saved as structured JSON ready for community submission.
 
 ---
 
@@ -34,8 +54,8 @@ contribute to the community leaderboard.
 
 > 🚧 Results coming soon — be the first to submit yours.
 
-| Hardware | Engine | Model | tok/s | TTFT cold | TTFT cached |
-|----------|--------|-------|-------|-----------|-------------|
+| Hardware | Engine | Model | tok/s mean | TTFT cold | TTFT cached |
+|----------|--------|-------|------------|-----------|-------------|
 | — | — | — | — | — | — |
 
 ---
@@ -46,12 +66,15 @@ contribute to the community leaderboard.
 # Install
 pip install git+https://github.com/igurss/mlx-chronos.git
 
-# Run benchmarks
-mlx-chronos run
+# Check available engines
+mlx-chronos engines
 
-# View your results
-mlx-chronos report
+# Run benchmark
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --size 3.2
 ```
+
+> **Note:** the engine server must be running before you launch mlx-chronos.
+> See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions.
 
 ---
 
@@ -63,6 +86,15 @@ mlx-chronos report
 4. GitHub Actions validates your result automatically
 5. Once merged, the leaderboard updates
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions.
+
+---
+
+## Benchmark Methodology
+
+See [docs/methodology.md](docs/methodology.md) for a full explanation of what
+is measured, how, and why.
+
 ---
 
 ## Roadmap
@@ -70,7 +102,9 @@ mlx-chronos report
 - [x] Project structure
 - [x] Hardware detection (chip, RAM, macOS)
 - [x] JSON result schema (Pydantic)
-- [X] oMLX integration
+- [x] oMLX integration
+- [x] Statistical benchmark (repeated trials, mean/stddev/min/max)
+- [x] CLI (`mlx-chronos run`, `mlx-chronos engines`)
 - [ ] Rapid-MLX integration
 - [ ] mlx-lm integration
 - [ ] GitHub Actions result validator
