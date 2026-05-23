@@ -68,7 +68,7 @@ mlx-chronos report
 ## Roadmap
 
 - [x] Project structure
-- [ ] Hardware detection (chip, RAM, macOS)
+- [x] Hardware detection (chip, RAM, macOS)
 - [ ] oMLX integration
 - [ ] Rapid-MLX integration  
 - [ ] mlx-lm integration
