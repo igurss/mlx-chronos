@@ -17,5 +17,24 @@
     "chronos_version": "0.1.0",
     "date": "2026-05-24",
     "notes": "First official result \u2014 Apple M2 8GB"
+  },
+  {
+    "chip": "Apple M2",
+    "memory_gb": 8.0,
+    "engine": "rapid-mlx",
+    "engine_version": "rapid-mlx 0.6.66",
+    "model": "Qwen3.5-4B-OptiQ-4bit",
+    "quantization": "4bit",
+    "size_gb": 3.2,
+    "tps": 20.77,
+    "tps_stddev": 0.19,
+    "ttft_cold": 0.022,
+    "ttft_cached": 0.094,
+    "ram_peak_gb": 6.88,
+    "ram_is_process_rss": false,
+    "trials": 5,
+    "chronos_version": "0.1.0",
+    "date": "2026-05-24",
+    "notes": "First official result \u2014 Apple M2 8GB"
   }
 ]
