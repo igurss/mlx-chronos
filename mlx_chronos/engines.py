@@ -2,10 +2,13 @@ import time
 import subprocess
 import shutil
 import json
+import logging
 import httpx
 import psutil
-import warnings
 from abc import ABC, abstractmethod
+
+
+logger = logging.getLogger("mlx_chronos")
 
 
 # ─── Base class ───────────────────────────────────────────────────────────────
@@ -41,7 +44,10 @@ class BaseEngine(ABC):
         return False
 
     def measure_ttft(self, prompt: str, model: str = "default") -> float:
-        """Measure Time to First Token in seconds."""
+        """
+        Measure Time to First Token in seconds.
+        Raises RuntimeError if no valid token is received from the stream.
+        """
         payload = {
             "model": self._request_model_name(model),
             "messages": [{"role": "user", "content": prompt}],
@@ -71,7 +77,10 @@ class BaseEngine(ABC):
                     delta = choices[0].get("delta", {})
                     if delta.get("content") or delta.get("tool_calls") or delta.get("role"):
                         return round(time.time() - start, 3)
-        return -1.0
+        raise RuntimeError(
+            f"No valid token received from {self.name} stream. "
+            f"Check that the model is loaded and responding correctly."
+        )
 
     def measure_tokens_per_second(self, prompt: str, model: str = "default", max_tokens: int = 100) -> float:
         """Measure generation throughput in tokens per second."""
@@ -116,6 +125,10 @@ class BaseEngine(ABC):
 
         mem = psutil.virtual_memory()
         used_gb = (mem.total - mem.available) / (1024 ** 3)
+        logger.warning(
+            f"Could not locate engine process on port {self.port}; "
+            f"returning system used memory as fallback."
+        )
         return round(used_gb, 2), True
 
     @abstractmethod
@@ -124,8 +137,8 @@ class BaseEngine(ABC):
         pass
 
     @abstractmethod
-    def run_benchmark(self, model: str) -> dict:
-        """Run the full benchmark suite and return a metrics dict."""
+    def get_version(self) -> str:
+        """Return the installed engine version string."""
         pass
 
 
@@ -135,67 +148,22 @@ class OMLXEngine(BaseEngine):
     name = "omlx"
     port = 8000
 
-    # Standard prompts used across all engines for consistency
-    COLD_PROMPT = "Explain the concept of unified memory in Apple Silicon in one sentence."
-
     def is_installed(self) -> bool:
-        """Check if omlx CLI is available."""
         return shutil.which("omlx") is not None
 
     def get_version(self) -> str:
-        """Get installed oMLX version."""
         try:
             result = subprocess.run(
                 ["omlx", "--help"],
                 capture_output=True,
                 text=True
             )
-            # Version is in the startup banner
             for line in (result.stdout + result.stderr).splitlines():
                 if "version" in line.lower() or "0." in line:
                     return line.strip()
-            return "0.3.9"  # fallback
+            return "unknown"
         except Exception:
             return "unknown"
-
-    def run_benchmark(self, model: str) -> dict:
-        """
-        Run the full benchmark suite against oMLX.
-        Assumes oMLX server is already running with the specified model.
-        """
-        if not self.is_server_running():
-            raise RuntimeError(
-                f"oMLX server not running on port {self.port}. "
-                f"Start it with: omlx serve --model-dir ~/models"
-            )
-
-        print(f"  Running cold TTFT...")
-        ttft_cold = self.measure_ttft(self.COLD_PROMPT, model=model)
-
-        # Warm up to encourage cache population before measuring cached TTFT
-        print(f"  Warmup call to populate caches...")
-        try:
-            _ = self.measure_ttft(self.COLD_PROMPT, model=model)
-        except Exception:
-            # ignore warmup failures; proceed to cached measurement
-            pass
-
-        print(f"  Running cached TTFT...")
-        ttft_cached = self.measure_ttft(self.COLD_PROMPT, model=model)  # same prompt = cache hit
-
-        print(f"  Measuring throughput...")
-        tps = self.measure_tokens_per_second(self.THROUGHPUT_PROMPT, model=model)
-
-        print(f"  Measuring RAM...")
-        ram = self.measure_ram_peak()
-
-        return {
-            "ttft_cold": ttft_cold,
-            "ttft_cached": ttft_cached,
-            "tokens_per_second": tps,
-            "tool_calling_rate": None,  # to be implemented
-            "ram_peak_gb": ram,
-        }
 
 
 # ─── Rapid-MLX ────────────────────────────────────────────────────────────────
@@ -204,18 +172,10 @@ class RapidMLXEngine(BaseEngine):
     name = "rapid-mlx"
     port = 8001
 
-    COLD_PROMPT = "Explain the concept of unified memory in Apple Silicon in one sentence."
-    THROUGHPUT_PROMPT = (
-        "Explain in detail how the attention mechanism works in transformer "
-        "neural networks, including the role of queries, keys, and values."
-    )
-
     def is_installed(self) -> bool:
-        """Check if rapid-mlx CLI is available."""
         return shutil.which("rapid-mlx") is not None
 
     def get_version(self) -> str:
-        """Get installed Rapid-MLX version."""
         try:
             result = subprocess.run(
                 ["rapid-mlx", "version"],
@@ -225,43 +185,6 @@ class RapidMLXEngine(BaseEngine):
             return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"
-
-    def run_benchmark(self, model: str) -> dict:
-        """
-        Run the full benchmark suite against Rapid-MLX.
-        Assumes Rapid-MLX server is already running on port 8001.
-        """
-        if not self.is_server_running():
-            raise RuntimeError(
-                f"Rapid-MLX server not running on port {self.port}. "
-                f"Start it with: rapid-mlx serve {model} --port 8001"
-            )
-
-        print(f"  Running cold TTFT...")
-        ttft_cold = self.measure_ttft(self.COLD_PROMPT, model=model)
-
-        print(f"  Warmup call...")
-        try:
-            self.measure_ttft(self.COLD_PROMPT, model=model)
-        except Exception:
-            pass
-
-        print(f"  Running cached TTFT...")
-        ttft_cached = self.measure_ttft(self.COLD_PROMPT, model=model)
-
-        print(f"  Measuring throughput...")
-        tps = self.measure_tokens_per_second(self.THROUGHPUT_PROMPT, model=model)
-
-        print(f"  Measuring RAM...")
-        ram = self.measure_ram_peak()
-
-        return {
-            "ttft_cold": ttft_cold,
-            "ttft_cached": ttft_cached,
-            "tokens_per_second": tps,
-            "tool_calling_rate": None,
-            "ram_peak_gb": ram,
-        }
 
 
 # ─── Registry ─────────────────────────────────────────────────────────────────
@@ -275,11 +198,17 @@ ENGINES = {
 def get_engine(name: str) -> BaseEngine:
     """Return an engine instance by name."""
     if name not in ENGINES:
-        raise ValueError(f"Unknown engine: '{name}'. Available: {list(ENGINES.keys())}")
+        raise ValueError(
+            f"Unknown engine: '{name}'. Available: {list(ENGINES.keys())}"
+        )
     return ENGINES[name]()
 
 
 if __name__ == "__main__":
-    engine = OMLXEngine()
-    print(f"oMLX installed: {engine.is_installed()}")
-    print(f"oMLX server running: {engine.is_server_running()}")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for name, cls in ENGINES.items():
+        engine = cls()
+        installed = engine.is_installed()
+        running = engine.is_server_running() if installed else False
+        status = "running" if running else ("installed" if installed else "not installed")
+        logger.info(f"{name:<15} {status}")

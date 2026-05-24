@@ -2,9 +2,18 @@ import json
 import statistics
 from datetime import datetime, timezone
 from pathlib import Path
-from mlx_chronos.schema import BenchmarkResult
+import logging
+
 from mlx_chronos.detect import detect_hardware
 from mlx_chronos.engines import get_engine
+from mlx_chronos.schema import BenchmarkResult
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = logging.getLogger("mlx_chronos")
 
 # mlx-chronos version
 VERSION = "0.1.0"
@@ -71,17 +80,17 @@ def run_benchmark(
             f"Requested: {trials}"
         )
 
-    print(f"\n{'='*50}")
-    print(f"  mlx-Chronos Benchmark")
-    print(f"  Engine : {engine_name}")
-    print(f"  Model  : {model_name} ({model_quantization})")
-    print(f"  Trials : {trials}")
-    print(f"{'='*50}\n")
+    logger.info(f"\n{'='*50}")
+    logger.info(f"  mlx-Chronos Benchmark")
+    logger.info(f"  Engine : {engine_name}")
+    logger.info(f"  Model  : {model_name} ({model_quantization})")
+    logger.info(f"  Trials : {trials}")
+    logger.info(f"{'='*50}\n")
 
     # 1. Detect hardware
-    print("Detecting hardware...")
+    logger.info("Detecting hardware...")
     hw = detect_hardware()
-    print(f"  {hw['chip']} — {hw['memory_gb']}GB — macOS {hw['macos_version']}\n")
+    logger.info(f"  {hw['chip']} — {hw['memory_gb']}GB — macOS {hw['macos_version']}\n")
 
     # 2. Get engine
     engine = get_engine(engine_name)
@@ -97,16 +106,16 @@ def run_benchmark(
 
     # 3. Engine version
     version = engine.get_version()
-    print(f"Engine version: {version}\n")
+    logger.info(f"Engine version: {version}\n")
 
     # 4. Warmup phase — 2 calls with the throughput prompt, not recorded
-    print("Warming up (2 calls, not recorded)...")
+    logger.info("Warming up (2 calls, not recorded)...")
     for _ in range(2):
         try:
             engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name, max_tokens=30)
         except Exception:
             pass
-    print("  Done.\n")
+    logger.info("  Done.\n")
 
     # 5. Run trials
     ttft_cold_trials = []
@@ -117,32 +126,32 @@ def run_benchmark(
     cached_prompt = "Explain the concept of unified memory in Apple Silicon in one sentence."
 
     # Priming call — load cached_prompt into engine cache, not recorded
-    print("Priming cache for cached TTFT measurement...")
+    logger.info("Priming cache for cached TTFT measurement...")
     try:
         engine.measure_ttft(cached_prompt, model=model_name)
     except Exception:
         pass
-    print("  Done.\n")
+    logger.info("  Done.\n")
 
     for i in range(trials):
-        print(f"Trial {i + 1}/{trials}")
+        logger.info(f"Trial {i + 1}/{trials}")
 
         # Cold TTFT — unique prompt per trial, never seen before
         cold_prompt = COLD_PROMPTS[i]
-        print(f"  Cold TTFT (unique prompt)...")
+        logger.info(f"  Cold TTFT (unique prompt)...")
         ttft_cold_trials.append(engine.measure_ttft(cold_prompt, model=model_name))
 
         # Cached TTFT — same prompt every trial
-        print(f"  Cached TTFT (fixed prompt)...")
+        logger.info(f"  Cached TTFT (fixed prompt)...")
         ttft_cached_trials.append(engine.measure_ttft(cached_prompt, model=model_name))
 
         # Throughput
-        print(f"  Throughput...")
+        logger.info(f"  Throughput...")
         tps_trials.append(
             engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
         )
 
-    print()
+    logger.info("")
 
     # 6. Compute statistics
     ttft_cold_stats = compute_stats(ttft_cold_trials)
@@ -150,10 +159,10 @@ def run_benchmark(
     tps_stats = compute_stats(tps_trials)
 
     # 7. RAM after trials
-    print("Measuring RAM...")
+    logger.info("Measuring RAM...")
     ram, ram_is_fallback = engine.measure_ram_peak()
     if ram_is_fallback:
-        print("  Warning: RAM measured as system fallback, not process RSS.")
+        logger.warning("  Warning: RAM measured as system fallback, not process RSS.")
 
     # Normalize model name — strip path if full path was passed
     model_display_name = model_name.split("/")[-1] if "/" in model_name else model_name
@@ -208,7 +217,7 @@ def save_result(result: dict) -> Path:
     with open(output_path, "w") as f:
         json.dump(result, f, indent=2)
 
-    print(f"\nResult saved to: {output_path}")
+    logger.info(f"\nResult saved to: {output_path}")
     return output_path
 
 
@@ -224,5 +233,5 @@ if __name__ == "__main__":
 
     path = save_result(result)
 
-    print("\n--- Result ---")
-    print(json.dumps(result, indent=2))
+    logger.info("\n--- Result ---")
+    logger.info(json.dumps(result, indent=2))
