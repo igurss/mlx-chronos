@@ -1,8 +1,12 @@
 import argparse
 import sys
+import logging
 
 from mlx_chronos.benchmark import run_benchmark, save_result
 from mlx_chronos.engines import ENGINES
+
+
+logger = logging.getLogger("mlx_chronos")
 
 
 def cmd_run(args):
@@ -19,23 +23,24 @@ def cmd_run(args):
         notes=args.notes,
     )
     path = save_result(result)
-    print(f"\nDone. Result saved to: {path}")
+    logger.info(f"\nDone. Result saved to: {path}")
 
 
 def cmd_engines(args):
     """List available engines and their status."""
     from mlx_chronos.engines import ENGINES, get_engine
-    print("\nAvailable engines:\n")
+    logger.info("\nAvailable engines:\n")
     for name in ENGINES:
         engine = get_engine(name)
         installed = engine.is_installed()
         running = engine.is_server_running() if installed else False
         status = "running" if running else ("installed" if installed else "not installed")
-        print(f"  {name:<15} {status}")
-    print()
+        logger.info(f"  {name:<15} {status}")
+    logger.info("")
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
         prog="mlx-chronos",
         description="Benchmark suite for MLX inference engines on Apple Silicon.",
