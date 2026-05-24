@@ -106,8 +106,8 @@ is measured, how, and why.
 - [x] CLI (`mlx-chronos run`, `mlx-chronos engines`)
 - [X] Rapid-MLX integration
 - [ ] mlx-lm integration
-- [ ] GitHub Actions result validator
-- [ ] GitHub Pages leaderboard
+- [X] GitHub Actions result validator
+- [X] GitHub Pages leaderboard
 
 ---
 

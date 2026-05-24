@@ -19,7 +19,7 @@ logger = logging.getLogger("mlx_chronos")
 VERSION = "0.1.0"
 
 # Results output directory
-RESULTS_DIR = Path(__file__).parent.parent / "results" / "submitted"
+RESULTS_DIR = Path.cwd() / "results" / "submitted"
 
 # Default number of trials
 DEFAULT_TRIALS = 5
@@ -79,6 +79,8 @@ def run_benchmark(
             f"Max trials is {len(COLD_PROMPTS)} (one unique cold prompt per trial). "
             f"Requested: {trials}"
         )
+    if trials < 1:
+        raise ValueError("trials must be at least 1")
 
     logger.info(f"\n{'='*50}")
     logger.info(f"  mlx-Chronos Benchmark")
