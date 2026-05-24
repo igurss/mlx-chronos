@@ -1,0 +1,68 @@
+{
+  "hardware": {
+    "chip": "Apple M2",
+    "memory_gb": 8.0,
+    "macos_version": "26.5",
+    "python_version": "3.14.5"
+  },
+  "engine": {
+    "name": "rapid-mlx",
+    "version": "rapid-mlx 0.6.66"
+  },
+  "model": {
+    "name": "Qwen3.5-4B-OptiQ-4bit",
+    "quantization": "4bit",
+    "size_gb": 3.2
+  },
+  "metrics": {
+    "ttft_cold": {
+      "mean": 0.022,
+      "stddev": 0.036,
+      "min": 0.006,
+      "max": 0.086
+    },
+    "ttft_cached": {
+      "mean": 0.094,
+      "stddev": 0.015,
+      "min": 0.085,
+      "max": 0.121
+    },
+    "tokens_per_second": {
+      "mean": 20.77,
+      "stddev": 0.19,
+      "min": 20.67,
+      "max": 21.11
+    },
+    "ram_peak_gb": 6.88,
+    "ram_is_process_rss": false
+  },
+  "trials": {
+    "count": 5,
+    "ttft_cold_raw": [
+      0.086,
+      0.006,
+      0.006,
+      0.006,
+      0.006
+    ],
+    "ttft_cached_raw": [
+      0.085,
+      0.087,
+      0.09,
+      0.089,
+      0.121
+    ],
+    "tokens_per_second_raw": [
+      21.11,
+      20.67,
+      20.7,
+      20.69,
+      20.68
+    ]
+  },
+  "meta": {
+    "chronos_version": "0.1.0",
+    "timestamp": "2026-05-24T14:21:45.752611+00:00",
+    "notes": "First official result \u2014 Apple M2 8GB"
+  }
+}
