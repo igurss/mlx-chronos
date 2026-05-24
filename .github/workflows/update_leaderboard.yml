@@ -1,0 +1,74 @@
+name: Update Leaderboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'results/submitted/**.json'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate results index
+        run: |
+          python - <<'EOF'
+          import json
+          from pathlib import Path
+          from datetime import datetime
+
+          results_dir = Path("results/submitted")
+          index = []
+
+          for path in sorted(results_dir.glob("*.json")):
+              try:
+                  data = json.loads(path.read_text())
+                  hw = data["hardware"]
+                  eng = data["engine"]
+                  mod = data["model"]
+                  met = data["metrics"]
+                  tri = data["trials"]
+                  meta = data["meta"]
+
+                  index.append({
+                      "chip": hw["chip"],
+                      "memory_gb": hw["memory_gb"],
+                      "engine": eng["name"],
+                      "engine_version": eng["version"],
+                      "model": mod["name"],
+                      "quantization": mod["quantization"],
+                      "size_gb": mod["size_gb"],
+                      "tps": met["tokens_per_second"]["mean"],
+                      "tps_stddev": met["tokens_per_second"]["stddev"],
+                      "ttft_cold": met["ttft_cold"]["mean"],
+                      "ttft_cached": met["ttft_cached"]["mean"],
+                      "ram_peak_gb": met["ram_peak_gb"],
+                      "ram_is_process_rss": met.get("ram_is_process_rss", False),
+                      "trials": tri["count"],
+                      "chronos_version": meta["chronos_version"],
+                      "date": meta["timestamp"][:10],
+                      "notes": meta.get("notes"),
+                  })
+              except Exception as e:
+                  print(f"Skipping {path.name}: {e}")
+
+          out = Path("docs/results_index.json")
+          out.write_text(json.dumps(index, indent=2))
+          print(f"Generated index with {len(index)} results.")
+          EOF
+
+      - name: Commit index
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/results_index.json
+          git diff --staged --quiet || git commit -m "chore: update leaderboard index [skip ci]"
+          git push
