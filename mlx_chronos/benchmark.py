@@ -151,7 +151,12 @@ def run_benchmark(
 
     # 7. RAM after trials
     print("Measuring RAM...")
-    ram = engine.measure_ram_peak()
+    ram, ram_is_fallback = engine.measure_ram_peak()
+    if ram_is_fallback:
+        print("  Warning: RAM measured as system fallback, not process RSS.")
+
+    # Normalize model name — strip path if full path was passed
+    model_display_name = model_name.split("/")[-1] if "/" in model_name else model_name
 
     # 8. Build result
     result = {
@@ -161,7 +166,7 @@ def run_benchmark(
             "version": version,
         },
         "model": {
-            "name": model_name,
+            "name": model_display_name,
             "quantization": model_quantization,
             "size_gb": model_size_gb,
         },
@@ -170,6 +175,7 @@ def run_benchmark(
             "ttft_cached": ttft_cached_stats,
             "tokens_per_second": tps_stats,
             "ram_peak_gb": ram,
+            "ram_is_process_rss": not ram_is_fallback,
         },
         "trials": {
             "count": trials,

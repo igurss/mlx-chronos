@@ -32,6 +32,10 @@ class Metrics(BaseModel):
     ttft_cached: TrialStats = Field(..., description="Time to first token, cached (seconds)")
     tokens_per_second: TrialStats = Field(..., description="Generation throughput (tok/s)")
     ram_peak_gb: float = Field(..., description="Peak RAM usage during inference (GB)")
+    ram_is_process_rss: bool = Field(
+        ..., 
+        description="True if RAM was measured from process RSS, False if system fallback was used"
+    )
 
 
 class Trials(BaseModel):
@@ -77,7 +81,7 @@ EXAMPLE_RESULT = {
         "ttft_cold": {"mean": 0.041, "stddev": 0.015, "min": 0.028, "max": 0.066},
         "ttft_cached": {"mean": 0.010, "stddev": 0.002, "min": 0.007, "max": 0.012},
         "tokens_per_second": {"mean": 18.44, "stddev": 0.097, "min": 18.27, "max": 18.51},
-        "ram_peak_gb": 7.22
+        "ram_peak_gb": 7.22, "ram_is_process_rss": False
     },
     "trials": {
         "count": 5,

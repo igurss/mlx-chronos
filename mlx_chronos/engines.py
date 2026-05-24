@@ -92,8 +92,11 @@ class BaseEngine(ABC):
         tokens = data.get("usage", {}).get("completion_tokens", max_tokens)
         return round(tokens / elapsed, 2)
 
-    def measure_ram_peak(self) -> float:
-        """Return the engine process RSS in GB as a proxy for RAM peak."""
+    def measure_ram_peak(self) -> tuple[float, bool]:
+        """
+        Return (ram_gb, is_fallback).
+        is_fallback=True means system memory was used instead of process RSS.
+        """
         try:
             for connection in psutil.net_connections(kind="inet"):
                 if not connection.laddr or connection.laddr.port != self.port:
@@ -107,18 +110,13 @@ class BaseEngine(ABC):
                         rss_bytes += child.memory_info().rss
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         continue
-                return round(rss_bytes / (1024 ** 3), 2)
+                return round(rss_bytes / (1024 ** 3), 2), False
         except (psutil.Error, OSError):
             pass
 
         mem = psutil.virtual_memory()
-        # Fallback: could not find engine process — warn and return system used memory
-        warnings.warn(
-            f"Could not locate engine process listening on port {self.port}; returning system used memory as fallback",
-            UserWarning,
-        )
         used_gb = (mem.total - mem.available) / (1024 ** 3)
-        return round(used_gb, 2)
+        return round(used_gb, 2), True
 
     @abstractmethod
     def is_installed(self) -> bool:
@@ -200,10 +198,77 @@ class OMLXEngine(BaseEngine):
         }
 
 
+# ─── Rapid-MLX ────────────────────────────────────────────────────────────────
+
+class RapidMLXEngine(BaseEngine):
+    name = "rapid-mlx"
+    port = 8001
+
+    COLD_PROMPT = "Explain the concept of unified memory in Apple Silicon in one sentence."
+    THROUGHPUT_PROMPT = (
+        "Explain in detail how the attention mechanism works in transformer "
+        "neural networks, including the role of queries, keys, and values."
+    )
+
+    def is_installed(self) -> bool:
+        """Check if rapid-mlx CLI is available."""
+        return shutil.which("rapid-mlx") is not None
+
+    def get_version(self) -> str:
+        """Get installed Rapid-MLX version."""
+        try:
+            result = subprocess.run(
+                ["rapid-mlx", "version"],
+                capture_output=True,
+                text=True
+            )
+            return result.stdout.strip() or "unknown"
+        except Exception:
+            return "unknown"
+
+    def run_benchmark(self, model: str) -> dict:
+        """
+        Run the full benchmark suite against Rapid-MLX.
+        Assumes Rapid-MLX server is already running on port 8001.
+        """
+        if not self.is_server_running():
+            raise RuntimeError(
+                f"Rapid-MLX server not running on port {self.port}. "
+                f"Start it with: rapid-mlx serve {model} --port 8001"
+            )
+
+        print(f"  Running cold TTFT...")
+        ttft_cold = self.measure_ttft(self.COLD_PROMPT, model=model)
+
+        print(f"  Warmup call...")
+        try:
+            self.measure_ttft(self.COLD_PROMPT, model=model)
+        except Exception:
+            pass
+
+        print(f"  Running cached TTFT...")
+        ttft_cached = self.measure_ttft(self.COLD_PROMPT, model=model)
+
+        print(f"  Measuring throughput...")
+        tps = self.measure_tokens_per_second(self.THROUGHPUT_PROMPT, model=model)
+
+        print(f"  Measuring RAM...")
+        ram = self.measure_ram_peak()
+
+        return {
+            "ttft_cold": ttft_cold,
+            "ttft_cached": ttft_cached,
+            "tokens_per_second": tps,
+            "tool_calling_rate": None,
+            "ram_peak_gb": ram,
+        }
+
+
 # ─── Registry ─────────────────────────────────────────────────────────────────
 
 ENGINES = {
     "omlx": OMLXEngine,
+    "rapid-mlx": RapidMLXEngine,
 }
 
 

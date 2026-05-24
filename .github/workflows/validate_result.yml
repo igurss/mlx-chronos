@@ -55,6 +55,7 @@ jobs:
               ttft_cached: TrialStats
               tokens_per_second: TrialStats
               ram_peak_gb: float
+              ram_is_process_rss: bool
 
           class Trials(BaseModel):
               count: int
