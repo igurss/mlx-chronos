@@ -6,6 +6,7 @@ import logging
 import httpx
 import psutil
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 
 logger = logging.getLogger("mlx_chronos")
@@ -152,18 +153,24 @@ class OMLXEngine(BaseEngine):
         return shutil.which("omlx") is not None
 
     def get_version(self) -> str:
+        """
+        Get oMLX version. oMLX does not expose a --version flag or pip metadata.
+        Version appears only in the server startup banner (stdout).
+        Returns 'unknown' when server is already running.
+        """
         try:
             result = subprocess.run(
-                ["omlx", "--help"],
+                ["omlx", "serve", "--help"],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=3,
             )
             for line in (result.stdout + result.stderr).splitlines():
-                if "version" in line.lower() or "0." in line:
-                    return line.strip()
-            return "unknown"
+                if "Version:" in line:
+                    return line.split("Version:")[-1].strip()
         except Exception:
-            return "unknown"
+            pass
+        return "unknown"
 
 
 # ─── Rapid-MLX ────────────────────────────────────────────────────────────────
