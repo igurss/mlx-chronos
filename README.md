@@ -51,11 +51,9 @@ and max. Results are saved as structured JSON ready for community submission.
 
 ## Community Leaderboard
 
-> 🚧 Results coming soon — be the first to submit yours.
+View the full leaderboard with all submitted results:
 
-| Hardware | Engine | Model | tok/s mean | TTFT cold | TTFT cached |
-|----------|--------|-------|------------|-----------|-------------|
-| — | — | — | — | — | — |
+**[→ igurss.github.io/mlx-chronos](https://igurss.github.io/mlx-chronos)**
 
 ---
 
