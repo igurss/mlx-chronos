@@ -8,7 +8,14 @@ class Hardware(BaseModel):
     memory_gb: float = Field(..., description="Unified memory in GB")
     macos_version: str = Field(..., description="macOS version (e.g. '15.3.1')")
     python_version: str = Field(..., description="Python version (e.g. '3.11.4')")
-    thermal_state: str = Field(..., description="Thermal pressure level (nominal/fair/serious/critical or unavailable_*)")
+    thermal_state: Optional[str] = Field(
+        "unavailable_no_sudo",
+        description="Thermal pressure level (nominal/fair/serious/critical or unavailable_*)",
+    )
+    system_ram_usage_percent: float = Field(
+        ...,
+        description="System RAM usage percentage before benchmark starts",
+    )
 
 
 class Engine(BaseModel):
@@ -69,7 +76,8 @@ EXAMPLE_RESULT = {
         "memory_gb": 8.0,
         "macos_version": "15.3.1",
         "python_version": "3.11.4",
-        "thermal_state": "unavailable_no_sudo"
+        "thermal_state": "unavailable_no_sudo",
+        "system_ram_usage_percent": 50.0
     },
     "engine": {
         "name": "omlx",

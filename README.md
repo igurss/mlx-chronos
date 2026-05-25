@@ -25,6 +25,7 @@ contribute to the community leaderboard.
 - **TTFT** — Time to First Token (cold and cached, with statistics)
 - **tok/s** — Generation throughput (mean, stddev, min, max across trials)
 - **RAM usage** — Peak memory during inference
+- **Base RAM load** — System RAM usage before benchmark starts (%)
 - **Tool calling** — Success rate *(coming in v0.2)*
 
 ---

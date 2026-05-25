@@ -36,6 +36,10 @@ complete. Reported in GB.
 When the engine process cannot be identified by port, system-used memory is
 reported as a fallback. This is noted in the result with a warning.
 
+### Base RAM Load (%)
+System RAM usage percentage measured before the benchmark starts. This is
+captured once during hardware detection to give context about background load.
+
 ---
 
 ## Trial Protocol
@@ -61,7 +65,7 @@ to the observed maximum and adds no information.
 
 - Tool calling success rate — planned for v0.2
 - Thermal throttling awareness — planned for v0.2
-- System load at benchmark time — planned for v0.2
+- CPU/GPU load at benchmark time — planned for v0.2
 - Multi-turn conversation latency
 
 ---

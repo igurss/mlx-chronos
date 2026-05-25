@@ -36,6 +36,7 @@ jobs:
               python_version: str
               machine_model: str
               thermal_state: str
+              system_ram_usage_percent: float
 
           class Engine(BaseModel):
               name: str
