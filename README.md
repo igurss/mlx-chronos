@@ -20,6 +20,7 @@ contribute to the community leaderboard.
 **Supported engines:**
 - [oMLX](https://github.com/jundot/omlx)
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
+- [mlx-lm (Apple MLX)](https://github.com/ml-explore/mlx-examples)
 
 **Metrics measured:**
 - **TTFT** — Time to First Token (cold and cached, with statistics)
@@ -104,7 +105,7 @@ is measured, how, and why.
 - [x] Statistical benchmark (repeated trials, mean/stddev/min/max)
 - [x] CLI (`mlx-chronos run`, `mlx-chronos engines`)
 - [X] Rapid-MLX integration
-- [ ] mlx-lm integration
+- [X] mlx-lm integration
 - [X] GitHub Actions result validator
 - [X] GitHub Pages leaderboard
 
