@@ -18,7 +18,6 @@ def cmd_run(args):
         engine_name=args.engine,
         model_name=args.model,
         model_quantization=args.quantization,
-        model_size_gb=args.size,
         trials=args.trials,
         notes=args.notes,
     )
@@ -64,12 +63,6 @@ def main():
         "--quantization",
         default="4bit",
         help="Model quantization format (default: 4bit)",
-    )
-    run_parser.add_argument(
-        "--size",
-        type=float,
-        required=True,
-        help="Model size on disk in GB (e.g. 3.2)",
     )
     run_parser.add_argument(
         "--trials",

@@ -65,7 +65,6 @@ def run_benchmark(
     engine_name: str,
     model_name: str,
     model_quantization: str,
-    model_size_gb: float,
     trials: int = DEFAULT_TRIALS,
     notes: str = None,
 ) -> dict:
@@ -179,7 +178,6 @@ def run_benchmark(
         "model": {
             "name": model_display_name,
             "quantization": model_quantization,
-            "size_gb": model_size_gb,
         },
         "metrics": {
             "ttft_cold": ttft_cold_stats,
@@ -228,7 +226,6 @@ if __name__ == "__main__":
         engine_name="omlx",
         model_name="Qwen3.5-4B-OptiQ-4bit",
         model_quantization="4bit",
-        model_size_gb=3.2,
         trials=5,
         notes="Test run — unique cold prompts per trial"
     )

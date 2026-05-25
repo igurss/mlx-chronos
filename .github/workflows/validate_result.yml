@@ -42,7 +42,6 @@ jobs:
           class Model(BaseModel):
               name: str
               quantization: str
-              size_gb: float
 
           class TrialStats(BaseModel):
               mean: float

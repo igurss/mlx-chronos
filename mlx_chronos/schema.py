@@ -17,7 +17,6 @@ class Engine(BaseModel):
 class Model(BaseModel):
     name: str = Field(..., description="Model name (e.g. 'Qwen3.5-9B')")
     quantization: str = Field(..., description="Quantization format (e.g. '4bit', '8bit')")
-    size_gb: float = Field(..., description="Model size on disk in GB")
 
 
 class TrialStats(BaseModel):

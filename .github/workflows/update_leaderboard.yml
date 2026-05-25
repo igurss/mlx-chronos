@@ -45,7 +45,6 @@ jobs:
                       "engine_version": eng["version"],
                       "model": mod["name"],
                       "quantization": mod["quantization"],
-                      "size_gb": mod["size_gb"],
                       "tps": met["tokens_per_second"]["mean"],
                       "tps_stddev": met["tokens_per_second"]["stddev"],
                       "ttft_cold": met["ttft_cold"]["mean"],
