@@ -192,6 +192,28 @@ class RapidMLXEngine(BaseEngine):
             return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"
+        
+
+
+        # ─── mlx-lm ───────────────────────────────────────────────────────────────────
+
+class MLXLMEngine(BaseEngine):
+    name = "mlx-lm"
+    port = 8002
+
+    def is_installed(self) -> bool:
+        try:
+            import mlx_lm
+            return True
+        except ImportError:
+            return False
+
+    def get_version(self) -> str:
+        try:
+            import importlib.metadata
+            return importlib.metadata.version("mlx-lm")
+        except Exception:
+            return "unknown"
 
 
 # ─── Registry ─────────────────────────────────────────────────────────────────
@@ -199,6 +221,7 @@ class RapidMLXEngine(BaseEngine):
 ENGINES = {
     "omlx": OMLXEngine,
     "rapid-mlx": RapidMLXEngine,
+    "mlx-lm": MLXLMEngine,
 }
 
 
