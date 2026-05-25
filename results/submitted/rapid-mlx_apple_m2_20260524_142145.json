@@ -11,8 +11,7 @@
   },
   "model": {
     "name": "Qwen3.5-4B-OptiQ-4bit",
-    "quantization": "4bit",
-    "size_gb": 3.2
+    "quantization": "4bit"
   },
   "metrics": {
     "ttft_cold": {
