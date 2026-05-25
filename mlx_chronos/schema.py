@@ -77,8 +77,7 @@ EXAMPLE_RESULT = {
     },
     "model": {
         "name": "Qwen3.5-4B-OptiQ-4bit",
-        "quantization": "4bit",
-        "size_gb": 3.2
+        "quantization": "4bit"
     },
     "metrics": {
         "ttft_cold": {"mean": 0.041, "stddev": 0.015, "min": 0.028, "max": 0.066},

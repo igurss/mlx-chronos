@@ -35,7 +35,6 @@ omlx serve --model-dir ~/models
 mlx-chronos engines                          # check engine status
 mlx-chronos run --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \
-  --size 3.2 \
   --trials 5
 ```
 

@@ -5,7 +5,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://python.org)
-[![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1_|_M2_|_M3_|_M4-black?logo=apple)](https://apple.com)
+[![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1_|_M2_|_M3_|_M4_|_M5-black?logo=apple)](https://apple.com)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
@@ -67,7 +67,7 @@ pip install git+https://github.com/igurss/mlx-chronos.git
 mlx-chronos engines
 
 # Run benchmark
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --size 3.2
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 ```
 
 > **Note:** the engine server must be running before you launch mlx-chronos.
