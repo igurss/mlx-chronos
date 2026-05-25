@@ -3,10 +3,13 @@ from typing import Optional
 
 
 class Hardware(BaseModel):
-    chip: str = Field(..., description="Apple Silicon chip model (e.g. 'Apple M3 Ultra')")
+    chip: str = Field(..., description="Apple Silicon chip model (e.g. 'Apple M2')")
+    machine_model: str = Field(..., description="Mac machine identifier (e.g. 'Mac14,2')")
     memory_gb: float = Field(..., description="Unified memory in GB")
+    ram_used_before_gb: float = Field(..., description="RAM already in use before benchmark (GB)")
     macos_version: str = Field(..., description="macOS version (e.g. '15.3.1')")
     python_version: str = Field(..., description="Python version (e.g. '3.11.4')")
+    thermal_state: str = Field(..., description="Thermal pressure level (nominal/fair/serious/critical or unavailable_*)")
 
 
 class Engine(BaseModel):
@@ -63,9 +66,12 @@ class BenchmarkResult(BaseModel):
 EXAMPLE_RESULT = {
     "hardware": {
         "chip": "Apple M2",
+        "machine_model": "Mac14,2",
         "memory_gb": 8.0,
+        "ram_used_before_gb": 6.5,
         "macos_version": "15.3.1",
-        "python_version": "3.11.4"
+        "python_version": "3.11.4",
+        "thermal_state": "unavailable_no_sudo"
     },
     "engine": {
         "name": "omlx",

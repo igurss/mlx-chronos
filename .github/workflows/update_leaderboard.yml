@@ -41,6 +41,9 @@ jobs:
                   index.append({
                       "chip": hw["chip"],
                       "memory_gb": hw["memory_gb"],
+                      "machine_model": hw.get("machine_model", "unknown"),
+                      "ram_used_before_gb": hw.get("ram_used_before_gb", None),
+                      "thermal_state": hw.get("thermal_state", "unavailable_no_sudo"),
                       "engine": eng["name"],
                       "engine_version": eng["version"],
                       "model": mod["name"],
