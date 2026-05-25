@@ -36,12 +36,6 @@ def get_memory_gb() -> float:
     return round(psutil.virtual_memory().total / (1024 ** 3), 1)
 
 
-def get_ram_used_gb() -> float:
-    """Return currently used RAM in GB before benchmark starts."""
-    mem = psutil.virtual_memory()
-    return round((mem.total - mem.available) / (1024 ** 3), 2)
-
-
 def get_macos_version() -> str:
     """Return macOS version (e.g. '15.3.1')."""
     return platform.mac_ver()[0]
@@ -87,7 +81,6 @@ def detect_hardware() -> dict:
         "chip": get_chip_model(),
         "machine_model": get_machine_model(),
         "memory_gb": get_memory_gb(),
-        "ram_used_before_gb": get_ram_used_gb(),
         "macos_version": get_macos_version(),
         "python_version": get_python_version(),
         "thermal_state": get_thermal_state(),

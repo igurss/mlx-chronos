@@ -157,7 +157,6 @@
         <th data-col="tps" class="sorted">tok/s ↓</th>
         <th data-col="ttft_cold">TTFT cold (s)</th>
         <th data-col="ttft_cached">TTFT cached (s)</th>
-        <th data-col="ram_before">RAM before</th>
         <th data-col="ram">RAM peak</th>
         <th data-col="thermal">Thermal</th>
         <th data-col="trials">Trials</th>
@@ -253,7 +252,6 @@
         <td><strong>${fmt(r.tps, 2)}</strong></td>
         <td>${fmt(r.ttft_cold)}</td>
         <td>${fmt(r.ttft_cached)}</td>
-        <td>${r.ram_used_before_gb != null ? fmt(r.ram_used_before_gb, 2) + " GB" : "—"}</td>
         <td>${r.ram_is_process_rss ? fmt(r.ram_peak_gb, 2) + " GB" : `<span class="fallback">${fmt(r.ram_peak_gb, 2)} GB*</span>`}</td>
         <td>${r.thermal_state && !r.thermal_state.startsWith("unavailable") ? "🌡 " + r.thermal_state : "—"}</td>
         <td>${r.trials}</td>
