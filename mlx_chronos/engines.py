@@ -3,11 +3,12 @@ import subprocess
 import shutil
 import json
 import logging
+import os
+import importlib.metadata
+import importlib.util
 import httpx
 import psutil
 from abc import ABC, abstractmethod
-from pathlib import Path
-
 
 logger = logging.getLogger("mlx_chronos")
 
@@ -27,6 +28,15 @@ class BaseEngine(ABC):
         """Normalize the model name used in API payloads."""
         return model.strip() or "default"
 
+    def _connection_port(self, connection) -> int | None:
+        """Return a psutil connection local port across tuple/namedtuple variants."""
+        if not connection.laddr:
+            return None
+        port = getattr(connection.laddr, "port", None)
+        if port is None and isinstance(connection.laddr, tuple):
+            port = connection.laddr[1] if len(connection.laddr) > 1 else None
+        return port
+
     def is_server_running(self) -> bool:
         """Check if the engine server is already running on its port."""
         try:
@@ -43,6 +53,29 @@ class BaseEngine(ABC):
                 return True
             time.sleep(1.0)
         return False
+
+    def get_server_pid(self) -> int | None:
+        """Return the PID of the engine server bound to this port, if available."""
+        try:
+            for connection in psutil.net_connections(kind="inet"):
+                if self._connection_port(connection) != self.port:
+                    continue
+                if connection.pid is None:
+                    continue
+                return connection.pid
+        except (psutil.Error, OSError):
+            return None
+        return None
+
+    def _stream_chunk_has_content(self, chunk: dict) -> bool:
+        """Return True only when a streamed chat chunk contains generated text."""
+        choices = chunk.get("choices", [])
+        if not choices:
+            return False
+
+        delta = choices[0].get("delta", {})
+        content = delta.get("content")
+        return isinstance(content, str) and content != ""
 
     def measure_ttft(self, prompt: str, model: str = "default") -> float:
         """
@@ -73,11 +106,8 @@ class BaseEngine(ABC):
                     chunk = json.loads(data)
                 except json.JSONDecodeError:
                     continue
-                choices = chunk.get("choices", [])
-                if choices:
-                    delta = choices[0].get("delta", {})
-                    if delta.get("content") or delta.get("tool_calls") or delta.get("role"):
-                        return round(time.time() - start, 3)
+                if self._stream_chunk_has_content(chunk):
+                    return round(time.time() - start, 3)
         raise RuntimeError(
             f"No valid token received from {self.name} stream. "
             f"Check that the model is loaded and responding correctly."
@@ -109,7 +139,7 @@ class BaseEngine(ABC):
         """
         try:
             for connection in psutil.net_connections(kind="inet"):
-                if not connection.laddr or connection.laddr.port != self.port:
+                if self._connection_port(connection) != self.port:
                     continue
                 if connection.pid is None:
                     continue
@@ -179,6 +209,39 @@ class RapidMLXEngine(BaseEngine):
     name = "rapid-mlx"
     port = 8001
 
+    def _resolve_model_id(self, model: str) -> str | None:
+        cache = getattr(self, "_model_id_cache", None)
+        if cache is None:
+            cache = {}
+            self._model_id_cache = cache
+
+        if model in cache:
+            return cache[model]
+
+        try:
+            r = httpx.get(f"{self.base_url()}/models", timeout=3.0)
+            r.raise_for_status()
+            data = r.json()
+            for item in data.get("data", []):
+                model_id = item.get("id")
+                if not model_id:
+                    continue
+                if model_id == model or model_id.endswith(f"/{model}"):
+                    cache[model] = model_id
+                    return model_id
+        except Exception:
+            return None
+        return None
+
+    def _request_model_name(self, model: str) -> str:
+        model_name = super()._request_model_name(model)
+        model_name = os.path.expanduser(model_name)
+        if "/" in model_name:
+            return model_name
+
+        resolved = self._resolve_model_id(model_name)
+        return resolved or model_name
+
     def is_installed(self) -> bool:
         return shutil.which("rapid-mlx") is not None
 
@@ -192,26 +255,42 @@ class RapidMLXEngine(BaseEngine):
             return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"
-        
 
 
-        # ─── mlx-lm ───────────────────────────────────────────────────────────────────
+# ─── mlx-lm ───────────────────────────────────────────────────────────────────
 
 class MLXLMEngine(BaseEngine):
     name = "mlx-lm"
     port = 8002
 
     def is_installed(self) -> bool:
-        try:
-            import mlx_lm
-            return True
-        except ImportError:
-            return False
+        return importlib.util.find_spec("mlx_lm") is not None
 
     def get_version(self) -> str:
         try:
-            import importlib.metadata
             return importlib.metadata.version("mlx-lm")
+        except Exception:
+            return "unknown"
+
+
+# ─── Ollama ───────────────────────────────────────────────────────────────────
+
+class OllamaEngine(BaseEngine):
+    name = "ollama"
+    port = 11434
+
+    def is_installed(self) -> bool:
+        return shutil.which("ollama") is not None
+
+    def get_version(self) -> str:
+        try:
+            result = subprocess.run(
+                ["ollama", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"
 
@@ -222,6 +301,7 @@ ENGINES = {
     "omlx": OMLXEngine,
     "rapid-mlx": RapidMLXEngine,
     "mlx-lm": MLXLMEngine,
+    "ollama": OllamaEngine,
 }
 
 
