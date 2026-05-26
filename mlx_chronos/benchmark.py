@@ -3,23 +3,73 @@ import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 import logging
+import threading
+import time
+import os
+import psutil
 
 from mlx_chronos.detect import detect_hardware
 from mlx_chronos.engines import get_engine
 from mlx_chronos.schema import BenchmarkResult
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-)
+class RAMTracker:
+    """
+    Continuously samples the RAM (RSS) of the target process in a separate thread.
+    Solves the issue of missing a memory peak between the start and end of inference.
+    """
+    def __init__(self, interval: float = 0.05, target_pid: int = None):
+        self.pid = target_pid or os.getpid()
+        self.interval = interval
+        self._process = psutil.Process(self.pid)
+        self.peak_ram_bytes = 0
+        self._stop_event = threading.Event()
+        self._thread = None
+
+    def _sample_rss(self) -> int:
+        rss_bytes = self._process.memory_info().rss
+        try:
+            for child in self._process.children(recursive=True):
+                try:
+                    rss_bytes += child.memory_info().rss
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        return rss_bytes
+
+    def _monitor(self):
+        while not self._stop_event.is_set():
+            try:
+                current_ram = self._sample_rss()
+                if current_ram > self.peak_ram_bytes:
+                    self.peak_ram_bytes = current_ram
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                break
+            time.sleep(self.interval)
+
+    def start(self):
+        """Run the sampling."""
+        self.peak_ram_bytes = self._sample_rss()
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._monitor, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> float:
+        """Stop sampling and return the peak RAM in GB."""
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join()
+
+        # Byte conversion to GB
+        return self.peak_ram_bytes / (1024 ** 3)
+
+
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mlx_chronos")
 
 # mlx-chronos version
 VERSION = "0.1.0"
 
-# Results output directory
-RESULTS_DIR = Path.cwd() / "results" / "submitted"
 
 # Default number of trials
 DEFAULT_TRIALS = 5
@@ -50,7 +100,7 @@ def compute_stats(values: list[float]) -> dict:
     p95 is only meaningful with 20+ trials — use min/max for small samples.
     """
     if not values:
-        return {"mean": None, "stddev": None, "min": None, "max": None}
+        raise ValueError("values must contain at least one measurement")
     mean = statistics.mean(values)
     stddev = statistics.stdev(values) if len(values) > 1 else 0.0
     return {
@@ -114,43 +164,74 @@ def run_benchmark(
     for _ in range(2):
         try:
             engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name, max_tokens=30)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"  Warmup call failed and was skipped: {exc}")
     logger.info("  Done.\n")
+
+
+    logger.info("Starting continuous background RAM sampling...")
+    target_pid = engine.get_server_pid()
+    ram_tracker = None
+    ram_is_process_rss = False
+    if target_pid is None:
+        logger.warning(
+            "Engine PID not found; falling back to post-benchmark system RAM measurement."
+        )
+    else:
+        try:
+            ram_tracker = RAMTracker(interval=0.05, target_pid=target_pid)
+            ram_tracker.start()
+            ram_is_process_rss = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+            logger.warning(
+                f"Could not start RAM sampling for PID {target_pid}: {exc}"
+            )
+            ram_tracker = None
+
 
     # 5. Run trials
     ttft_cold_trials = []
     ttft_cached_trials = []
     tps_trials = []
 
-    # Fixed prompt for cached TTFT — same prompt every trial = cache hit
+    # Fixed prompt for cached TTFT
     cached_prompt = "Explain the concept of unified memory in Apple Silicon in one sentence."
 
-    # Priming call — load cached_prompt into engine cache, not recorded
-    logger.info("Priming cache for cached TTFT measurement...")
+    peak_ram_gb = None
+    ram_is_fallback = False
+
     try:
-        engine.measure_ttft(cached_prompt, model=model_name)
-    except Exception:
-        pass
-    logger.info("  Done.\n")
+        # Priming call
+        logger.info("Priming cache for cached TTFT measurement...")
+        try:
+            engine.measure_ttft(cached_prompt, model=model_name)
+        except Exception as exc:
+            logger.warning(f"  Cache priming failed; cached TTFT may be cold: {exc}")
+        logger.info("  Done.\n")
 
-    for i in range(trials):
-        logger.info(f"Trial {i + 1}/{trials}")
+        for i in range(trials):
+            logger.info(f"Trial {i + 1}/{trials}")
 
-        # Cold TTFT — unique prompt per trial, never seen before
-        cold_prompt = COLD_PROMPTS[i]
-        logger.info(f"  Cold TTFT (unique prompt)...")
-        ttft_cold_trials.append(engine.measure_ttft(cold_prompt, model=model_name))
+            cold_prompt = COLD_PROMPTS[i]
+            logger.info("  Cold TTFT (unique prompt)...")
+            ttft_cold_trials.append(engine.measure_ttft(cold_prompt, model=model_name))
 
-        # Cached TTFT — same prompt every trial
-        logger.info(f"  Cached TTFT (fixed prompt)...")
-        ttft_cached_trials.append(engine.measure_ttft(cached_prompt, model=model_name))
+            logger.info("  Cached TTFT (fixed prompt)...")
+            ttft_cached_trials.append(engine.measure_ttft(cached_prompt, model=model_name))
 
-        # Throughput
-        logger.info(f"  Throughput...")
-        tps_trials.append(
-            engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
-        )
+            logger.info("  Throughput...")
+            tps_trials.append(
+                engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
+            )
+    finally:
+        if ram_tracker:
+            peak_ram_gb = ram_tracker.stop()
+            logger.info(
+                f"RAM sampling finished. Peak detected: {peak_ram_gb:.2f} GB\n"
+            )
+        else:
+            peak_ram_gb, ram_is_fallback = engine.measure_ram_peak()
+            ram_is_process_rss = not ram_is_fallback
 
     logger.info("")
 
@@ -159,16 +240,10 @@ def run_benchmark(
     ttft_cached_stats = compute_stats(ttft_cached_trials)
     tps_stats = compute_stats(tps_trials)
 
-    # 7. RAM after trials
-    logger.info("Measuring RAM...")
-    ram, ram_is_fallback = engine.measure_ram_peak()
-    if ram_is_fallback:
-        logger.warning("  Warning: RAM measured as system fallback, not process RSS.")
 
-    # Normalize model name — strip path if full path was passed
     model_display_name = model_name.split("/")[-1] if "/" in model_name else model_name
 
-    # 8. Build result
+    # 7. Build result
     result = {
         "hardware": hw,
         "engine": {
@@ -183,8 +258,8 @@ def run_benchmark(
             "ttft_cold": ttft_cold_stats,
             "ttft_cached": ttft_cached_stats,
             "tokens_per_second": tps_stats,
-            "ram_peak_gb": ram,
-            "ram_is_process_rss": not ram_is_fallback,
+            "ram_peak_gb": round(peak_ram_gb, 3),
+            "ram_is_process_rss": ram_is_process_rss,
         },
         "trials": {
             "count": trials,
@@ -205,14 +280,15 @@ def run_benchmark(
 
 def save_result(result: dict) -> Path:
     """Save a benchmark result to results/submitted/."""
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    results_dir = Path.cwd() / "results" / "submitted"
+    results_dir.mkdir(parents=True, exist_ok=True)
 
     chip_slug = result["hardware"]["chip"].replace(" ", "_").lower()
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     engine_name = result["engine"]["name"]
     filename = f"{engine_name}_{chip_slug}_{ts}.json"
 
-    output_path = RESULTS_DIR / filename
+    output_path = results_dir / filename
 
     with open(output_path, "w") as f:
         json.dump(result, f, indent=2)

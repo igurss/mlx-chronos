@@ -14,13 +14,17 @@ def cmd_run(args):
     if args.trials < 1:
         print("Error: --trials must be at least 1.", file=sys.stderr)
         raise SystemExit(2)
-    result = run_benchmark(
-        engine_name=args.engine,
-        model_name=args.model,
-        model_quantization=args.quantization,
-        trials=args.trials,
-        notes=args.notes,
-    )
+    try:
+        result = run_benchmark(
+            engine_name=args.engine,
+            model_name=args.model,
+            model_quantization=args.quantization,
+            trials=args.trials,
+            notes=args.notes,
+        )
+    except (RuntimeError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
     path = save_result(result)
     logger.info(f"\nDone. Result saved to: {path}")
 
