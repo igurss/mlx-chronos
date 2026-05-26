@@ -47,8 +47,8 @@ class BaseEngine(ABC):
 
     def wait_for_server(self, timeout: int = 60) -> bool:
         """Poll until the server is ready or timeout is reached."""
-        start = time.time()
-        while time.time() - start < timeout:
+        start = time.perf_counter()
+        while time.perf_counter() - start < timeout:
             if self.is_server_running():
                 return True
             time.sleep(1.0)
@@ -75,7 +75,7 @@ class BaseEngine(ABC):
 
         delta = choices[0].get("delta", {})
         content = delta.get("content")
-        return isinstance(content, str) and content != ""
+        return isinstance(content, str) and content.strip() != ""
 
     def measure_ttft(self, prompt: str, model: str = "default") -> float:
         """
@@ -88,7 +88,7 @@ class BaseEngine(ABC):
             "max_tokens": 1,
             "stream": True,
         }
-        start = time.time()
+        start = time.perf_counter()
         with httpx.stream("POST", f"{self.base_url()}/chat/completions",
                           json=payload, timeout=30.0) as r:
             r.raise_for_status()
@@ -107,7 +107,7 @@ class BaseEngine(ABC):
                 except json.JSONDecodeError:
                     continue
                 if self._stream_chunk_has_content(chunk):
-                    return round(time.time() - start, 3)
+                    return round(time.perf_counter() - start, 3)
         raise RuntimeError(
             f"No valid token received from {self.name} stream. "
             f"Check that the model is loaded and responding correctly."
@@ -121,11 +121,11 @@ class BaseEngine(ABC):
             "max_tokens": max_tokens,
             "stream": False,
         }
-        start = time.time()
+        start = time.perf_counter()
         r = httpx.post(f"{self.base_url()}/chat/completions",
                        json=payload, timeout=60.0)
         r.raise_for_status()
-        elapsed = time.time() - start
+        elapsed = time.perf_counter() - start
         if elapsed <= 0:
             return 0.0
         data = r.json()

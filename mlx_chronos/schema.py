@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal, Annotated
 
@@ -78,7 +80,12 @@ class Trials(BaseModel):
 
 class Meta(BaseModel):
     chronos_version: str = Field(..., description="mlx-chronos version used")
-    timestamp: str = Field(..., description="ISO 8601 timestamp of the benchmark run")
+    timestamp: datetime = Field(..., description="Timestamp of the benchmark run")
+    ram_sample_interval_seconds: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Seconds between process RSS samples during RAM tracking",
+    )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 
 
@@ -125,6 +132,7 @@ EXAMPLE_RESULT = {
     "meta": {
         "chronos_version": "0.1.0",
         "timestamp": "2026-05-23T15:08:36Z",
+        "ram_sample_interval_seconds": 0.05,
         "notes": "Test run"
     }
 }
@@ -133,5 +141,5 @@ EXAMPLE_RESULT = {
 if __name__ == "__main__":
     import json
     result = BenchmarkResult(**EXAMPLE_RESULT)
-    print(json.dumps(result.model_dump(), indent=2))
+    print(json.dumps(result.model_dump(mode="json"), indent=2))
     print("\nSchema validation: OK")

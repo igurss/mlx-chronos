@@ -1,6 +1,7 @@
 import subprocess
 import platform
 import os
+import importlib
 import psutil
 
 
@@ -46,12 +47,33 @@ def get_python_version() -> str:
     return platform.python_version()
 
 
+def get_thermal_state_from_foundation() -> str | None:
+    """Return thermal state via NSProcessInfo when PyObjC/Foundation is available."""
+    try:
+        foundation = importlib.import_module("Foundation")
+        state_value = int(foundation.NSProcessInfo.processInfo().thermalState())
+    except Exception:
+        return None
+
+    states = {
+        0: "nominal",
+        1: "fair",
+        2: "serious",
+        3: "critical",
+    }
+    return states.get(state_value, f"unavailable_foundation_unknown_state_{state_value}")
+
+
 def get_thermal_state() -> str:
     """
-    Return macOS thermal pressure level via powermetrics.
-    Requires sudo. Returns a descriptive status string if unavailable.
+    Return macOS thermal pressure level.
+    Uses NSProcessInfo without sudo when available, then falls back to powermetrics.
     """
-    if os.geteuid() != 0:
+    foundation_state = get_thermal_state_from_foundation()
+    if foundation_state is not None:
+        return foundation_state
+
+    if getattr(os, "geteuid", lambda: -1)() != 0:
         return "unavailable_no_sudo"
     try:
         result = subprocess.run(
@@ -68,8 +90,8 @@ def get_thermal_state() -> str:
         return "unavailable_timeout"
     except FileNotFoundError:
         return "unavailable_powermetrics_not_found"
-    except Exception as e:
-        return f"unavailable_error"
+    except Exception:
+        return "unavailable_error"
 
 
 def detect_hardware() -> dict:

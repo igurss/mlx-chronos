@@ -70,6 +70,8 @@ logger = logging.getLogger("mlx_chronos")
 # mlx-chronos version
 VERSION = "0.1.0"
 
+# Default RAM sampling interval in seconds
+DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
 
 # Default number of trials
 DEFAULT_TRIALS = 5
@@ -117,6 +119,7 @@ def run_benchmark(
     model_quantization: str,
     trials: int = DEFAULT_TRIALS,
     notes: str = None,
+    ram_sample_interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
 ) -> dict:
     """
     Run a full benchmark session for a given engine and model.
@@ -130,6 +133,8 @@ def run_benchmark(
         )
     if trials < 1:
         raise ValueError("trials must be at least 1")
+    if ram_sample_interval <= 0:
+        raise ValueError("ram_sample_interval must be greater than 0")
 
     logger.info(f"\n{'='*50}")
     logger.info(f"  mlx-Chronos Benchmark")
@@ -169,7 +174,10 @@ def run_benchmark(
     logger.info("  Done.\n")
 
 
-    logger.info("Starting continuous background RAM sampling...")
+    logger.info(
+        f"Starting continuous background RAM sampling "
+        f"({ram_sample_interval:.3f}s interval)..."
+    )
     target_pid = engine.get_server_pid()
     ram_tracker = None
     ram_is_process_rss = False
@@ -179,7 +187,10 @@ def run_benchmark(
         )
     else:
         try:
-            ram_tracker = RAMTracker(interval=0.05, target_pid=target_pid)
+            ram_tracker = RAMTracker(
+                interval=ram_sample_interval,
+                target_pid=target_pid,
+            )
             ram_tracker.start()
             ram_is_process_rss = True
         except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
@@ -269,13 +280,13 @@ def run_benchmark(
         },
         "meta": {
             "chronos_version": VERSION,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(timezone.utc),
+            "ram_sample_interval_seconds": ram_sample_interval,
             "notes": notes,
         }
     }
     # Validate against schema before returning
-    BenchmarkResult(**result)
-    return result
+    return BenchmarkResult(**result).model_dump(mode="json")
 
 
 def save_result(result: dict) -> Path:

@@ -9,6 +9,7 @@
 - Added Literal constraints to `engine.name` in Pydantic schema for strict validation.
 - Added non-negative bounds to all numerical fields in the schema.
 - Added schema validation for trial raw-list lengths and summary statistic ranges.
+- Added configurable RAM sampling interval metadata.
 
 ### Removed
 - **llama.cpp** engine — out of scope. mlx-Chronos benchmarks MLX inference engines only; llama.cpp runs GGUF models, not MLX.
@@ -19,6 +20,8 @@
 - Translated all Italian log messages to English.
 - Fixed `mlx-chronos engines` crashing when `mlx-lm` import initializes Metal in restricted environments.
 - Fixed TTFT measurement so role/tool metadata chunks are not counted as first content tokens.
+- Switched latency timing to `time.perf_counter()` for monotonic high-resolution measurements.
+- Improved thermal-state detection with a no-sudo Foundation/NSProcessInfo path when available.
 - Fixed leaderboard sorting for string columns and escaped community-submitted values before rendering.
 - Improved CLI error output for invalid runtime arguments.
 

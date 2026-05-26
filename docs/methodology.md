@@ -12,6 +12,9 @@ Time in seconds from sending the request to receiving the first real content
 token in the streaming response. "Cold" means the model has not seen this
 prompt before — no cache advantage.
 
+TTFT is measured with Python's monotonic high-resolution performance counter,
+so wall-clock changes during a run do not affect the latency value.
+
 Each trial uses a **unique prompt** from a fixed pool defined in `benchmark.py`.
 This ensures the engine cannot serve the response from a previous cache hit.
 
@@ -40,6 +43,17 @@ their model cards. This metric helps you understand how "heavy" the engine
 process itself is.
 
 When the engine process cannot be identified by port, system-used memory is reported as a fallback (marked in the results).
+
+The default sampling interval is 50ms (`--ram-sample-interval 0.05`). Lower
+values can catch shorter spikes but add more measurement overhead; higher values
+reduce overhead but may miss brief peaks. The interval is recorded in result
+metadata as `meta.ram_sample_interval_seconds`.
+
+### Thermal State
+Thermal state is detected without sudo through macOS `NSProcessInfo` when the
+Foundation bridge is available. If that path is unavailable, mlx-Chronos falls
+back to `powermetrics`, which requires sudo; otherwise the result records an
+`unavailable_*` status.
 
 ### Base RAM Load (%)
 System RAM usage percentage measured before the benchmark starts. This is captured to give context about background load. Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB causes swapping and slows down inference, whereas 7GB used out of 16GB does not). This metric helps explain performance variances between identical chips.

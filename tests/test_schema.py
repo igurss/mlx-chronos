@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 from pydantic import ValidationError
 from mlx_chronos.schema import BenchmarkResult, EXAMPLE_RESULT
@@ -7,6 +9,8 @@ def test_valid_schema():
     result = BenchmarkResult(**EXAMPLE_RESULT)
     assert result.engine.name == "omlx"
     assert result.metrics.tokens_per_second.mean == 18.44
+    assert isinstance(result.meta.timestamp, datetime)
+    assert result.meta.ram_sample_interval_seconds == 0.05
 
 def test_invalid_engine_name():
     """Test that an unknown engine name raises a validation error."""

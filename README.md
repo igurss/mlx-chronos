@@ -46,6 +46,8 @@ loads it into cache first. This measures true cache performance.
 fixed prompt, identical across all engines and versions.
 
 **RAM peak** — measures memory used by the engine process during inference.
+The default RSS sampling interval is 50ms and can be changed with
+`--ram-sample-interval`.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. The default is 5 trials, with a maximum of 8 unique cold prompts.

@@ -8,6 +8,13 @@ def test_stream_chunk_role_is_not_counted_as_content():
     assert engine._stream_chunk_has_content(chunk) is False
 
 
+def test_stream_chunk_whitespace_is_not_counted_as_content():
+    engine = OMLXEngine()
+    chunk = {"choices": [{"delta": {"content": "   "}}]}
+
+    assert engine._stream_chunk_has_content(chunk) is False
+
+
 def test_stream_chunk_text_content_is_counted():
     engine = OMLXEngine()
     chunk = {"choices": [{"delta": {"content": "Hello"}}]}

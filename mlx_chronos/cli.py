@@ -2,7 +2,7 @@ import argparse
 import sys
 import logging
 
-from mlx_chronos.benchmark import run_benchmark, save_result
+from mlx_chronos.benchmark import DEFAULT_RAM_SAMPLE_INTERVAL, run_benchmark, save_result
 from mlx_chronos.engines import ENGINES
 
 
@@ -14,6 +14,9 @@ def cmd_run(args):
     if args.trials < 1:
         print("Error: --trials must be at least 1.", file=sys.stderr)
         raise SystemExit(2)
+    if args.ram_sample_interval <= 0:
+        print("Error: --ram-sample-interval must be greater than 0.", file=sys.stderr)
+        raise SystemExit(2)
     try:
         result = run_benchmark(
             engine_name=args.engine,
@@ -21,6 +24,7 @@ def cmd_run(args):
             model_quantization=args.quantization,
             trials=args.trials,
             notes=args.notes,
+            ram_sample_interval=args.ram_sample_interval,
         )
     except (RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -78,6 +82,15 @@ def main():
         "--notes",
         default=None,
         help="Optional notes to include in the result JSON",
+    )
+    run_parser.add_argument(
+        "--ram-sample-interval",
+        type=float,
+        default=DEFAULT_RAM_SAMPLE_INTERVAL,
+        help=(
+            "Seconds between process RSS samples "
+            f"(default: {DEFAULT_RAM_SAMPLE_INTERVAL})"
+        ),
     )
     run_parser.set_defaults(func=cmd_run)
 
