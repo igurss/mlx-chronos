@@ -104,6 +104,7 @@
     .badge-omlx    { background: #1f4d8f; color: #79c0ff; }
     .badge-rapid   { background: #1f4d2f; color: #56d364; }
     .badge-mlxlm   { background: #4d3b1f; color: #f0a742; }
+    .badge-ollama  { background: #e6e6e6; color: #1a1a1a; }
 
     .fallback { color: #8b949e; font-style: italic; font-size: 0.8rem; }
 
@@ -136,6 +137,7 @@
 <div class="filters">
   <select id="filter-engine">
     <option value="">All engines</option>
+    <option value="ollama">Ollama</option>
     <option value="omlx">oMLX</option>
     <option value="rapid-mlx">Rapid-MLX</option>
     <option value="mlx-lm">mlx-lm</option>
@@ -157,8 +159,8 @@
         <th data-col="tps" class="sorted">tok/s ↓</th>
         <th data-col="ttft_cold">TTFT cold (s)</th>
         <th data-col="ttft_cached">TTFT cached (s)</th>
-        <th data-col="system_ram_usage_percent">Base RAM Load</th>
-        <th data-col="ram">RAM peak</th>
+        <th data-col="system_ram_usage_percent" title="System RAM usage % before benchmark. High values impact performance.">Base RAM Load</th>
+        <th data-col="ram" title="Peak engine process RSS when available">Engine RAM (GB)</th>
         <th data-col="thermal">Thermal</th>
         <th data-col="trials">Trials</th>
         <th data-col="date">Date</th>
@@ -170,7 +172,8 @@
 </div>
 
 <footer>
-  Results are community-submitted and validated automatically via GitHub Actions.
+  Results are community-submitted and validated automatically via GitHub Actions.<br>
+  <strong>Engine RAM</strong> reports peak engine process RSS when available.
   RAM marked <span class="fallback">fallback</span> was measured as system memory, not process RSS.
 </footer>
 
@@ -182,6 +185,22 @@
   let allRows = [];
   let sortCol = "tps";
   let sortAsc = false;
+
+  const SORT_KEYS = {
+    memory: "memory_gb",
+    quant: "quantization",
+    ram: "ram_peak_gb",
+    thermal: "thermal_state",
+  };
+  const NUMERIC_COLUMNS = new Set([
+    "memory",
+    "tps",
+    "ttft_cold",
+    "ttft_cached",
+    "system_ram_usage_percent",
+    "ram",
+    "trials",
+  ]);
 
   // ── Fetch & render ──────────────────────────────────────────────────────────
   async function loadResults() {
@@ -199,17 +218,53 @@
   function engineBadge(name) {
     const cls = name === "omlx" ? "badge-omlx"
               : name === "rapid-mlx" ? "badge-rapid"
-              : "badge-mlxlm";
-    return `<span class="badge ${cls}">${name}</span>`;
+              : name === "mlx-lm" ? "badge-mlxlm"
+              : name === "ollama" ? "badge-ollama"
+              : "badge-omlx";
+    return `<span class="badge ${cls}">${escapeHtml(name)}</span>`;
   }
 
   function fmt(val, decimals = 3) {
     return val != null ? Number(val).toFixed(decimals) : "—";
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[ch]));
+  }
+
+  function getSortValue(row, col) {
+    return row[SORT_KEYS[col] || col];
+  }
+
+  function compareRows(a, b) {
+    const av = getSortValue(a, sortCol);
+    const bv = getSortValue(b, sortCol);
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+
+    let cmp;
+    if (NUMERIC_COLUMNS.has(sortCol)) {
+      cmp = Number(av) - Number(bv);
+    } else {
+      cmp = String(av).localeCompare(String(bv), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    }
+    return sortAsc ? cmp : -cmp;
+  }
+
   function populateChipFilter() {
     const chips = [...new Set(allRows.map(r => r.chip))].sort();
     const sel = document.getElementById("filter-chip");
+    sel.replaceChildren(new Option("All chips", ""));
     chips.forEach(c => {
       const opt = document.createElement("option");
       opt.value = c; opt.textContent = c;
@@ -226,12 +281,7 @@
       (!chipFilter   || r.chip   === chipFilter)
     );
 
-    rows.sort((a, b) => {
-      let av = a[sortCol], bv = b[sortCol];
-      if (av == null) return 1;
-      if (bv == null) return -1;
-      return sortAsc ? av - bv : bv - av;
-    });
+    rows.sort(compareRows);
 
     const tbody = document.getElementById("tbody");
     const empty = document.getElementById("empty");
@@ -245,19 +295,19 @@
 
     tbody.innerHTML = rows.map(r => `
       <tr>
-        <td>${r.chip}</td>
+        <td>${escapeHtml(r.chip)}</td>
         <td>${r.memory_gb} GB</td>
         <td>${engineBadge(r.engine)}</td>
-        <td>${r.model}</td>
-        <td>${r.quantization}</td>
+        <td>${escapeHtml(r.model)}</td>
+        <td>${escapeHtml(r.quantization)}</td>
         <td><strong>${fmt(r.tps, 2)}</strong></td>
         <td>${fmt(r.ttft_cold)}</td>
         <td>${fmt(r.ttft_cached)}</td>
         <td>${r.system_ram_usage_percent != null ? fmt(r.system_ram_usage_percent, 0) + "%" : "—"}</td>
         <td>${r.ram_is_process_rss ? fmt(r.ram_peak_gb, 2) + " GB" : `<span class="fallback">${fmt(r.ram_peak_gb, 2)} GB*</span>`}</td>
-        <td>${r.thermal_state && !r.thermal_state.startsWith("unavailable") ? "🌡 " + r.thermal_state : "—"}</td>
+        <td>${r.thermal_state && !r.thermal_state.startsWith("unavailable") ? "🌡 " + escapeHtml(r.thermal_state) : "—"}</td>
         <td>${r.trials}</td>
-        <td>${r.date}</td>
+        <td>${escapeHtml(r.date)}</td>
       </tr>
     `).join("");
   }
