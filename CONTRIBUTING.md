@@ -9,8 +9,9 @@ There are two ways to contribute: submitting benchmark results and improving the
 
 ### Prerequisites
 
-- A Mac with Apple Silicon (M1, M2, M3, or M4)
+- A Mac with Apple Silicon (M1, M2, M3, M4, or M5)
 - At least one supported engine installed and running:
+  - [Ollama](https://github.com/ollama/ollama) (MLX backend)
   - [oMLX](https://github.com/jundot/omlx)
   - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
   - [mlx-lm](https://github.com/ml-explore/mlx-examples)
@@ -61,7 +62,7 @@ git clone https://github.com/igurss/mlx-chronos.git
 cd mlx-chronos
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[test]"
 ```
 
 ### Guidelines

@@ -1,6 +1,28 @@
 # Changelog
 
-## [0.1.0] — 2026-05-24
+## [Unreleased]
+
+### Added
+- **Ollama** engine support (MLX backend, port 11434).
+- Comprehensive unit tests using `pytest` for schema validation and benchmark math.
+- GitHub Actions workflow for unit tests on code changes.
+- Added Literal constraints to `engine.name` in Pydantic schema for strict validation.
+- Added non-negative bounds to all numerical fields in the schema.
+- Added schema validation for trial raw-list lengths and summary statistic ranges.
+
+### Removed
+- **llama.cpp** engine — out of scope. mlx-Chronos benchmarks MLX inference engines only; llama.cpp runs GGUF models, not MLX.
+
+### Fixed
+- Changed `RESULTS_DIR` logic to resolve output directory relative to the current working directory at runtime, fixing PIP installation paths.
+- Removed duplicated `logging.basicConfig` preventing log formatting from applying correctly.
+- Translated all Italian log messages to English.
+- Fixed `mlx-chronos engines` crashing when `mlx-lm` import initializes Metal in restricted environments.
+- Fixed TTFT measurement so role/tool metadata chunks are not counted as first content tokens.
+- Fixed leaderboard sorting for string columns and escaped community-submitted values before rendering.
+- Improved CLI error output for invalid runtime arguments.
+
+## [0.1.0-beta.1] — 2026-05-24
 
 ### First public release
 

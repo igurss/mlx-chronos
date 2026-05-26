@@ -12,7 +12,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Recupera la cronologia per permettere il git diff
+          fetch-depth: 0 # Fetch history to enable git diff
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -20,7 +20,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install package and dependencies
-        run: pip install . # Installa Pydantic e tutte le altre dipendenze del progetto
+        run: pip install . # Install Pydantic and other project dependencies
 
       - name: Validate submitted results
         env:

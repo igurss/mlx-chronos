@@ -29,16 +29,20 @@ bumping `chronos_version`.
 Non-streaming mode is used (`stream: false`) so the total token count is
 available from the API response's `usage.completion_tokens` field.
 
-### RAM Peak (GB)
-Memory used by the engine process during inference, measured after all trials
-complete. Reported in GB.
+### Engine RAM Overhead (GB)
+Memory used by the engine server process during inference, sampled continuously
+while the benchmark is running and reported as the observed RSS peak.
 
-When the engine process cannot be identified by port, system-used memory is
-reported as a fallback. This is noted in the result with a warning.
+**Important:** this metric is best read as process overhead for the server, API
+layer, and runtime. It may not include model weights or Metal allocations that
+are mapped outside ordinary process RSS. Model sizes should still be read from
+their model cards. This metric helps you understand how "heavy" the engine
+process itself is.
+
+When the engine process cannot be identified by port, system-used memory is reported as a fallback (marked in the results).
 
 ### Base RAM Load (%)
-System RAM usage percentage measured before the benchmark starts. This is
-captured once during hardware detection to give context about background load.
+System RAM usage percentage measured before the benchmark starts. This is captured to give context about background load. Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB causes swapping and slows down inference, whereas 7GB used out of 16GB does not). This metric helps explain performance variances between identical chips.
 
 ---
 

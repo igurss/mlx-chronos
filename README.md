@@ -18,6 +18,7 @@ of tests across installed engines, and produces a structured JSON result you can
 contribute to the community leaderboard.
 
 **Supported engines:**
+- [Ollama](https://github.com/ollama/ollama) (MLX backend)
 - [oMLX](https://github.com/jundot/omlx)
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
 - [mlx-lm (Apple MLX)](https://github.com/ml-explore/mlx-examples)
@@ -25,7 +26,7 @@ contribute to the community leaderboard.
 **Metrics measured:**
 - **TTFT** — Time to First Token (cold and cached, with statistics)
 - **tok/s** — Generation throughput (mean, stddev, min, max across trials)
-- **RAM usage** — Peak memory during inference
+- **RAM usage** — Peak engine process RSS during inference when available
 - **Base RAM load** — System RAM usage before benchmark starts (%)
 - **Tool calling** — Success rate *(coming in v0.2)*
 
@@ -47,7 +48,8 @@ fixed prompt, identical across all engines and versions.
 **RAM peak** — measures memory used by the engine process during inference.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
-and max. Results are saved as structured JSON ready for community submission.
+and max. The default is 5 trials, with a maximum of 8 unique cold prompts.
+Results are saved as structured JSON ready for community submission.
 
 ---
 
