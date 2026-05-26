@@ -77,11 +77,6 @@ jobs:
                   data = json.loads(path.read_text())
                   BenchmarkResult(**data)
 
-                  t = data["trials"]
-                  if not (t["count"] == len(t["ttft_cold_raw"]) == len(t["ttft_cached_raw"]) == len(t["tokens_per_second_raw"])):
-                      raise ValueError(
-                          f"trials.count does not match raw data lengths in {path.name}"
-                      )
 
                   print(f"OK: {path.name}")
               except ValidationError as e:

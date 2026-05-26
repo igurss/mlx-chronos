@@ -28,15 +28,6 @@ class BaseEngine(ABC):
         """Normalize the model name used in API payloads."""
         return model.strip() or "default"
 
-    def _connection_port(self, connection) -> int | None:
-        """Return a psutil connection local port across tuple/namedtuple variants."""
-        if not connection.laddr:
-            return None
-        port = getattr(connection.laddr, "port", None)
-        if port is None and isinstance(connection.laddr, tuple):
-            port = connection.laddr[1] if len(connection.laddr) > 1 else None
-        return port
-
     def is_server_running(self) -> bool:
         """Check if the engine server is already running on its port."""
         try:
@@ -55,16 +46,18 @@ class BaseEngine(ABC):
         return False
 
     def get_server_pid(self) -> int | None:
-        """Return the PID of the engine server bound to this port, if available."""
+        """Return the PID of the engine server bound to this port using lsof."""
         try:
-            for connection in psutil.net_connections(kind="inet"):
-                if self._connection_port(connection) != self.port:
-                    continue
-                if connection.pid is None:
-                    continue
-                return connection.pid
-        except (psutil.Error, OSError):
-            return None
+            import subprocess
+            result = subprocess.run(
+                ["lsof", "-t", f"-i:{self.port}"],
+                capture_output=True, text=True, timeout=2
+            )
+            pids = result.stdout.strip().split()
+            if pids:
+                return int(pids[0])
+        except Exception:
+            pass
         return None
 
     def _stream_chunk_has_content(self, chunk: dict) -> bool:

@@ -44,7 +44,9 @@ class RAMTracker:
                 if current_ram > self.peak_ram_bytes:
                     self.peak_ram_bytes = current_ram
             except (psutil.NoSuchProcess, psutil.AccessDenied):
-                break
+                if not self._process.is_running():
+                    break
+                continue
             time.sleep(self.interval)
 
     def start(self):
