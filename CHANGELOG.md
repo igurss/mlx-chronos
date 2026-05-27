@@ -25,8 +25,7 @@ Official v0.1.0 release notes, compared with `v0.1.0-beta.1`
 - Documentation now reflects the current benchmark methodology, memory semantics, submission flow, and supported engines.
 
 ### Removed
-- **llama.cpp** engine — out of scope. mlx-Chronos benchmarks MLX inference engines only; llama.cpp runs GGUF models, not MLX.
-- Legacy `requirements.txt`, old report module, model `size_gb`, and unreliable pre-run RAM baseline fields.
+- Legacy `requirements.txt`, old report module, and model `size_gb` field from result files.
 
 ### Fixed
 - Result output paths now resolve from the current working directory, fixing installed-package usage.
