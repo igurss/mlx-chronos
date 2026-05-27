@@ -16,7 +16,7 @@ logger = logging.getLogger("mlx_chronos")
 # ─── Base class ───────────────────────────────────────────────────────────────
 
 class BaseEngine(ABC):
-    """Abstract base class for all inference engine integrations."""
+    """Abstract base class for inference engine integrations."""
 
     name: str
     port: int
@@ -24,12 +24,30 @@ class BaseEngine(ABC):
     def base_url(self) -> str:
         return f"http://localhost:{self.port}/v1"
 
+    def endpoint(self) -> str:
+        """API endpoint used by the engine."""
+        return "/chat/completions"
+
+    def uses_chat_api(self) -> bool:
+        """Whether the engine uses OpenAI chat format."""
+        return True
+
+    def build_payload(self, prompt: str, model: str, max_tokens: int, stream: bool) -> dict:
+        payload = {
+            "model": self._request_model_name(model),
+            "max_tokens": max_tokens,
+            "stream": stream,
+        }
+        if self.uses_chat_api():
+            payload["messages"] = [{"role": "user", "content": prompt}]
+        else:
+            payload["prompt"] = prompt
+        return payload
+
     def _request_model_name(self, model: str) -> str:
-        """Normalize the model name used in API payloads."""
         return model.strip() or "default"
 
     def is_server_running(self) -> bool:
-        """Check if the engine server is already running on its port."""
         try:
             r = httpx.get(f"{self.base_url()}/models", timeout=2.0)
             return r.status_code == 200
@@ -37,7 +55,6 @@ class BaseEngine(ABC):
             return False
 
     def wait_for_server(self, timeout: int = 60) -> bool:
-        """Poll until the server is ready or timeout is reached."""
         start = time.perf_counter()
         while time.perf_counter() - start < timeout:
             if self.is_server_running():
@@ -46,12 +63,13 @@ class BaseEngine(ABC):
         return False
 
     def get_server_pid(self) -> int | None:
-        """Return the PID of the engine server bound to this port using lsof."""
+        """macOS-safe PID lookup using lsof."""
         try:
-            import subprocess
             result = subprocess.run(
                 ["lsof", "-t", f"-i:{self.port}"],
-                capture_output=True, text=True, timeout=2
+                capture_output=True,
+                text=True,
+                timeout=2,
             )
             pids = result.stdout.strip().split()
             if pids:
@@ -61,30 +79,37 @@ class BaseEngine(ABC):
         return None
 
     def _stream_chunk_has_content(self, chunk: dict) -> bool:
-        """Return True only when a streamed chat chunk contains generated text."""
-        choices = chunk.get("choices", [])
-        if not choices:
+        choices = chunk.get("choices")
+        if not choices:  # Corretto: gestisce sia None che lista vuota senza crash
             return False
 
-        delta = choices[0].get("delta", {})
-        content = delta.get("content")
-        return isinstance(content, str) and content.strip() != ""
+        choice = choices[0]
+        delta = choice.get("delta", {})
+
+        for key in ("content", "reasoning", "reasoning_content"):
+            value = delta.get(key)
+            if isinstance(value, str) and value.strip():
+                return True
+
+        if delta.get("tool_calls"):
+            return True
+
+        text = choice.get("text")
+        if isinstance(text, str) and text.strip():
+            return True
+
+        return False
 
     def measure_ttft(self, prompt: str, model: str = "default") -> float:
-        """
-        Measure Time to First Token in seconds.
-        Raises RuntimeError if no valid token is received from the stream.
-        """
-        payload = {
-            "model": self._request_model_name(model),
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 1,
-            "stream": True,
-        }
+        """Measure Time To First Token."""
+        payload = self.build_payload(prompt=prompt, model=model, max_tokens=1, stream=True)
         start = time.perf_counter()
-        with httpx.stream("POST", f"{self.base_url()}/chat/completions",
-                          json=payload, timeout=30.0) as r:
+
+        with httpx.stream(
+            "POST", f"{self.base_url()}{self.endpoint()}", json=payload, timeout=30.0
+        ) as r:
             r.raise_for_status()
+
             for line in r.iter_lines():
                 if not line:
                     continue
@@ -92,77 +117,78 @@ class BaseEngine(ABC):
                     line = line.decode("utf-8", errors="ignore")
                 if not line.startswith("data:"):
                     continue
+
                 data = line.removeprefix("data:").strip()
                 if not data or data == "[DONE]":
                     continue
+
                 try:
                     chunk = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+
                 if self._stream_chunk_has_content(chunk):
                     return round(time.perf_counter() - start, 3)
-        raise RuntimeError(
-            f"No valid token received from {self.name} stream. "
-            f"Check that the model is loaded and responding correctly."
-        )
+
+        raise RuntimeError(f"No valid token received from {self.name} stream.")
 
     def measure_tokens_per_second(self, prompt: str, model: str = "default", max_tokens: int = 100) -> float:
-        """Measure generation throughput in tokens per second."""
-        payload = {
-            "model": self._request_model_name(model),
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-            "stream": False,
-        }
+        """Measure throughput."""
+        payload = self.build_payload(prompt=prompt, model=model, max_tokens=max_tokens, stream=False)
         start = time.perf_counter()
-        r = httpx.post(f"{self.base_url()}/chat/completions",
-                       json=payload, timeout=60.0)
+
+        r = httpx.post(f"{self.base_url()}{self.endpoint()}", json=payload, timeout=60.0)
         r.raise_for_status()
+
         elapsed = time.perf_counter() - start
         if elapsed <= 0:
             return 0.0
+
         data = r.json()
-        tokens = data.get("usage", {}).get("completion_tokens", max_tokens)
+        tokens = data.get("usage", {}).get("completion_tokens")
+
+        if tokens is None:
+            text = ""
+            if "choices" in data and data["choices"]:
+                choice = data["choices"][0]
+                text = choice.get("text") or choice.get("message", {}).get("content", "")
+            tokens = max(1, len(text.split()))
+
         return round(tokens / elapsed, 2)
 
     def measure_ram_peak(self) -> tuple[float, bool]:
-        """
-        Return (ram_gb, is_fallback).
-        is_fallback=True means system memory was used instead of process RSS.
-        """
-        try:
-            for connection in psutil.net_connections(kind="inet"):
-                if self._connection_port(connection) != self.port:
-                    continue
-                if connection.pid is None:
-                    continue
-                process = psutil.Process(connection.pid)
+        """Return (ram_gb, is_fallback)."""
+        pid = self.get_server_pid()
+
+        if pid is not None:
+            try:
+                process = psutil.Process(pid)
                 rss_bytes = process.memory_info().rss
+
                 for child in process.children(recursive=True):
                     try:
                         rss_bytes += child.memory_info().rss
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         continue
+
                 return round(rss_bytes / (1024 ** 3), 2), False
-        except (psutil.Error, OSError):
-            pass
+
+            except (psutil.Error, OSError):
+                pass
 
         mem = psutil.virtual_memory()
         used_gb = (mem.total - mem.available) / (1024 ** 3)
         logger.warning(
-            f"Could not locate engine process on port {self.port}; "
-            f"returning system used memory as fallback."
+            f"Could not locate engine process on port {self.port}; returning system memory fallback."
         )
         return round(used_gb, 2), True
 
     @abstractmethod
     def is_installed(self) -> bool:
-        """Check if this engine is installed on the system."""
         pass
 
     @abstractmethod
     def get_version(self) -> str:
-        """Return the installed engine version string."""
         pass
 
 
@@ -176,17 +202,9 @@ class OMLXEngine(BaseEngine):
         return shutil.which("omlx") is not None
 
     def get_version(self) -> str:
-        """
-        Get oMLX version. oMLX does not expose a --version flag or pip metadata.
-        Version appears only in the server startup banner (stdout).
-        Returns 'unknown' when server is already running.
-        """
         try:
             result = subprocess.run(
-                ["omlx", "serve", "--help"],
-                capture_output=True,
-                text=True,
-                timeout=3,
+                ["omlx", "serve", "--help"], capture_output=True, text=True, timeout=3
             )
             for line in (result.stdout + result.stderr).splitlines():
                 if "Version:" in line:
@@ -201,27 +219,28 @@ class OMLXEngine(BaseEngine):
 class RapidMLXEngine(BaseEngine):
     name = "rapid-mlx"
     port = 8001
+    
+    # Risolto il problema della cache di istanza spostandola a livello di classe
+    _global_model_id_cache: dict[str, str] = {}
 
     def _resolve_model_id(self, model: str) -> str | None:
-        cache = getattr(self, "_model_id_cache", None)
-        if cache is None:
-            cache = {}
-            self._model_id_cache = cache
-
-        if model in cache:
-            return cache[model]
+        if model in self._global_model_id_cache:
+            return self._global_model_id_cache[model]
 
         try:
             r = httpx.get(f"{self.base_url()}/models", timeout=3.0)
             r.raise_for_status()
             data = r.json()
+
             for item in data.get("data", []):
                 model_id = item.get("id")
                 if not model_id:
                     continue
+
                 if model_id == model or model_id.endswith(f"/{model}"):
-                    cache[model] = model_id
+                    self._global_model_id_cache[model] = model_id
                     return model_id
+
         except Exception:
             return None
         return None
@@ -229,7 +248,8 @@ class RapidMLXEngine(BaseEngine):
     def _request_model_name(self, model: str) -> str:
         model_name = super()._request_model_name(model)
         model_name = os.path.expanduser(model_name)
-        if "/" in model_name:
+
+        if "/" in model_name and os.path.exists(model_name):
             return model_name
 
         resolved = self._resolve_model_id(model_name)
@@ -240,11 +260,7 @@ class RapidMLXEngine(BaseEngine):
 
     def get_version(self) -> str:
         try:
-            result = subprocess.run(
-                ["rapid-mlx", "version"],
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(["rapid-mlx", "version"], capture_output=True, text=True)
             return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"
@@ -255,6 +271,8 @@ class RapidMLXEngine(BaseEngine):
 class MLXLMEngine(BaseEngine):
     name = "mlx-lm"
     port = 8002
+
+    # Metodi ridondanti rimossi (ereditano correttamente dalla BaseClass)
 
     def is_installed(self) -> bool:
         return importlib.util.find_spec("mlx_lm") is not None
@@ -278,12 +296,11 @@ class OllamaEngine(BaseEngine):
     def get_version(self) -> str:
         try:
             result = subprocess.run(
-                ["ollama", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=3,
+                ["ollama", "--version"], capture_output=True, text=True, timeout=3
             )
-            return result.stdout.strip() or "unknown"
+            version_str = result.stdout.strip()
+            # Estrae solo il numero di versione (es. da "ollama version is 0.24.0" a "0.24.0")
+            return version_str.split()[-1] if version_str else "unknown"
         except Exception:
             return "unknown"
 
@@ -297,18 +314,14 @@ ENGINES = {
     "ollama": OllamaEngine,
 }
 
-
 def get_engine(name: str) -> BaseEngine:
-    """Return an engine instance by name."""
     if name not in ENGINES:
-        raise ValueError(
-            f"Unknown engine: '{name}'. Available: {list(ENGINES.keys())}"
-        )
+        raise ValueError(f"Unknown engine: '{name}'. Available: {list(ENGINES.keys())}")
     return ENGINES[name]()
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     for name, cls in ENGINES.items():
         engine = cls()
         installed = engine.is_installed()
