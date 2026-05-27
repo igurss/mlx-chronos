@@ -4,8 +4,7 @@
 
 ## [0.1.0] — 2026-05-27
 
-Official v0.1.0 release notes, compared with `v0.1.0-beta.1`
-(`9d1bed23bf938e602ebef15b7a5e10ad5064488b`).
+Official v0.1.0 release notes, compared with `v0.1.0-beta.1`.
 
 ### Added
 - **Ollama** engine support (MLX backend, port 11434).
