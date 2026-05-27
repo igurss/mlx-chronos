@@ -140,6 +140,11 @@ COLD_PROMPTS = [
     "Explain what an operating system does in simple terms.",
 ]
 
+# Fixed prompt used for cached TTFT trials.
+CACHED_TTFT_PROMPT = (
+    "Explain the concept of unified memory in Apple Silicon in one sentence."
+)
+
 # Standard throughput prompt — fixed across all engines and versions
 # Do not change this without bumping chronos_version
 THROUGHPUT_PROMPT = (
@@ -244,9 +249,6 @@ def run_benchmark(
     tps_trials = []
     token_count_sources = []
 
-    # Fixed prompt for cached TTFT
-    cached_prompt = "Explain the concept of unified memory in Apple Silicon in one sentence."
-
     peak_ram_gb = None
     system_ram_peak_gb = None
     system_ram_peak_percent = None
@@ -290,25 +292,29 @@ def run_benchmark(
                 )
                 ram_tracker = None
 
-        # Priming call
-        logger.info("Priming cache for cached TTFT measurement...")
+        logger.info("Running cold TTFT trials...")
+        for i in range(trials):
+            cold_prompt = COLD_PROMPTS[i]
+            logger.info(f"  Cold trial {i + 1}/{trials} (unique prompt)...")
+            ttft_cold_trials.append(engine.measure_ttft(cold_prompt, model=model_name))
+
+        logger.info("\nPriming cache for cached TTFT measurement...")
         try:
-            engine.measure_ttft(cached_prompt, model=model_name)
+            engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
         except Exception as exc:
             logger.warning(f"  Cache priming failed; cached TTFT may be cold: {exc}")
         logger.info("  Done.\n")
 
+        logger.info("Running cached TTFT trials...")
         for i in range(trials):
-            logger.info(f"Trial {i + 1}/{trials}")
+            logger.info(f"  Cached trial {i + 1}/{trials} (fixed prompt)...")
+            ttft_cached_trials.append(
+                engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
+            )
 
-            cold_prompt = COLD_PROMPTS[i]
-            logger.info("  Cold TTFT (unique prompt)...")
-            ttft_cold_trials.append(engine.measure_ttft(cold_prompt, model=model_name))
-
-            logger.info("  Cached TTFT (fixed prompt)...")
-            ttft_cached_trials.append(engine.measure_ttft(cached_prompt, model=model_name))
-
-            logger.info("  Throughput...")
+        logger.info("\nRunning throughput trials...")
+        for i in range(trials):
+            logger.info(f"  Throughput trial {i + 1}/{trials}...")
             tps_trials.append(
                 engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
             )

@@ -32,6 +32,7 @@
 - Made leaderboard generation fail on invalid submitted JSON instead of silently skipping files.
 - Decoupled schema engine-name validation from the engine implementation registry.
 - Made Rapid-MLX model ID caching instance-scoped to avoid cross-test leakage.
+- Separated cold TTFT, cached TTFT, and throughput phases so cached TTFT is not polluted by interleaved prompts.
 
 ## [0.1.0-beta.1] — 2026-05-24
 

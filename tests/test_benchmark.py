@@ -1,6 +1,13 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from mlx_chronos.benchmark import compute_stats, RAMTracker, SystemRAMTracker, run_benchmark
+from mlx_chronos.benchmark import (
+    CACHED_TTFT_PROMPT,
+    COLD_PROMPTS,
+    RAMTracker,
+    SystemRAMTracker,
+    compute_stats,
+    run_benchmark,
+)
 
 def test_compute_stats_normal():
     values = [10.0, 12.0, 14.0, 16.0, 18.0]
@@ -109,3 +116,12 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["metrics"]["ram_measurement_method"] == "process_rss"
     assert result["metrics"]["system_ram_peak_gb"] == 6.0
     assert result["metrics"]["system_ram_peak_percent"] == 75.0
+
+    ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]
+    assert ttft_prompts == [
+        COLD_PROMPTS[0],
+        COLD_PROMPTS[1],
+        CACHED_TTFT_PROMPT,
+        CACHED_TTFT_PROMPT,
+        CACHED_TTFT_PROMPT,
+    ]

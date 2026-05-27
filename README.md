@@ -40,14 +40,16 @@ running engine:
 **Cold TTFT** — sends a prompt to the model and measures the time from request
 to first real token. Each trial uses a unique prompt to avoid cache hits.
 
-**Cached TTFT** — sends the same fixed prompt on every trial. A priming call
-loads it into cache first. This measures true cache performance.
+**Cached TTFT** — sends the same fixed prompt on every cached trial. A priming
+call loads it into cache first, then cached trials run consecutively. This
+measures cache performance without interleaving unrelated prompts between
+cached measurements.
 
 **Throughput (tok/s)** — measures tokens generated per second using a standard
 fixed prompt, identical across all engines and versions.
 
 **Peak engine RSS** — measures the resident memory of the engine server process
-after warmup, through cache priming and the recorded trial loop. This is
+after warmup, through the recorded benchmark phases. This is
 intentionally not the total memory occupied by the loaded model or by
 macOS/Metal unified memory. It is meant to compare how light or heavy each
 engine process is while serving the same model. The default RSS sampling

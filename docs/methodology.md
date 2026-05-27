@@ -19,9 +19,10 @@ Each trial uses a **unique prompt** from a fixed pool defined in `benchmark.py`.
 This ensures the engine cannot serve the response from a previous cache hit.
 
 ### TTFT Cached — Time to First Token (cached)
-Same measurement, but using a **fixed prompt** that is sent on every trial.
-A priming call (not recorded) is made before the trial loop to load this prompt
-into the engine cache. Subsequent measurements reflect true cache performance.
+Same measurement, but using a **fixed prompt** that is sent on every cached
+trial. After cold TTFT trials finish, a priming call (not recorded) loads this
+prompt into the engine cache. Cached TTFT trials then run consecutively so
+unrelated prompts do not evict or overwrite the cache between measurements.
 
 ### Throughput (tok/s)
 Tokens generated per second, measured using a fixed standard prompt defined
@@ -37,7 +38,7 @@ are marked as `word_fallback` or `mixed` and are not considered comparable.
 
 ### Peak Engine RSS (GB)
 Resident memory used by the engine server process, sampled continuously after
-warmup through cache priming and the recorded trial loop, then reported as the
+warmup through the recorded benchmark phases, then reported as the
 observed RSS peak.
 
 **Important:** this metric is best read as process overhead for the server, API
@@ -58,7 +59,7 @@ fallbacks.
 
 ### System RAM Peak
 Total Mac RAM usage is sampled continuously from before warmup through the
-recorded trial loop, using the configured RAM sampling interval. The result
+recorded benchmark phases, using the configured RAM sampling interval. The result
 records the observed peak as `metrics.system_ram_peak_gb` and
 `metrics.system_ram_peak_percent`.
 
@@ -90,12 +91,18 @@ chips and models.
 |-----------|-------|
 | Trials per metric | 5 (default) |
 | Warmup calls | 2 (not recorded, throughput prompt) |
-| Cache priming | 1 call before trial loop (not recorded) |
+| Cache priming | 1 call after cold TTFT and before cached TTFT (not recorded) |
 | Max tokens — TTFT | 1 |
 | Max tokens — throughput | 100 |
 
 **Warmup:** two unrecorded calls using the throughput prompt are made before
 any measurement. This reduces noise from model loading and JIT compilation.
+
+**Phase order:** mlx-Chronos measures cold TTFT trials first, primes the fixed
+cached prompt once, measures cached TTFT trials consecutively, and then measures
+throughput trials. The phases are intentionally not interleaved, because some
+local engines keep only one active KV/prefix cache and can lose the cached
+prompt when unrelated prompts are sent between cached trials.
 
 **Statistics:** mean, stddev, min, max are reported for each metric.
 p95 is intentionally omitted for small sample sizes (n=5) where it collapses
