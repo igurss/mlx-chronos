@@ -8,6 +8,14 @@ import time
 import os
 import psutil
 
+from mlx_chronos.constants import (
+    RAM_MEASUREMENT_PROCESS_RSS,
+    RAM_MEASUREMENT_SYSTEM_FALLBACK,
+    TOKEN_COUNT_SOURCE_MIXED,
+    TOKEN_COUNT_SOURCE_USAGE,
+    TOKEN_COUNT_SOURCE_WORD_FALLBACK,
+    TOKEN_COUNT_SOURCES,
+)
 from mlx_chronos.detect import detect_hardware
 from mlx_chronos.engines import get_engine
 from mlx_chronos.schema import BenchmarkResult
@@ -119,6 +127,21 @@ def compute_stats(values: list[float]) -> dict:
     }
 
 
+def _normalize_token_count_source(source: object) -> str:
+    if isinstance(source, str) and source in TOKEN_COUNT_SOURCES:
+        return source
+    return TOKEN_COUNT_SOURCE_WORD_FALLBACK
+
+
+def _summarize_token_count_sources(sources: list[str]) -> str:
+    unique_sources = set(sources)
+    if unique_sources == {TOKEN_COUNT_SOURCE_USAGE}:
+        return TOKEN_COUNT_SOURCE_USAGE
+    if unique_sources == {TOKEN_COUNT_SOURCE_WORD_FALLBACK}:
+        return TOKEN_COUNT_SOURCE_WORD_FALLBACK
+    return TOKEN_COUNT_SOURCE_MIXED
+
+
 def run_benchmark(
     engine_name: str,
     model_name: str,
@@ -210,6 +233,7 @@ def run_benchmark(
     ttft_cold_trials = []
     ttft_cached_trials = []
     tps_trials = []
+    token_count_sources = []
 
     # Fixed prompt for cached TTFT
     cached_prompt = "Explain the concept of unified memory in Apple Silicon in one sentence."
@@ -240,6 +264,11 @@ def run_benchmark(
             tps_trials.append(
                 engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
             )
+            token_count_sources.append(
+                _normalize_token_count_source(
+                    getattr(engine, "last_token_count_source", None)
+                )
+            )
     finally:
         if ram_tracker:
             peak_ram_gb = ram_tracker.stop()
@@ -256,6 +285,7 @@ def run_benchmark(
     ttft_cold_stats = compute_stats(ttft_cold_trials)
     ttft_cached_stats = compute_stats(ttft_cached_trials)
     tps_stats = compute_stats(tps_trials)
+    token_count_source = _summarize_token_count_sources(token_count_sources)
 
 
     model_display_name = model_name.split("/")[-1] if "/" in model_name else model_name
@@ -277,6 +307,12 @@ def run_benchmark(
             "tokens_per_second": tps_stats,
             "ram_peak_gb": round(peak_ram_gb, 3),
             "ram_is_process_rss": ram_is_process_rss,
+            "ram_measurement_method": (
+                RAM_MEASUREMENT_PROCESS_RSS
+                if ram_is_process_rss
+                else RAM_MEASUREMENT_SYSTEM_FALLBACK
+            ),
+            "token_count_source": token_count_source,
         },
         "trials": {
             "count": trials,

@@ -35,6 +35,7 @@ def test_cmd_run_format_all_calls_reporters():
         notes=None,
         ram_sample_interval=0.1,
         format="all",
+        output_dir=None,
     )
     with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT) as mock_run, \
          patch("mlx_chronos.cli.JSONReporter") as mock_json, \
@@ -47,5 +48,31 @@ def test_cmd_run_format_all_calls_reporters():
         mock_run.assert_called_once()
         mock_json.assert_called_once()
         mock_md.assert_called_once()
-        mock_json.return_value.save.assert_called_once()
-        mock_md.return_value.save.assert_called_once()
+        expected_dir = Path.cwd() / "results" / "local"
+        mock_json.return_value.save.assert_called_once_with(EXAMPLE_RESULT, expected_dir)
+        mock_md.return_value.save.assert_called_once_with(EXAMPLE_RESULT, expected_dir)
+
+def test_cmd_run_custom_output_dir():
+    output_dir = Path("custom-results")
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        format="json",
+        output_dir=output_dir,
+    )
+    with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT), \
+         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+        mock_json.return_value.save.return_value = output_dir / "test.json"
+
+        cmd_run(args)
+
+        mock_json.return_value.save.assert_called_once_with(EXAMPLE_RESULT, output_dir)
+
+def test_submitted_results_are_not_gitignored():
+    gitignore = Path(".gitignore").read_text()
+    assert "results/submitted/*.json" not in gitignore
+    assert "results/local/" in gitignore

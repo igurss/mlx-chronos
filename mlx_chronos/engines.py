@@ -10,6 +10,11 @@ import httpx
 import psutil
 from abc import ABC, abstractmethod
 
+from mlx_chronos.constants import (
+    TOKEN_COUNT_SOURCE_USAGE,
+    TOKEN_COUNT_SOURCE_WORD_FALLBACK,
+)
+
 logger = logging.getLogger("mlx_chronos")
 
 
@@ -19,7 +24,36 @@ class BaseEngine(ABC):
     """Abstract base class for inference engine integrations."""
 
     name: str
-    port: int
+    default_port: int
+    expected_process_names: tuple[str, ...] = ()
+
+    def __init__(self, port: int | None = None):
+        self.port = port if port is not None else self._configured_port()
+        self.last_token_count_source = TOKEN_COUNT_SOURCE_USAGE
+
+    def port_env_var(self) -> str:
+        normalized_name = self.name.upper().replace("-", "_")
+        return f"MLX_CHRONOS_{normalized_name}_PORT"
+
+    def _configured_port(self) -> int:
+        raw_port = os.getenv(self.port_env_var())
+        if raw_port is None:
+            return self.default_port
+
+        try:
+            port = int(raw_port)
+            if 1 <= port <= 65535:
+                return port
+        except ValueError:
+            pass
+
+        logger.warning(
+            "Invalid %s=%r; using default port %s.",
+            self.port_env_var(),
+            raw_port,
+            self.default_port,
+        )
+        return self.default_port
 
     def base_url(self) -> str:
         return f"http://localhost:{self.port}/v1"
@@ -63,24 +97,46 @@ class BaseEngine(ABC):
         return False
 
     def get_server_pid(self) -> int | None:
-        """macOS-safe PID lookup using lsof."""
+        """Return the listening server PID for this engine port when available."""
         try:
             result = subprocess.run(
-                ["lsof", "-t", f"-i:{self.port}"],
+                ["lsof", "-nP", f"-iTCP:{self.port}", "-sTCP:LISTEN", "-t"],
                 capture_output=True,
                 text=True,
                 timeout=2,
             )
             pids = result.stdout.strip().split()
-            if pids:
-                return int(pids[0])
+            for pid_text in pids:
+                try:
+                    pid = int(pid_text)
+                except ValueError:
+                    continue
+                if self._process_matches_engine(pid):
+                    return pid
         except Exception:
             pass
         return None
 
+    def _process_matches_engine(self, pid: int) -> bool:
+        if not self.expected_process_names:
+            return True
+
+        try:
+            process = psutil.Process(pid)
+            process_text = " ".join(
+                [
+                    process.name(),
+                    " ".join(process.cmdline()),
+                ]
+            ).lower()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+            return False
+
+        return any(name.lower() in process_text for name in self.expected_process_names)
+
     def _stream_chunk_has_content(self, chunk: dict) -> bool:
         choices = chunk.get("choices")
-        if not choices:  # Corretto: gestisce sia None che lista vuota senza crash
+        if not choices:
             return False
 
         choice = choices[0]
@@ -105,30 +161,32 @@ class BaseEngine(ABC):
         payload = self.build_payload(prompt=prompt, model=model, max_tokens=1, stream=True)
         start = time.perf_counter()
 
-        with httpx.stream(
-            "POST", f"{self.base_url()}{self.endpoint()}", json=payload, timeout=30.0
-        ) as r:
-            r.raise_for_status()
+        url = f"{self.base_url()}{self.endpoint()}"
+        try:
+            with httpx.stream("POST", url, json=payload, timeout=30.0) as r:
+                r.raise_for_status()
 
-            for line in r.iter_lines():
-                if not line:
-                    continue
-                if isinstance(line, bytes):
-                    line = line.decode("utf-8", errors="ignore")
-                if not line.startswith("data:"):
-                    continue
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    if isinstance(line, bytes):
+                        line = line.decode("utf-8", errors="ignore")
+                    if not line.startswith("data:"):
+                        continue
 
-                data = line.removeprefix("data:").strip()
-                if not data or data == "[DONE]":
-                    continue
+                    data = line.removeprefix("data:").strip()
+                    if not data or data == "[DONE]":
+                        continue
 
-                try:
-                    chunk = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
 
-                if self._stream_chunk_has_content(chunk):
-                    return round(time.perf_counter() - start, 3)
+                    if self._stream_chunk_has_content(chunk):
+                        return round(time.perf_counter() - start, 3)
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"{self.name} request failed at {url}: {exc}") from exc
 
         raise RuntimeError(f"No valid token received from {self.name} stream.")
 
@@ -137,22 +195,33 @@ class BaseEngine(ABC):
         payload = self.build_payload(prompt=prompt, model=model, max_tokens=max_tokens, stream=False)
         start = time.perf_counter()
 
-        r = httpx.post(f"{self.base_url()}{self.endpoint()}", json=payload, timeout=60.0)
-        r.raise_for_status()
+        url = f"{self.base_url()}{self.endpoint()}"
+        try:
+            r = httpx.post(url, json=payload, timeout=60.0)
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"{self.name} request failed at {url}: {exc}") from exc
 
         elapsed = time.perf_counter() - start
         if elapsed <= 0:
             return 0.0
 
-        data = r.json()
+        try:
+            data = r.json()
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"{self.name} returned invalid JSON at {url}") from exc
+
         tokens = data.get("usage", {}).get("completion_tokens")
 
-        if tokens is None:
+        if isinstance(tokens, (int, float)) and tokens > 0:
+            self.last_token_count_source = TOKEN_COUNT_SOURCE_USAGE
+        else:
             text = ""
             if "choices" in data and data["choices"]:
                 choice = data["choices"][0]
                 text = choice.get("text") or choice.get("message", {}).get("content", "")
             tokens = max(1, len(text.split()))
+            self.last_token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
         return round(tokens / elapsed, 2)
 
@@ -196,7 +265,8 @@ class BaseEngine(ABC):
 
 class OMLXEngine(BaseEngine):
     name = "omlx"
-    port = 8000
+    default_port = 8000
+    expected_process_names = ("omlx", "python")
 
     def is_installed(self) -> bool:
         return shutil.which("omlx") is not None
@@ -218,9 +288,9 @@ class OMLXEngine(BaseEngine):
 
 class RapidMLXEngine(BaseEngine):
     name = "rapid-mlx"
-    port = 8001
+    default_port = 8001
+    expected_process_names = ("rapid-mlx", "python")
     
-    # Risolto il problema della cache di istanza spostandola a livello di classe
     _global_model_id_cache: dict[str, str] = {}
 
     def _resolve_model_id(self, model: str) -> str | None:
@@ -270,9 +340,8 @@ class RapidMLXEngine(BaseEngine):
 
 class MLXLMEngine(BaseEngine):
     name = "mlx-lm"
-    port = 8002
-
-    # Metodi ridondanti rimossi (ereditano correttamente dalla BaseClass)
+    default_port = 8080
+    expected_process_names = ("mlx_lm", "mlx-lm", "python")
 
     def is_installed(self) -> bool:
         return importlib.util.find_spec("mlx_lm") is not None
@@ -288,7 +357,8 @@ class MLXLMEngine(BaseEngine):
 
 class OllamaEngine(BaseEngine):
     name = "ollama"
-    port = 11434
+    default_port = 11434
+    expected_process_names = ("ollama",)
 
     def is_installed(self) -> bool:
         return shutil.which("ollama") is not None
@@ -299,7 +369,6 @@ class OllamaEngine(BaseEngine):
                 ["ollama", "--version"], capture_output=True, text=True, timeout=3
             )
             version_str = result.stdout.strip()
-            # Estrae solo il numero di versione (es. da "ollama version is 0.24.0" a "0.24.0")
             return version_str.split()[-1] if version_str else "unknown"
         except Exception:
             return "unknown"

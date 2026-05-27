@@ -52,6 +52,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         "memory_gb": 8.0,
         "macos_version": "14.0",
         "python_version": "3.11",
+        "architecture": "arm64",
         "thermal_state": "nominal",
         "system_ram_usage_percent": 50.0
     }
@@ -60,6 +61,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.return_value = 0.5
     mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.last_token_count_source = "usage.completion_tokens"
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = 12345
     mock_get_engine.return_value = mock_engine
@@ -86,3 +88,5 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["model"]["name"] == "test-model"
     assert result["metrics"]["tokens_per_second"]["mean"] == 20.0
     assert result["metrics"]["ttft_cold"]["mean"] == 0.5
+    assert result["metrics"]["token_count_source"] == "usage.completion_tokens"
+    assert result["metrics"]["ram_measurement_method"] == "process_rss"

@@ -1,7 +1,7 @@
 import sys
 from types import SimpleNamespace
 
-from mlx_chronos.detect import get_thermal_state
+from mlx_chronos.detect import get_architecture, get_thermal_state
 
 
 def test_thermal_state_uses_foundation_when_available(monkeypatch):
@@ -19,3 +19,8 @@ def test_thermal_state_falls_back_without_sudo(monkeypatch):
     monkeypatch.setattr("os.geteuid", lambda: 501)
 
     assert get_thermal_state() == "unavailable_no_sudo"
+
+
+def test_get_architecture(monkeypatch):
+    monkeypatch.setattr("platform.machine", lambda: "arm64")
+    assert get_architecture() == "arm64"

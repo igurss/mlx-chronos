@@ -1,4 +1,5 @@
 import pytest
+import httpx
 from unittest.mock import MagicMock, patch
 from mlx_chronos.engines import (
     OMLXEngine, MLXLMEngine, RapidMLXEngine, OllamaEngine, get_engine
@@ -43,6 +44,50 @@ def test_measure_tokens_per_second(mock_post):
     with patch("time.perf_counter", side_effect=[0.0, 1.5]):
         tps = engine.measure_tokens_per_second("test prompt", "default", 100)
         assert tps == 100.0  # 150 tokens / 1.5s = 100.0
+        assert engine.last_token_count_source == "usage.completion_tokens"
+
+@patch("httpx.post")
+def test_measure_tokens_per_second_marks_word_fallback(mock_post):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": "one two three four"}}]
+    }
+    mock_post.return_value = mock_response
+
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 2.0]):
+        tps = engine.measure_tokens_per_second("test prompt", "default", 100)
+        assert tps == 2.0
+        assert engine.last_token_count_source == "word_fallback"
+
+@patch("httpx.post", side_effect=httpx.TimeoutException("timed out"))
+def test_measure_tokens_per_second_wraps_http_errors(mock_post):
+    engine = OMLXEngine()
+    with pytest.raises(RuntimeError, match="omlx request failed"):
+        engine.measure_tokens_per_second("test prompt", "default", 100)
+
+def test_engine_port_env_override(monkeypatch):
+    monkeypatch.setenv("MLX_CHRONOS_MLX_LM_PORT", "8090")
+    assert MLXLMEngine().port == 8090
+
+def test_engine_invalid_port_env_uses_default(monkeypatch):
+    monkeypatch.setenv("MLX_CHRONOS_MLX_LM_PORT", "invalid")
+    assert MLXLMEngine().port == 8080
+
+@patch("subprocess.run")
+@patch("mlx_chronos.engines.psutil.Process")
+def test_get_server_pid_filters_listening_process(mock_process_cls, mock_run):
+    mock_result = MagicMock()
+    mock_result.stdout = "123\n"
+    mock_run.return_value = mock_result
+
+    mock_process = MagicMock()
+    mock_process.name.return_value = "python"
+    mock_process.cmdline.return_value = ["omlx", "serve"]
+    mock_process_cls.return_value = mock_process
+
+    assert OMLXEngine().get_server_pid() == 123
+    assert "-sTCP:LISTEN" in mock_run.call_args.args[0]
 
 @patch("subprocess.run")
 def test_ollama_get_version(mock_run):

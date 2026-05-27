@@ -32,7 +32,7 @@ def cmd_run(args):
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
         
-    results_dir = Path.cwd() / "results" / "submitted"
+    results_dir = args.output_dir or Path.cwd() / "results" / "local"
     reporters = []
     if args.format in ("json", "all"):
         reporters.append(JSONReporter())
@@ -55,7 +55,7 @@ def cmd_engines(args):
         installed = engine.is_installed()
         running = engine.is_server_running() if installed else False
         status = "running" if running else ("installed" if installed else "not installed")
-        logger.info(f"  {name:<15} {status}")
+        logger.info(f"  {name:<15} {status:<13} {engine.base_url()}")
     logger.info("")
 
 
@@ -110,6 +110,12 @@ def main():
         choices=["json", "markdown", "all"],
         default="json",
         help="Output format (default: json)",
+    )
+    run_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Directory for result files (default: ./results/local)",
     )
     run_parser.set_defaults(func=cmd_run)
 

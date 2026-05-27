@@ -47,6 +47,11 @@ def get_python_version() -> str:
     return platform.python_version()
 
 
+def get_architecture() -> str:
+    """Return host CPU architecture (e.g. 'arm64')."""
+    return platform.machine() or "unknown"
+
+
 def get_thermal_state_from_foundation() -> str | None:
     """Return thermal state via NSProcessInfo when PyObjC/Foundation is available."""
     try:
@@ -105,6 +110,7 @@ def detect_hardware() -> dict:
         "memory_gb": get_memory_gb(),
         "macos_version": get_macos_version(),
         "python_version": get_python_version(),
+        "architecture": get_architecture(),
         "thermal_state": get_thermal_state(),
         "system_ram_usage_percent": get_system_ram_usage_percent(),
     }

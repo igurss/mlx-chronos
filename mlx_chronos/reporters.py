@@ -1,4 +1,5 @@
 import json
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from datetime import datetime, timezone
@@ -12,7 +13,7 @@ class BaseReporter(ABC):
         pass
 
     def _generate_base_filename(self, result: dict) -> str:
-        chip_slug = result["hardware"]["chip"].replace(" ", "_").lower()
+        chip_slug = self._slug(result["hardware"]["chip"])
         # For timestamps, we typically want a consistent ts across formats for the same run
         # but calling datetime.now() inside here might yield slightly different seconds.
         # We can use the timestamp from result["meta"]["timestamp"] if available.
@@ -29,8 +30,11 @@ class BaseReporter(ABC):
         else:
             ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             
-        engine_name = result["engine"]["name"]
+        engine_name = self._slug(result["engine"]["name"])
         return f"{engine_name}_{chip_slug}_{ts}"
+
+    def _slug(self, value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "unknown"
 
 class JSONReporter(BaseReporter):
     """Saves benchmark results as JSON."""
@@ -42,6 +46,7 @@ class JSONReporter(BaseReporter):
         
         with open(output_path, "w") as f:
             json.dump(result, f, indent=2)
+            f.write("\n")
             
         return output_path
 

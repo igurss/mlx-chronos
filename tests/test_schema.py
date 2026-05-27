@@ -11,6 +11,9 @@ def test_valid_schema():
     assert result.metrics.tokens_per_second.mean == 18.44
     assert isinstance(result.meta.timestamp, datetime)
     assert result.meta.ram_sample_interval_seconds == 0.05
+    assert result.hardware.architecture == "arm64"
+    assert result.metrics.token_count_source == "usage.completion_tokens"
+    assert result.metrics.ram_measurement_method == "system_fallback"
 
 def test_invalid_engine_name():
     """Test that an unknown engine name raises a validation error."""
@@ -60,4 +63,72 @@ def test_trial_stats_range_must_be_consistent():
     }
 
     with pytest.raises(ValidationError, match="mean must be between"):
+        BenchmarkResult(**invalid_data)
+
+def test_summary_stats_must_match_raw_trials():
+    """Test that summary statistics must be derived from raw trial values."""
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["metrics"] = invalid_data["metrics"].copy()
+    invalid_data["metrics"]["ttft_cold"] = invalid_data["metrics"]["ttft_cold"].copy()
+    invalid_data["metrics"]["ttft_cold"]["mean"] = 0.05
+
+    with pytest.raises(ValidationError, match="metrics.ttft_cold.mean"):
+        BenchmarkResult(**invalid_data)
+
+def test_timestamp_must_be_timezone_aware():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["timestamp"] = "2026-05-23T15:08:36"
+
+    with pytest.raises(ValidationError, match="timezone-aware"):
+        BenchmarkResult(**invalid_data)
+
+def test_quantization_is_normalized():
+    data = EXAMPLE_RESULT.copy()
+    data["model"] = data["model"].copy()
+    data["model"]["quantization"] = "4-bit"
+
+    result = BenchmarkResult(**data)
+    assert result.model.quantization == "4bit"
+
+def test_uncommon_quantization_is_allowed():
+    data = EXAMPLE_RESULT.copy()
+    data["model"] = data["model"].copy()
+    data["model"]["quantization"] = "q4_k_m"
+
+    result = BenchmarkResult(**data)
+    assert result.model.quantization == "q4km"
+
+def test_empty_quantization_is_rejected():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["model"] = invalid_data["model"].copy()
+    invalid_data["model"]["quantization"] = "  "
+
+    with pytest.raises(ValidationError, match="quantization must not be empty"):
+        BenchmarkResult(**invalid_data)
+
+def test_trial_count_has_maximum():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["trials"] = invalid_data["trials"].copy()
+    invalid_data["trials"]["count"] = 9
+    invalid_data["trials"]["ttft_cold_raw"] = [0.1] * 9
+    invalid_data["trials"]["ttft_cached_raw"] = [0.1] * 9
+    invalid_data["trials"]["tokens_per_second_raw"] = [10.0] * 9
+
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**invalid_data)
+
+def test_ram_measurement_method_must_match_boolean():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["metrics"] = invalid_data["metrics"].copy()
+    invalid_data["metrics"]["ram_measurement_method"] = "process_rss"
+
+    with pytest.raises(ValidationError, match="ram_measurement_method"):
+        BenchmarkResult(**invalid_data)
+
+def test_extra_fields_are_rejected():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["unexpected"] = True
+
+    with pytest.raises(ValidationError):
         BenchmarkResult(**invalid_data)
