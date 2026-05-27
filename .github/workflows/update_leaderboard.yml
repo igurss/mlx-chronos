@@ -50,7 +50,7 @@ jobs:
                       "tps_stddev": met["tokens_per_second"]["stddev"],
                       "ttft_cold": met["ttft_cold"]["mean"],
                       "ttft_cached": met["ttft_cached"]["mean"],
-                      "system_ram_usage_percent": hw["system_ram_usage_percent"],
+                      "system_ram_usage_percent": hw.get("system_ram_usage_percent", None),
                       "ram_peak_gb": met["ram_peak_gb"],
                       "ram_is_process_rss": met.get("ram_is_process_rss", False),
                       "thermal_state": hw.get("thermal_state", "unavailable_no_sudo"),
