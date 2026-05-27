@@ -74,6 +74,43 @@ class RAMTracker:
         return self.peak_ram_bytes / (1024 ** 3)
 
 
+class SystemRAMTracker:
+    """Continuously samples total system RAM usage during the benchmark."""
+
+    def __init__(self, interval: float = 0.05):
+        self.interval = interval
+        self.peak_used_bytes = 0
+        self.peak_percent = 0.0
+        self._stop_event = threading.Event()
+        self._thread = None
+
+    def _sample_system_ram(self) -> tuple[int, float]:
+        mem = psutil.virtual_memory()
+        used_bytes = max(0, mem.total - mem.available)
+        percent = (used_bytes / mem.total * 100) if mem.total else 0.0
+        return used_bytes, percent
+
+    def _monitor(self):
+        while not self._stop_event.is_set():
+            used_bytes, percent = self._sample_system_ram()
+            if used_bytes > self.peak_used_bytes:
+                self.peak_used_bytes = used_bytes
+                self.peak_percent = percent
+            time.sleep(self.interval)
+
+    def start(self):
+        self.peak_used_bytes, self.peak_percent = self._sample_system_ram()
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._monitor, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> tuple[float, float]:
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join()
+        return self.peak_used_bytes / (1024 ** 3), self.peak_percent
+
+
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mlx_chronos")
 
@@ -193,26 +230,19 @@ def run_benchmark(
     version = engine.get_version()
     logger.info(f"Engine version: {version}\n")
 
-    # 4. Warmup phase — 2 calls with the throughput prompt, not recorded
-    logger.info("Warming up (2 calls, not recorded)...")
-    for _ in range(2):
-        try:
-            engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name, max_tokens=30)
-        except Exception as exc:
-            logger.warning(f"  Warmup call failed and was skipped: {exc}")
-    logger.info("  Done.\n")
-
-
+    # 4. Start memory sampling before warmup so model load/cache pressure is captured.
     logger.info(
         f"Starting continuous background RAM sampling "
         f"({ram_sample_interval:.3f}s interval)..."
     )
+    system_ram_tracker = SystemRAMTracker(interval=ram_sample_interval)
+    system_ram_tracker.start()
     target_pid = engine.get_server_pid()
     ram_tracker = None
     ram_is_process_rss = False
     if target_pid is None:
         logger.warning(
-            "Engine PID not found; falling back to post-benchmark system RAM measurement."
+            "Engine PID not found; engine RSS will use system RAM peak fallback."
         )
     else:
         try:
@@ -229,7 +259,7 @@ def run_benchmark(
             ram_tracker = None
 
 
-    # 5. Run trials
+    # 5. Run warmup and trials
     ttft_cold_trials = []
     ttft_cached_trials = []
     tps_trials = []
@@ -239,9 +269,23 @@ def run_benchmark(
     cached_prompt = "Explain the concept of unified memory in Apple Silicon in one sentence."
 
     peak_ram_gb = None
-    ram_is_fallback = False
+    system_ram_peak_gb = None
+    system_ram_peak_percent = None
 
     try:
+        # Warmup phase — 2 calls with the throughput prompt, not recorded
+        logger.info("Warming up (2 calls, not recorded)...")
+        for _ in range(2):
+            try:
+                engine.measure_tokens_per_second(
+                    THROUGHPUT_PROMPT,
+                    model=model_name,
+                    max_tokens=30,
+                )
+            except Exception as exc:
+                logger.warning(f"  Warmup call failed and was skipped: {exc}")
+        logger.info("  Done.\n")
+
         # Priming call
         logger.info("Priming cache for cached TTFT measurement...")
         try:
@@ -273,11 +317,19 @@ def run_benchmark(
         if ram_tracker:
             peak_ram_gb = ram_tracker.stop()
             logger.info(
-                f"RAM sampling finished. Peak detected: {peak_ram_gb:.2f} GB\n"
+                f"Engine RSS sampling finished. Peak detected: {peak_ram_gb:.2f} GB"
             )
         else:
-            peak_ram_gb, ram_is_fallback = engine.measure_ram_peak()
-            ram_is_process_rss = not ram_is_fallback
+            ram_is_process_rss = False
+
+        system_ram_peak_gb, system_ram_peak_percent = system_ram_tracker.stop()
+        logger.info(
+            "System RAM sampling finished. Peak detected: "
+            f"{system_ram_peak_gb:.2f} GB ({system_ram_peak_percent:.1f}%)\n"
+        )
+
+        if peak_ram_gb is None:
+            peak_ram_gb = system_ram_peak_gb
 
     logger.info("")
 
@@ -312,6 +364,8 @@ def run_benchmark(
                 if ram_is_process_rss
                 else RAM_MEASUREMENT_SYSTEM_FALLBACK
             ),
+            "system_ram_peak_gb": round(system_ram_peak_gb, 3),
+            "system_ram_peak_percent": round(system_ram_peak_percent, 1),
             "token_count_source": token_count_source,
         },
         "trials": {

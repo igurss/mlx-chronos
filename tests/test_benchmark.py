@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from mlx_chronos.benchmark import compute_stats, RAMTracker, run_benchmark
+from mlx_chronos.benchmark import compute_stats, RAMTracker, SystemRAMTracker, run_benchmark
 
 def test_compute_stats_normal():
     values = [10.0, 12.0, 14.0, 16.0, 18.0]
@@ -43,6 +43,19 @@ def test_ram_tracker():
         
     assert tracker.peak_ram_bytes == 1024 ** 3
 
+def test_system_ram_tracker():
+    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+        mem_info = MagicMock()
+        mem_info.total = 8 * (1024 ** 3)
+        mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = mem_info
+
+        tracker = SystemRAMTracker(interval=0.1)
+        used_bytes, percent = tracker._sample_system_ram()
+
+    assert used_bytes == 6 * (1024 ** 3)
+    assert percent == 75.0
+
 @patch("mlx_chronos.benchmark.get_engine")
 @patch("mlx_chronos.benchmark.detect_hardware")
 def test_run_benchmark(mock_detect, mock_get_engine):
@@ -54,7 +67,6 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         "python_version": "3.11",
         "architecture": "arm64",
         "thermal_state": "nominal",
-        "system_ram_usage_percent": 50.0
     }
     
     mock_engine = MagicMock()
@@ -66,13 +78,18 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     mock_engine.get_server_pid.return_value = 12345
     mock_get_engine.return_value = mock_engine
     
-    with patch("mlx_chronos.benchmark.psutil.Process") as mock_process_cls:
+    with patch("mlx_chronos.benchmark.psutil.Process") as mock_process_cls, \
+         patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
         mock_process = MagicMock()
         mem_info = MagicMock()
         mem_info.rss = int(1.5 * (1024 ** 3))
         mock_process.memory_info.return_value = mem_info
         mock_process.children.return_value = []
         mock_process_cls.return_value = mock_process
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
         
         result = run_benchmark(
             engine_name="omlx",
@@ -90,3 +107,5 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["metrics"]["ttft_cold"]["mean"] == 0.5
     assert result["metrics"]["token_count_source"] == "usage.completion_tokens"
     assert result["metrics"]["ram_measurement_method"] == "process_rss"
+    assert result["metrics"]["system_ram_peak_gb"] == 6.0
+    assert result["metrics"]["system_ram_peak_percent"] == 75.0

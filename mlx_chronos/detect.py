@@ -112,12 +112,7 @@ def detect_hardware() -> dict:
         "python_version": get_python_version(),
         "architecture": get_architecture(),
         "thermal_state": get_thermal_state(),
-        "system_ram_usage_percent": get_system_ram_usage_percent(),
     }
-
-def get_system_ram_usage_percent() -> float:
-    """Return the current total system RAM usage percentage."""
-    return psutil.virtual_memory().percent
 
 
 if __name__ == "__main__":

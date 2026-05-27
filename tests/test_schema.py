@@ -14,6 +14,8 @@ def test_valid_schema():
     assert result.hardware.architecture == "arm64"
     assert result.metrics.token_count_source == "usage.completion_tokens"
     assert result.metrics.ram_measurement_method == "system_fallback"
+    assert result.metrics.system_ram_peak_gb == 7.22
+    assert result.metrics.system_ram_peak_percent == 90.2
 
 def test_invalid_engine_name():
     """Test that an unknown engine name raises a validation error."""
@@ -124,6 +126,14 @@ def test_ram_measurement_method_must_match_boolean():
     invalid_data["metrics"]["ram_measurement_method"] = "process_rss"
 
     with pytest.raises(ValidationError, match="ram_measurement_method"):
+        BenchmarkResult(**invalid_data)
+
+def test_pre_run_system_ram_baseline_is_rejected():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["hardware"] = invalid_data["hardware"].copy()
+    invalid_data["hardware"]["system_ram_usage_percent"] = 50.0
+
+    with pytest.raises(ValidationError):
         BenchmarkResult(**invalid_data)
 
 def test_extra_fields_are_rejected():

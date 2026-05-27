@@ -101,7 +101,7 @@ def main():
         type=float,
         default=DEFAULT_RAM_SAMPLE_INTERVAL,
         help=(
-            "Seconds between process RSS samples "
+            "Seconds between engine RSS and system RAM samples "
             f"(default: {DEFAULT_RAM_SAMPLE_INTERVAL})"
         ),
     )

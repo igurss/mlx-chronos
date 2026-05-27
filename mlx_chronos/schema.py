@@ -39,10 +39,6 @@ class Hardware(ChronosBaseModel):
         "unavailable_no_sudo",
         description="Thermal pressure level (nominal/fair/serious/critical or unavailable_*)",
     )
-    system_ram_usage_percent: PercentFloat = Field(
-        ...,
-        description="System RAM usage percentage before benchmark starts",
-    )
 
 
 class Engine(ChronosBaseModel):
@@ -103,7 +99,10 @@ class Metrics(ChronosBaseModel):
     tokens_per_second: TrialStats = Field(..., description="Generation throughput (tok/s)")
     ram_peak_gb: NonNegativeFloat = Field(
         ...,
-        description="Peak engine process RSS or fallback system RAM usage (GB)",
+        description=(
+            "Peak RSS of the engine server process during the benchmark, or "
+            "fallback system memory usage when the process cannot be located (GB)"
+        ),
     )
     ram_is_process_rss: bool = Field(
         ..., 
@@ -111,7 +110,15 @@ class Metrics(ChronosBaseModel):
     )
     ram_measurement_method: RAMMeasurementMethod = Field(
         ...,
-        description="RAM measurement method used for ram_peak_gb",
+        description="Measurement method used for ram_peak_gb",
+    )
+    system_ram_peak_gb: NonNegativeFloat = Field(
+        ...,
+        description="Peak total Mac RAM in use during the benchmark (GB)",
+    )
+    system_ram_peak_percent: PercentFloat = Field(
+        ...,
+        description="Peak total Mac RAM usage percentage during the benchmark",
     )
     token_count_source: TokenCountSource = Field(
         ...,
@@ -154,7 +161,7 @@ class Meta(ChronosBaseModel):
     ram_sample_interval_seconds: Optional[float] = Field(
         None,
         gt=0,
-        description="Seconds between process RSS samples during RAM tracking",
+        description="Seconds between engine RSS and system RAM samples",
     )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 
@@ -225,8 +232,7 @@ EXAMPLE_RESULT = {
         "macos_version": "15.3.1",
         "python_version": "3.11.4",
         "architecture": "arm64",
-        "thermal_state": "unavailable_no_sudo",
-        "system_ram_usage_percent": 50.0
+        "thermal_state": "unavailable_no_sudo"
     },
     "engine": {
         "name": "omlx",
@@ -243,6 +249,8 @@ EXAMPLE_RESULT = {
         "ram_peak_gb": 7.22,
         "ram_is_process_rss": False,
         "ram_measurement_method": "system_fallback",
+        "system_ram_peak_gb": 7.22,
+        "system_ram_peak_percent": 90.2,
         "token_count_source": "usage.completion_tokens"
     },
     "trials": {

@@ -75,7 +75,14 @@ class MarkdownReporter(BaseReporter):
         md += f"- **Throughput:** {metrics['tokens_per_second']['mean']} tokens/s (±{metrics['tokens_per_second']['stddev']})\n"
         md += f"- **Cold TTFT:** {metrics['ttft_cold']['mean']} s (±{metrics['ttft_cold']['stddev']})\n"
         md += f"- **Cached TTFT:** {metrics['ttft_cached']['mean']} s (±{metrics['ttft_cached']['stddev']})\n"
-        md += f"- **Peak RAM:** {metrics['ram_peak_gb']} GB\n"
+        if metrics.get("ram_is_process_rss", False):
+            md += f"- **Peak engine RSS:** {metrics['ram_peak_gb']} GB\n"
+        else:
+            md += f"- **Peak engine RSS fallback (system RAM):** {metrics['ram_peak_gb']} GB\n"
+        md += (
+            f"- **Peak system RAM:** {metrics['system_ram_peak_gb']} GB "
+            f"({metrics['system_ram_peak_percent']}%)\n"
+        )
         
         notes = result.get("meta", {}).get("notes")
         if notes:

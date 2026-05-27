@@ -159,8 +159,8 @@
         <th data-col="tps" class="sorted">tok/s ↓</th>
         <th data-col="ttft_cold">TTFT cold (s)</th>
         <th data-col="ttft_cached">TTFT cached (s)</th>
-        <th data-col="system_ram_usage_percent" title="System RAM usage % before benchmark. High values impact performance.">Base RAM Load</th>
-        <th data-col="ram" title="Peak engine process RSS when available">Engine RAM (GB)</th>
+        <th data-col="ram" title="Peak RSS of the engine server process from warmup through trials when available.">Engine RSS (GB)</th>
+        <th data-col="system_ram_peak" title="Peak total Mac RAM usage during the benchmark.">System RAM Peak</th>
         <th data-col="thermal">Thermal</th>
         <th data-col="trials">Trials</th>
         <th data-col="date">Date</th>
@@ -173,8 +173,9 @@
 
 <footer>
   Results are community-submitted and validated automatically via GitHub Actions.<br>
-  <strong>Engine RAM</strong> reports peak engine process RSS when available.
-  RAM marked <span class="fallback">fallback</span> was measured as system memory, not process RSS.
+  <strong>Engine RSS</strong> reports peak RSS of the engine server process from warmup through trials when available.
+  It is not total model or unified-memory usage. <strong>System RAM Peak</strong> is total Mac RAM usage observed during the benchmark.
+  Values marked <span class="fallback">fallback</span> were measured as system memory, not process RSS.
 </footer>
 
 <script>
@@ -190,6 +191,7 @@
     memory: "memory_gb",
     quant: "quantization",
     ram: "ram_peak_gb",
+    system_ram_peak: "system_ram_peak_percent",
     thermal: "thermal_state",
   };
   const NUMERIC_COLUMNS = new Set([
@@ -197,8 +199,8 @@
     "tps",
     "ttft_cold",
     "ttft_cached",
-    "system_ram_usage_percent",
     "ram",
+    "system_ram_peak",
     "trials",
   ]);
 
@@ -303,8 +305,8 @@
         <td><strong>${fmt(r.tps, 2)}</strong></td>
         <td>${fmt(r.ttft_cold)}</td>
         <td>${fmt(r.ttft_cached)}</td>
-        <td>${r.system_ram_usage_percent != null ? fmt(r.system_ram_usage_percent, 0) + "%" : "—"}</td>
         <td>${r.ram_is_process_rss ? fmt(r.ram_peak_gb, 2) + " GB" : `<span class="fallback">${fmt(r.ram_peak_gb, 2)} GB*</span>`}</td>
+        <td>${r.system_ram_peak_percent != null ? fmt(r.system_ram_peak_gb, 2) + " GB / " + fmt(r.system_ram_peak_percent, 0) + "%" : "—"}</td>
         <td>${r.thermal_state && !r.thermal_state.startsWith("unavailable") ? "🌡 " + escapeHtml(r.thermal_state) : "—"}</td>
         <td>${r.trials}</td>
         <td>${escapeHtml(r.date)}</td>
