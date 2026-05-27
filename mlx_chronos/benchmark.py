@@ -52,8 +52,13 @@ class RAMTracker:
                 if current_ram > self.peak_ram_bytes:
                     self.peak_ram_bytes = current_ram
             except (psutil.NoSuchProcess, psutil.AccessDenied):
-                if not self._process.is_running():
+                try:
+                    is_running = self._process.is_running()
+                except psutil.Error:
                     break
+                if not is_running:
+                    break
+                time.sleep(self.interval)
                 continue
             time.sleep(self.interval)
 

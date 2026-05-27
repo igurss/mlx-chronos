@@ -3,6 +3,29 @@ import platform
 import os
 import importlib
 import psutil
+from functools import lru_cache
+
+
+@lru_cache(maxsize=1)
+def get_system_profiler_hardware() -> dict[str, str]:
+    """Return selected hardware fields from system_profiler when available."""
+    try:
+        result = subprocess.run(
+            ["system_profiler", "SPHardwareDataType"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        return {}
+
+    fields = {}
+    for line in result.stdout.splitlines():
+        key, separator, value = line.partition(":")
+        if not separator:
+            continue
+        fields[key.strip()] = value.strip()
+    return fields
 
 
 def get_chip_model() -> str:
@@ -17,6 +40,9 @@ def get_chip_model() -> str:
             return chip
     except Exception:
         pass
+    chip = get_system_profiler_hardware().get("Chip")
+    if chip:
+        return chip
     return "unknown"
 
 
@@ -27,9 +53,15 @@ def get_machine_model() -> str:
             ["sysctl", "-n", "hw.model"],
             capture_output=True, text=True
         )
-        return result.stdout.strip() or "unknown"
+        model = result.stdout.strip()
+        if model:
+            return model
     except Exception:
-        return "unknown"
+        pass
+    model = get_system_profiler_hardware().get("Model Identifier")
+    if model:
+        return model
+    return "unknown"
 
 
 def get_memory_gb() -> float:

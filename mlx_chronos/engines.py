@@ -229,33 +229,6 @@ class BaseEngine(ABC):
 
         return round(tokens / elapsed, 2)
 
-    def measure_ram_peak(self) -> tuple[float, bool]:
-        """Return (ram_gb, is_fallback)."""
-        pid = self.get_server_pid()
-
-        if pid is not None:
-            try:
-                process = psutil.Process(pid)
-                rss_bytes = process.memory_info().rss
-
-                for child in process.children(recursive=True):
-                    try:
-                        rss_bytes += child.memory_info().rss
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-
-                return round(rss_bytes / (1024 ** 3), 2), False
-
-            except (psutil.Error, OSError):
-                pass
-
-        mem = psutil.virtual_memory()
-        used_gb = (mem.total - mem.available) / (1024 ** 3)
-        logger.warning(
-            f"Could not locate engine process on port {self.port}; returning system memory fallback."
-        )
-        return round(used_gb, 2), True
-
     @abstractmethod
     def is_installed(self) -> bool:
         pass

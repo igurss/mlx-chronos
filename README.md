@@ -56,10 +56,10 @@ engine process is while serving the same model. The default RSS sampling
 interval is 50ms and can be changed with `--ram-sample-interval`.
 
 **System RAM peak** — continuously samples total Mac RAM usage from before
-warmup through the recorded trial loop and reports the observed peak in GB and
-percent. This is the metric to use when checking whether a run pushed the
-machine into memory pressure or swap while the model was actually loading or
-serving requests.
+warmup through the recorded benchmark phases and reports the observed peak in
+GB and percent. This is the metric to use when checking whether a run pushed
+the machine into memory pressure or swap while the model was actually loading
+or serving requests.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. The default is 5 trials, with a maximum of 8 unique cold prompts.

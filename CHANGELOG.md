@@ -33,6 +33,10 @@
 - Decoupled schema engine-name validation from the engine implementation registry.
 - Made Rapid-MLX model ID caching instance-scoped to avoid cross-test leakage.
 - Separated cold TTFT, cached TTFT, and throughput phases so cached TTFT is not polluted by interleaved prompts.
+- Added a `system_profiler` fallback for Mac chip and machine-model detection when `sysctl` is unavailable.
+- Corrected Ollama submitted-result quantization metadata to canonical `bf16`.
+- Removed stale one-shot RAM measurement helper now replaced by continuous benchmark sampling.
+- Made engine RSS sampling back off cleanly if process access is temporarily denied.
 
 ## [0.1.0-beta.1] — 2026-05-24
 
