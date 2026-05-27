@@ -126,16 +126,32 @@ is measured, how, and why.
 
 ## Roadmap
 
-- [x] Project structure
-- [x] Hardware detection (chip, RAM, macOS)
-- [x] JSON result schema (Pydantic)
-- [x] oMLX integration
-- [x] Statistical benchmark (repeated trials, mean/stddev/min/max)
-- [x] CLI (`mlx-chronos run`, `mlx-chronos engines`)
-- [X] Rapid-MLX integration
-- [X] mlx-lm integration
-- [X] GitHub Actions result validator
-- [X] GitHub Pages leaderboard
+### Completed
+- [x] Core benchmark runner with repeated trials, warmup, cache priming, and phase-separated metrics
+- [x] Engine support for oMLX, Rapid-MLX, mlx-lm, and Ollama
+- [x] Hardware detection for chip, machine model, memory, macOS, Python, architecture, and thermal state
+- [x] Strict JSON schema validation with raw-trial consistency checks
+- [x] Continuous engine RSS and system RAM peak sampling
+- [x] GitHub Actions validation for submitted results
+- [x] GitHub Pages leaderboard with engine/chip filters
+- [x] JSON and Markdown result export
+
+### Next
+- [ ] Refresh published Apple M2 sample results with the current benchmark protocol
+- [ ] Add `mlx-chronos validate` to check engine availability, ports, model access, and environment readiness before a run
+- [ ] Add `mlx-chronos submit` to help prepare leaderboard submissions
+- [ ] Add warnings for battery mode, low power mode, and non-nominal thermal state
+- [ ] Improve leaderboard filtering by machine model and add broader column tooltips
+- [ ] Add integration tests against mock OpenAI-compatible servers
+
+### Future
+- [ ] Support larger trial counts with a bigger cold-prompt pool
+- [ ] Add p95 reporting for larger sample sizes
+- [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract
+- [ ] Add tool-calling success-rate benchmarks
+- [ ] Explore anti-spoofing checks for community submissions
+- [ ] Document external contributor branch workflow when community PRs start arriving
+- [ ] Collect more results from M3, M4, and M5 systems
 
 ---
 
