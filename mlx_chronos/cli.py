@@ -2,8 +2,10 @@ import argparse
 import sys
 import logging
 
-from mlx_chronos.benchmark import DEFAULT_RAM_SAMPLE_INTERVAL, run_benchmark, save_result
+from pathlib import Path
+from mlx_chronos.benchmark import DEFAULT_RAM_SAMPLE_INTERVAL, run_benchmark
 from mlx_chronos.engines import ENGINES
+from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 
 
 logger = logging.getLogger("mlx_chronos")
@@ -29,8 +31,19 @@ def cmd_run(args):
     except (RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
-    path = save_result(result)
-    logger.info(f"\nDone. Result saved to: {path}")
+        
+    results_dir = Path.cwd() / "results" / "submitted"
+    reporters = []
+    if args.format in ("json", "all"):
+        reporters.append(JSONReporter())
+    if args.format in ("markdown", "all"):
+        reporters.append(MarkdownReporter())
+        
+    for reporter in reporters:
+        path = reporter.save(result, results_dir)
+        logger.info(f"Result saved to: {path}")
+        
+    logger.info("\nDone.")
 
 
 def cmd_engines(args):
@@ -91,6 +104,12 @@ def main():
             "Seconds between process RSS samples "
             f"(default: {DEFAULT_RAM_SAMPLE_INTERVAL})"
         ),
+    )
+    run_parser.add_argument(
+        "--format",
+        choices=["json", "markdown", "all"],
+        default="json",
+        help="Output format (default: json)",
     )
     run_parser.set_defaults(func=cmd_run)
 

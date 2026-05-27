@@ -295,26 +295,9 @@ def run_benchmark(
     return BenchmarkResult(**result).model_dump(mode="json")
 
 
-def save_result(result: dict) -> Path:
-    """Save a benchmark result to results/submitted/."""
-    results_dir = Path.cwd() / "results" / "submitted"
-    results_dir.mkdir(parents=True, exist_ok=True)
-
-    chip_slug = result["hardware"]["chip"].replace(" ", "_").lower()
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    engine_name = result["engine"]["name"]
-    filename = f"{engine_name}_{chip_slug}_{ts}.json"
-
-    output_path = results_dir / filename
-
-    with open(output_path, "w") as f:
-        json.dump(result, f, indent=2)
-
-    logger.info(f"\nResult saved to: {output_path}")
-    return output_path
-
-
 if __name__ == "__main__":
+    from mlx_chronos.reporters import JSONReporter
+    
     result = run_benchmark(
         engine_name="omlx",
         model_name="Qwen3.5-4B-OptiQ-4bit",
@@ -323,7 +306,8 @@ if __name__ == "__main__":
         notes="Test run — unique cold prompts per trial"
     )
 
-    path = save_result(result)
+    reporter = JSONReporter()
+    path = reporter.save(result, Path.cwd() / "results" / "submitted")
 
     logger.info("\n--- Result ---")
     logger.info(json.dumps(result, indent=2))
