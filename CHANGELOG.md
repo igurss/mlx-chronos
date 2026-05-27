@@ -2,41 +2,41 @@
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-05-27
+
+Official v0.1.0 release notes, compared with `v0.1.0-beta.1`
+(`9d1bed23bf938e602ebef15b7a5e10ad5064488b`).
+
 ### Added
 - **Ollama** engine support (MLX backend, port 11434).
-- Comprehensive unit tests using `pytest` for schema validation and benchmark math.
-- GitHub Actions workflow for unit tests on code changes.
-- Added Literal constraints to `engine.name` in Pydantic schema for strict validation.
-- Added non-negative bounds to all numerical fields in the schema.
-- Added schema validation for trial raw-list lengths and summary statistic ranges.
-- Added configurable RAM sampling interval metadata.
-- Added configurable engine ports via `MLX_CHRONOS_<ENGINE>_PORT` environment variables.
-- Added explicit `token_count_source`, `ram_measurement_method`, and hardware `architecture` fields to result metadata.
-- Added continuous system RAM peak tracking during benchmark runs.
+- **mlx-lm** engine support and improved oMLX/Rapid-MLX/Ollama engine integration.
+- Continuous engine RSS and system RAM peak sampling during benchmark runs.
+- Explicit result metadata for token-count source, RAM measurement method, hardware architecture, machine model, and timezone-aware timestamps.
+- Configurable engine ports via `MLX_CHRONOS_<ENGINE>_PORT` environment variables.
+- JSON and Markdown output support through reporter classes.
+- Unit test suite and GitHub Actions coverage for schema, benchmark, engine, CLI, and hardware-detection behavior.
+- Apple M2 benchmark submissions for oMLX, Rapid-MLX, mlx-lm, and Ollama.
+
+### Changed
+- TTFT now measures the first real streamed content token, uses `time.perf_counter()`, and runs cold TTFT, cached TTFT, and throughput in separate phases.
+- Result validation is stricter: engine names are controlled, numeric fields are non-negative, raw trial arrays must match trial count, and summary statistics must match raw values.
+- Leaderboard submissions are validated from the shared Pydantic schema and must use `usage.completion_tokens` for comparable throughput.
+- Leaderboard rendering now escapes submitted values, sorts strings correctly, and displays engine RSS separately from total system RAM peak.
+- Documentation now reflects the current benchmark methodology, memory semantics, submission flow, and supported engines.
 
 ### Removed
 - **llama.cpp** engine — out of scope. mlx-Chronos benchmarks MLX inference engines only; llama.cpp runs GGUF models, not MLX.
+- Legacy `requirements.txt`, old report module, model `size_gb`, and unreliable pre-run RAM baseline fields.
 
 ### Fixed
-- Changed `RESULTS_DIR` logic to resolve output directory relative to the current working directory at runtime, fixing PIP installation paths.
-- Removed duplicated `logging.basicConfig` preventing log formatting from applying correctly.
-- Translated all Italian log messages to English.
+- Result output paths now resolve from the current working directory, fixing installed-package usage.
 - Fixed `mlx-chronos engines` crashing when `mlx-lm` import initializes Metal in restricted environments.
-- Fixed TTFT measurement so role/tool metadata chunks are not counted as first content tokens.
-- Switched latency timing to `time.perf_counter()` for monotonic high-resolution measurements.
-- Improved thermal-state detection with a no-sudo Foundation/NSProcessInfo path when available.
-- Fixed leaderboard sorting for string columns and escaped community-submitted values before rendering.
-- Improved CLI error output for invalid runtime arguments.
-- Split local benchmark output from publishable leaderboard submissions.
-- Hardened result validation so summary statistics must match raw trial data.
-- Made leaderboard generation fail on invalid submitted JSON instead of silently skipping files.
+- Improved process detection, engine RSS sampling stability, and fallback hardware detection via `system_profiler`.
+- Split local benchmark output from publishable leaderboard submissions and made leaderboard generation fail on invalid submitted JSON.
 - Decoupled schema engine-name validation from the engine implementation registry.
 - Made Rapid-MLX model ID caching instance-scoped to avoid cross-test leakage.
-- Separated cold TTFT, cached TTFT, and throughput phases so cached TTFT is not polluted by interleaved prompts.
-- Added a `system_profiler` fallback for Mac chip and machine-model detection when `sysctl` is unavailable.
 - Corrected Ollama submitted-result quantization metadata to canonical `bf16`.
-- Removed stale one-shot RAM measurement helper now replaced by continuous benchmark sampling.
-- Made engine RSS sampling back off cleanly if process access is temporarily denied.
+- Improved CLI errors and cleaned up logging/output consistency.
 
 ## [0.1.0-beta.1] — 2026-05-24
 
