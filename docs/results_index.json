@@ -31,7 +31,7 @@
     "engine": "ollama",
     "engine_version": "0.24.0",
     "model": "qwen3.5:4b-mlx",
-    "quantization": "4bit",
+    "quantization": "bfloat16",
     "tps": 23.35,
     "tps_stddev": 0.078,
     "ttft_cold": 0.427,
