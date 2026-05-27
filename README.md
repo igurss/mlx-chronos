@@ -26,15 +26,16 @@ contribute to the community leaderboard.
 **Metrics measured:**
 - **TTFT** — Time to First Token (cold and cached, with statistics)
 - **tok/s** — Generation throughput (mean, stddev, min, max across trials)
-- **RAM usage** — Peak engine process RSS during inference when available
-- **Base RAM load** — System RAM usage before benchmark starts (%)
+- **Engine RSS** — Peak RSS of the engine server process during the benchmark when available
+- **System RAM peak** — Peak total Mac RAM in use during the benchmark
 - **Tool calling** — Success rate *(coming in v0.2)*
 
 ---
 
 ## How It Works
 
-When you run mlx-Chronos, it executes four measurements against the running engine:
+When you run mlx-Chronos, it executes a fixed benchmark protocol against the
+running engine:
 
 **Cold TTFT** — sends a prompt to the model and measures the time from request
 to first real token. Each trial uses a unique prompt to avoid cache hits.
@@ -45,9 +46,17 @@ loads it into cache first. This measures true cache performance.
 **Throughput (tok/s)** — measures tokens generated per second using a standard
 fixed prompt, identical across all engines and versions.
 
-**RAM peak** — measures memory used by the engine process during inference.
-The default RSS sampling interval is 50ms and can be changed with
-`--ram-sample-interval`.
+**Peak engine RSS** — measures the resident memory of the engine server process
+from before warmup through the recorded trial loop. This is intentionally not
+the total memory occupied by the loaded model or by macOS/Metal unified memory.
+It is meant to compare how light or heavy each engine process is while serving
+the same model. The default RSS sampling interval is 50ms and can be changed
+with `--ram-sample-interval`.
+
+**System RAM peak** — continuously samples total Mac RAM usage during the
+benchmark and reports the observed peak in GB and percent. This is the metric
+to use when checking whether a run pushed the machine into memory pressure or
+swap while the model was actually serving requests.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. The default is 5 trials, with a maximum of 8 unique cold prompts.

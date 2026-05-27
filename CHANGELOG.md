@@ -12,6 +12,7 @@
 - Added configurable RAM sampling interval metadata.
 - Added configurable engine ports via `MLX_CHRONOS_<ENGINE>_PORT` environment variables.
 - Added explicit `token_count_source`, `ram_measurement_method`, and hardware `architecture` fields to result metadata.
+- Added continuous system RAM peak tracking during benchmark runs.
 
 ### Removed
 - **llama.cpp** engine — out of scope. mlx-Chronos benchmarks MLX inference engines only; llama.cpp runs GGUF models, not MLX.

@@ -35,22 +35,36 @@ from the API response's `usage.completion_tokens` field. The result records
 `usage.completion_tokens`; local runs that fall back to a word-based estimate
 are marked as `word_fallback` or `mixed` and are not considered comparable.
 
-### Engine RAM Overhead (GB)
-Memory used by the engine server process during inference, sampled continuously
-while the benchmark is running and reported as the observed RSS peak.
+### Peak Engine RSS (GB)
+Resident memory used by the engine server process, sampled continuously from
+before warmup through the recorded trial loop and reported as the observed RSS
+peak.
 
 **Important:** this metric is best read as process overhead for the server, API
 layer, and runtime. It may not include model weights or Metal allocations that
 are mapped outside ordinary process RSS. Model sizes should still be read from
 their model cards. This metric helps you understand how "heavy" the engine
-process itself is.
+process itself is when serving the same model.
 
-When the engine process cannot be identified by port, system-used memory is reported as a fallback (marked in the results).
+When the engine process cannot be identified by port, system-used memory is
+reported as a fallback (marked in the results). Fallback values are not the same
+metric as process RSS and should not be compared directly against normal engine
+RSS values.
 
 The result records both `metrics.ram_is_process_rss` and
 `metrics.ram_measurement_method` (`process_rss` or `system_fallback`) so the
 leaderboard can distinguish direct process measurements from system-memory
 fallbacks.
+
+### System RAM Peak
+Total Mac RAM usage is sampled continuously from before warmup through the
+recorded trial loop, using the same sampling interval as engine RSS. The result
+records the observed peak as `metrics.system_ram_peak_gb` and
+`metrics.system_ram_peak_percent`.
+
+This replaces the old pre-run baseline. mlx-Chronos reports memory pressure
+while inference is actually happening, so model loading, cache growth, swap, and
+other runtime pressure are represented in the result.
 
 The default sampling interval is 50ms (`--ram-sample-interval 0.05`). Lower
 values can catch shorter spikes but add more measurement overhead; higher values
@@ -63,8 +77,10 @@ Foundation bridge is available. If that path is unavailable, mlx-Chronos falls
 back to `powermetrics`, which requires sudo; otherwise the result records an
 `unavailable_*` status.
 
-### Base RAM Load (%)
-System RAM usage percentage measured before the benchmark starts. This is captured to give context about background load. Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB causes swapping and slows down inference, whereas 7GB used out of 16GB does not). This metric helps explain performance variances between identical chips.
+Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB
+causes swapping and slows down inference, whereas 7GB used out of 16GB does
+not). System RAM peak helps explain performance variances between identical
+chips and models.
 
 ---
 
