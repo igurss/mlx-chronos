@@ -262,7 +262,7 @@ EXAMPLE_RESULT = {
         "tokens_per_second_raw": [18.48, 18.27, 18.51, 18.48, 18.46]
     },
     "meta": {
-        "chronos_version": "0.1.0",
+        "chronos_version": "0.1.0b1",
         "timestamp": "2026-05-23T15:08:36Z",
         "ram_sample_interval_seconds": 0.05,
         "notes": "Test run"

@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 [project]
 name = "mlx-chronos"
-version = "0.1.0"
+version = "0.1.0b1"
 description = "Benchmark suite and community leaderboard for local LLM inference on Apple Silicon"
 requires-python = ">=3.10"
 dependencies = [
