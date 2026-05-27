@@ -1,0 +1,84 @@
+{
+  "hardware": {
+    "chip": "Apple M2",
+    "machine_model": "Mac14,2",
+    "memory_gb": 8.0,
+    "macos_version": "26.5",
+    "python_version": "3.14.5",
+    "architecture": "arm64",
+    "thermal_state": "nominal"
+  },
+  "engine": {
+    "name": "omlx",
+    "version": "unknown"
+  },
+  "model": {
+    "name": "Qwen3.5-4B-OptiQ-4bit",
+    "quantization": "4bit"
+  },
+  "metrics": {
+    "ttft_cold": {
+      "mean": 0.606,
+      "stddev": 0.014,
+      "min": 0.591,
+      "max": 0.631
+    },
+    "ttft_cached": {
+      "mean": 0.607,
+      "stddev": 0.01,
+      "min": 0.598,
+      "max": 0.624
+    },
+    "tokens_per_second": {
+      "mean": 20.369,
+      "stddev": 0.088,
+      "min": 20.26,
+      "max": 20.5
+    },
+    "ram_peak_gb": 0.461,
+    "ram_is_process_rss": true,
+    "ram_measurement_method": "process_rss",
+    "system_ram_peak_gb": 7.021,
+    "system_ram_peak_percent": 87.8,
+    "token_count_source": "usage.completion_tokens"
+  },
+  "trials": {
+    "count": 8,
+    "ttft_cold_raw": [
+      0.623,
+      0.605,
+      0.599,
+      0.631,
+      0.599,
+      0.598,
+      0.603,
+      0.591
+    ],
+    "ttft_cached_raw": [
+      0.624,
+      0.603,
+      0.6,
+      0.6,
+      0.609,
+      0.62,
+      0.602,
+      0.598
+    ],
+    "tokens_per_second_raw": [
+      20.29,
+      20.4,
+      20.38,
+      20.47,
+      20.26,
+      20.28,
+      20.5,
+      20.37
+    ]
+  },
+  "meta": {
+    "chronos_version": "0.1.0",
+    "timestamp": "2026-05-27T11:10:51.798904Z",
+    "ram_sample_interval_seconds": 0.05,
+    "notes": "v0.1 live oMLX"
+  }
+}
