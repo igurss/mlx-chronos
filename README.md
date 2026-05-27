@@ -72,8 +72,11 @@ pip install git+https://github.com/igurss/mlx-chronos.git
 # Check available engines
 mlx-chronos engines
 
-# Run benchmark
+# Run benchmark (JSON by default)
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
+
+# Optional: also write a Markdown summary
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format markdown
 ```
 
 > **Note:** the engine server must be running before you launch mlx-chronos.
@@ -84,7 +87,7 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 ## Contributing Your Results
 
 1. Run `mlx-chronos run` on your Mac
-2. A JSON file is generated in `results/submitted/`
+2. A JSON file is generated in `results/submitted/` (use `--format all` for a Markdown summary too)
 3. Fork this repo, add your result file, open a PR
 4. GitHub Actions validates your result automatically
 5. Once merged, the leaderboard updates
