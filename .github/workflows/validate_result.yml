@@ -3,7 +3,8 @@ name: Validate Benchmark Result
 on:
   pull_request:
     paths:
-      - 'results/submitted/**.json'
+      - 'results/submitted/*.json'
+      - 'results/submitted/**/*.json'
 
 jobs:
   validate:
@@ -34,6 +35,7 @@ jobs:
           from pathlib import Path
           from pydantic import ValidationError
 
+          from mlx_chronos.constants import TOKEN_COUNT_SOURCE_USAGE
           from mlx_chronos.schema import BenchmarkResult
 
           def get_changed_json_files() -> list[Path]:
@@ -61,7 +63,7 @@ jobs:
                   return [path for path in files if path.exists()]
               except Exception as e:
                   print(f"Warning: git diff failed ({e}), falling back to all files.")
-                  return list(Path("results/submitted").glob("*.json"))
+                  return list(Path("results/submitted").rglob("*.json"))
 
           json_files = get_changed_json_files()
 
@@ -75,8 +77,12 @@ jobs:
           for path in json_files:
               try:
                   data = json.loads(path.read_text())
-                  BenchmarkResult(**data)
-
+                  result = BenchmarkResult(**data)
+                  if result.metrics.token_count_source != TOKEN_COUNT_SOURCE_USAGE:
+                      raise ValueError(
+                          "submitted leaderboard results must use "
+                          "usage.completion_tokens for throughput token counts"
+                      )
 
                   print(f"OK: {path.name}")
               except ValidationError as e:

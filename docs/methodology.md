@@ -29,8 +29,11 @@ in the project. The prompt is identical across all engines and all versions
 of mlx-Chronos to ensure comparability. Do not change this prompt without
 bumping `chronos_version`.
 
-Non-streaming mode is used (`stream: false`) so the total token count is
-available from the API response's `usage.completion_tokens` field.
+Non-streaming mode is used (`stream: false`) so the total token count can come
+from the API response's `usage.completion_tokens` field. The result records
+`metrics.token_count_source`. Leaderboard submissions must use
+`usage.completion_tokens`; local runs that fall back to a word-based estimate
+are marked as `word_fallback` or `mixed` and are not considered comparable.
 
 ### Engine RAM Overhead (GB)
 Memory used by the engine server process during inference, sampled continuously
@@ -43,6 +46,11 @@ their model cards. This metric helps you understand how "heavy" the engine
 process itself is.
 
 When the engine process cannot be identified by port, system-used memory is reported as a fallback (marked in the results).
+
+The result records both `metrics.ram_is_process_rss` and
+`metrics.ram_measurement_method` (`process_rss` or `system_fallback`) so the
+leaderboard can distinguish direct process measurements from system-memory
+fallbacks.
 
 The default sampling interval is 50ms (`--ram-sample-interval 0.05`). Lower
 values can catch shorter spikes but add more measurement overhead; higher values
@@ -96,6 +104,7 @@ To reproduce a result:
 3. Run on the same hardware (chip + memory)
 4. Ensure no other GPU-intensive processes are running
 5. Run `mlx-chronos run` with default trial count (5)
+6. Submit only results whose throughput token source is `usage.completion_tokens`
 
 Results may vary slightly across runs due to thermal state and system load.
 This is expected and reflected in the stddev field.

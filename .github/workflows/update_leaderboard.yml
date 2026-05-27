@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'results/submitted/**.json'
+      - 'results/submitted/*.json'
+      - 'results/submitted/**/*.json'
 
 jobs:
   update:
@@ -18,19 +19,35 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install package and dependencies
+        run: pip install .
+
       - name: Generate results index
         run: |
           python - <<'EOF'
           import json
+          import sys
           from pathlib import Path
-          from datetime import datetime
+          from pydantic import ValidationError
+
+          from mlx_chronos.constants import TOKEN_COUNT_SOURCE_USAGE
+          from mlx_chronos.schema import BenchmarkResult
 
           results_dir = Path("results/submitted")
           index = []
+          errors = []
 
-          for path in sorted(results_dir.glob("*.json")):
+          for path in sorted(results_dir.rglob("*.json")):
               try:
                   data = json.loads(path.read_text())
+                  result = BenchmarkResult(**data)
+                  if result.metrics.token_count_source != TOKEN_COUNT_SOURCE_USAGE:
+                      raise ValueError(
+                          "leaderboard results must use usage.completion_tokens "
+                          "for throughput token counts"
+                      )
+
+                  data = result.model_dump(mode="json")
                   hw = data["hardware"]
                   eng = data["engine"]
                   mod = data["model"]
@@ -53,14 +70,25 @@ jobs:
                       "system_ram_usage_percent": hw.get("system_ram_usage_percent", None),
                       "ram_peak_gb": met["ram_peak_gb"],
                       "ram_is_process_rss": met.get("ram_is_process_rss", False),
+                      "ram_measurement_method": met["ram_measurement_method"],
+                      "token_count_source": met["token_count_source"],
                       "thermal_state": hw.get("thermal_state", "unavailable_no_sudo"),
+                      "architecture": hw.get("architecture", "unknown"),
                       "trials": tri["count"],
                       "chronos_version": meta["chronos_version"],
                       "date": meta["timestamp"][:10],
                       "notes": meta.get("notes"),
                   })
+              except ValidationError as e:
+                  errors.append(f"{path.name}: {e}")
               except Exception as e:
-                  print(f"Skipping {path.name}: {e}")
+                  errors.append(f"{path.name}: {e}")
+
+          if errors:
+              print("Invalid submitted result file(s):")
+              for error in errors:
+                  print(f"- {error}")
+              sys.exit(1)
 
           out = Path("docs/results_index.json")
           out.write_text(json.dumps(index, indent=2))

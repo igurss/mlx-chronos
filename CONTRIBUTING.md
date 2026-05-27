@@ -31,6 +31,23 @@ For oMLX:
 omlx serve --model-dir ~/models
 ```
 
+For mlx-lm:
+```bash
+mlx_lm.server --model /path/to/model --port 8080
+```
+
+mlx-Chronos checks these default OpenAI-compatible endpoints:
+
+| Engine | Default URL |
+|--------|-------------|
+| oMLX | `http://localhost:8000/v1` |
+| Rapid-MLX | `http://localhost:8001/v1` |
+| mlx-lm | `http://localhost:8080/v1` |
+| Ollama | `http://localhost:11434/v1` |
+
+You can override a port with an environment variable such as
+`MLX_CHRONOS_MLX_LM_PORT=8002`.
+
 **3. Run the benchmark**
 ```bash
 mlx-chronos engines                          # check engine status
@@ -41,10 +58,15 @@ mlx-chronos run --engine omlx \
 
 **4. Submit your result**
 - Fork this repository
-- Copy your JSON file from `results/submitted/` into the same folder in your fork
+- Copy the JSON you want to publish from `results/local/` into `results/submitted/`
 - Open a Pull Request
 - GitHub Actions will validate your result automatically
 - Once approved and merged, the leaderboard updates
+
+Public leaderboard submissions must use `usage.completion_tokens` as the
+throughput token-count source. If your JSON says `"token_count_source":
+"word_fallback"` or `"mixed"`, keep it as a local result until the engine can
+return a real completion-token count.
 
 ### Result File Format
 

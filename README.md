@@ -51,7 +51,9 @@ The default RSS sampling interval is 50ms and can be changed with
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. The default is 5 trials, with a maximum of 8 unique cold prompts.
-Results are saved as structured JSON ready for community submission.
+Results are saved as structured JSON in `results/local/` by default. Copy a
+reviewed JSON into `results/submitted/` only when you want to publish it to the
+community leaderboard.
 
 ---
 
@@ -77,6 +79,9 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 
 # Optional: also write a Markdown summary
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format markdown
+
+# Optional: choose a custom output directory
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir results/local
 ```
 
 > **Note:** the engine server must be running before you launch mlx-chronos.
@@ -87,10 +92,14 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format markdown
 ## Contributing Your Results
 
 1. Run `mlx-chronos run` on your Mac
-2. A JSON file is generated in `results/submitted/` (use `--format all` for a Markdown summary too)
-3. Fork this repo, add your result file, open a PR
+2. A JSON file is generated in `results/local/` (use `--format all` for a Markdown summary too)
+3. Fork this repo and copy the JSON you want to publish into `results/submitted/`
 4. GitHub Actions validates your result automatically
 5. Once merged, the leaderboard updates
+
+Leaderboard submissions must report throughput using the engine response's
+`usage.completion_tokens`. Local runs can still be saved with a fallback token
+estimate, but those results are not accepted for the public leaderboard.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions.
 

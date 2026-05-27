@@ -10,6 +10,8 @@
 - Added non-negative bounds to all numerical fields in the schema.
 - Added schema validation for trial raw-list lengths and summary statistic ranges.
 - Added configurable RAM sampling interval metadata.
+- Added configurable engine ports via `MLX_CHRONOS_<ENGINE>_PORT` environment variables.
+- Added explicit `token_count_source`, `ram_measurement_method`, and hardware `architecture` fields to result metadata.
 
 ### Removed
 - **llama.cpp** engine — out of scope. mlx-Chronos benchmarks MLX inference engines only; llama.cpp runs GGUF models, not MLX.
@@ -24,6 +26,9 @@
 - Improved thermal-state detection with a no-sudo Foundation/NSProcessInfo path when available.
 - Fixed leaderboard sorting for string columns and escaped community-submitted values before rendering.
 - Improved CLI error output for invalid runtime arguments.
+- Split local benchmark output from publishable leaderboard submissions.
+- Hardened result validation so summary statistics must match raw trial data.
+- Made leaderboard generation fail on invalid submitted JSON instead of silently skipping files.
 
 ## [0.1.0-beta.1] — 2026-05-24
 
