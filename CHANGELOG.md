@@ -18,7 +18,7 @@ Official v0.1.0 release notes, compared with `v0.1.0-beta.1`
 - Apple M2 benchmark submissions for oMLX, Rapid-MLX, mlx-lm, and Ollama.
 
 ### Changed
-- TTFT now measures the first real streamed content token, uses `time.perf_counter()`, and runs cold TTFT, cached TTFT, and throughput in separate phases.
+- Benchmark execution now runs cold TTFT, cached TTFT, and throughput in separate phases.
 - Result validation is stricter: engine names are controlled, numeric fields are non-negative, raw trial arrays must match trial count, and summary statistics must match raw values.
 - Leaderboard submissions are validated from the shared Pydantic schema and must use `usage.completion_tokens` for comparable throughput.
 - Leaderboard rendering now escapes submitted values, sorts strings correctly, and displays engine RSS separately from total system RAM peak.
@@ -30,17 +30,16 @@ Official v0.1.0 release notes, compared with `v0.1.0-beta.1`
 
 ### Fixed
 - Result output paths now resolve from the current working directory, fixing installed-package usage.
-- Fixed `mlx-chronos engines` crashing when `mlx-lm` import initializes Metal in restricted environments.
-- Improved process detection, engine RSS sampling stability, and fallback hardware detection via `system_profiler`.
-- Split local benchmark output from publishable leaderboard submissions and made leaderboard generation fail on invalid submitted JSON.
-- Decoupled schema engine-name validation from the engine implementation registry.
-- Made Rapid-MLX model ID caching instance-scoped to avoid cross-test leakage.
-- Corrected Ollama submitted-result quantization metadata to canonical `bf16`.
-- Improved CLI errors and cleaned up logging/output consistency.
+- TTFT no longer counts streamed metadata chunks as first tokens and now uses a monotonic high-resolution timer.
+- Cached TTFT is no longer polluted by interleaved cold/throughput prompts.
+- Local benchmark output is separated from publishable leaderboard submissions.
+- Hardware detection falls back to `system_profiler` when `sysctl` is unavailable.
+- Leaderboard generation now fails on invalid submitted JSON instead of silently skipping files.
+- CLI errors, process detection, and engine RSS sampling are more robust.
 
 ## [0.1.0-beta.1] — 2026-05-24
 
-### First public release
+### First public pre-release
 
 **Engines supported:**
 - oMLX (port 8000)
