@@ -47,16 +47,17 @@ loads it into cache first. This measures true cache performance.
 fixed prompt, identical across all engines and versions.
 
 **Peak engine RSS** — measures the resident memory of the engine server process
-from before warmup through the recorded trial loop. This is intentionally not
-the total memory occupied by the loaded model or by macOS/Metal unified memory.
-It is meant to compare how light or heavy each engine process is while serving
-the same model. The default RSS sampling interval is 50ms and can be changed
-with `--ram-sample-interval`.
+after warmup, through cache priming and the recorded trial loop. This is
+intentionally not the total memory occupied by the loaded model or by
+macOS/Metal unified memory. It is meant to compare how light or heavy each
+engine process is while serving the same model. The default RSS sampling
+interval is 50ms and can be changed with `--ram-sample-interval`.
 
-**System RAM peak** — continuously samples total Mac RAM usage during the
-benchmark and reports the observed peak in GB and percent. This is the metric
-to use when checking whether a run pushed the machine into memory pressure or
-swap while the model was actually serving requests.
+**System RAM peak** — continuously samples total Mac RAM usage from before
+warmup through the recorded trial loop and reports the observed peak in GB and
+percent. This is the metric to use when checking whether a run pushed the
+machine into memory pressure or swap while the model was actually loading or
+serving requests.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. The default is 5 trials, with a maximum of 8 unique cold prompts.

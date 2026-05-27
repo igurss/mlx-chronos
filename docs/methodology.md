@@ -36,9 +36,9 @@ from the API response's `usage.completion_tokens` field. The result records
 are marked as `word_fallback` or `mixed` and are not considered comparable.
 
 ### Peak Engine RSS (GB)
-Resident memory used by the engine server process, sampled continuously from
-before warmup through the recorded trial loop and reported as the observed RSS
-peak.
+Resident memory used by the engine server process, sampled continuously after
+warmup through cache priming and the recorded trial loop, then reported as the
+observed RSS peak.
 
 **Important:** this metric is best read as process overhead for the server, API
 layer, and runtime. It may not include model weights or Metal allocations that
@@ -58,7 +58,7 @@ fallbacks.
 
 ### System RAM Peak
 Total Mac RAM usage is sampled continuously from before warmup through the
-recorded trial loop, using the same sampling interval as engine RSS. The result
+recorded trial loop, using the configured RAM sampling interval. The result
 records the observed peak as `metrics.system_ram_peak_gb` and
 `metrics.system_ram_peak_percent`.
 

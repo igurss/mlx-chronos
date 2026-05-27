@@ -159,7 +159,7 @@
         <th data-col="tps" class="sorted">tok/s ↓</th>
         <th data-col="ttft_cold">TTFT cold (s)</th>
         <th data-col="ttft_cached">TTFT cached (s)</th>
-        <th data-col="ram" title="Peak RSS of the engine server process from warmup through trials when available.">Engine RSS (GB)</th>
+        <th data-col="ram" title="Peak RSS of the engine server process after warmup through trials when available.">Engine RSS (GB)</th>
         <th data-col="system_ram_peak" title="Peak total Mac RAM usage during the benchmark.">System RAM Peak</th>
         <th data-col="thermal">Thermal</th>
         <th data-col="trials">Trials</th>
@@ -173,7 +173,7 @@
 
 <footer>
   Results are community-submitted and validated automatically via GitHub Actions.<br>
-  <strong>Engine RSS</strong> reports peak RSS of the engine server process from warmup through trials when available.
+  <strong>Engine RSS</strong> reports peak RSS of the engine server process after warmup through trials when available.
   It is not total model or unified-memory usage. <strong>System RAM Peak</strong> is total Mac RAM usage observed during the benchmark.
   Values marked <span class="fallback">fallback</span> were measured as system memory, not process RSS.
 </footer>

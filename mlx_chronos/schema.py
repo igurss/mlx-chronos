@@ -100,7 +100,7 @@ class Metrics(ChronosBaseModel):
     ram_peak_gb: NonNegativeFloat = Field(
         ...,
         description=(
-            "Peak RSS of the engine server process during the benchmark, or "
+            "Peak RSS of the engine server process after warmup during the benchmark, or "
             "fallback system memory usage when the process cannot be located (GB)"
         ),
     )

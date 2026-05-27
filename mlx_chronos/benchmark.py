@@ -230,34 +230,13 @@ def run_benchmark(
     version = engine.get_version()
     logger.info(f"Engine version: {version}\n")
 
-    # 4. Start memory sampling before warmup so model load/cache pressure is captured.
+    # 4. Start system memory sampling before warmup so load/cache pressure is captured.
     logger.info(
-        f"Starting continuous background RAM sampling "
+        f"Starting continuous background system RAM sampling "
         f"({ram_sample_interval:.3f}s interval)..."
     )
     system_ram_tracker = SystemRAMTracker(interval=ram_sample_interval)
     system_ram_tracker.start()
-    target_pid = engine.get_server_pid()
-    ram_tracker = None
-    ram_is_process_rss = False
-    if target_pid is None:
-        logger.warning(
-            "Engine PID not found; engine RSS will use system RAM peak fallback."
-        )
-    else:
-        try:
-            ram_tracker = RAMTracker(
-                interval=ram_sample_interval,
-                target_pid=target_pid,
-            )
-            ram_tracker.start()
-            ram_is_process_rss = True
-        except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
-            logger.warning(
-                f"Could not start RAM sampling for PID {target_pid}: {exc}"
-            )
-            ram_tracker = None
-
 
     # 5. Run warmup and trials
     ttft_cold_trials = []
@@ -271,6 +250,8 @@ def run_benchmark(
     peak_ram_gb = None
     system_ram_peak_gb = None
     system_ram_peak_percent = None
+    ram_tracker = None
+    ram_is_process_rss = False
 
     try:
         # Warmup phase — 2 calls with the throughput prompt, not recorded
@@ -285,6 +266,29 @@ def run_benchmark(
             except Exception as exc:
                 logger.warning(f"  Warmup call failed and was skipped: {exc}")
         logger.info("  Done.\n")
+
+        logger.info(
+            f"Starting continuous background engine RSS sampling "
+            f"({ram_sample_interval:.3f}s interval)..."
+        )
+        target_pid = engine.get_server_pid()
+        if target_pid is None:
+            logger.warning(
+                "Engine PID not found; engine RSS will use system RAM peak fallback."
+            )
+        else:
+            try:
+                ram_tracker = RAMTracker(
+                    interval=ram_sample_interval,
+                    target_pid=target_pid,
+                )
+                ram_tracker.start()
+                ram_is_process_rss = True
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+                logger.warning(
+                    f"Could not start engine RSS sampling for PID {target_pid}: {exc}"
+                )
+                ram_tracker = None
 
         # Priming call
         logger.info("Priming cache for cached TTFT measurement...")
