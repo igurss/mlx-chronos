@@ -70,7 +70,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mlx_chronos")
 
 # mlx-chronos version
-VERSION = "0.1.0"
+try:
+    from importlib.metadata import version
+    VERSION = version("mlx-chronos")
+except Exception:
+    VERSION = "0.1.0"
 
 # Default RAM sampling interval in seconds
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
