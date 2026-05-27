@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, model_validator
-from typing import Optional, Literal, Annotated
+from pydantic import BaseModel, Field, model_validator, field_validator
+from typing import Optional, Annotated
 
 
 NonNegativeFloat = Annotated[float, Field(ge=0)]
@@ -25,8 +25,16 @@ class Hardware(BaseModel):
 
 
 class Engine(BaseModel):
-    name: Literal['omlx', 'rapid-mlx', 'mlx-lm', 'ollama'] = Field(..., description="Engine name")
+    name: str = Field(..., description="Engine name")
     version: str = Field(..., description="Engine version string")
+
+    @field_validator("name")
+    @classmethod
+    def validate_engine_name(cls, value: str) -> str:
+        from mlx_chronos.engines import ENGINES
+        if value not in ENGINES:
+            raise ValueError(f"Unknown engine: '{value}'. Available: {list(ENGINES.keys())}")
+        return value
 
 
 class Model(BaseModel):
