@@ -30,6 +30,8 @@
 - Split local benchmark output from publishable leaderboard submissions.
 - Hardened result validation so summary statistics must match raw trial data.
 - Made leaderboard generation fail on invalid submitted JSON instead of silently skipping files.
+- Decoupled schema engine-name validation from the engine implementation registry.
+- Made Rapid-MLX model ID caching instance-scoped to avoid cross-test leakage.
 
 ## [0.1.0-beta.1] — 2026-05-24
 

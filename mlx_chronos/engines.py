@@ -11,6 +11,10 @@ import psutil
 from abc import ABC, abstractmethod
 
 from mlx_chronos.constants import (
+    ENGINE_NAME_MLX_LM,
+    ENGINE_NAME_OLLAMA,
+    ENGINE_NAME_OMLX,
+    ENGINE_NAME_RAPID_MLX,
     TOKEN_COUNT_SOURCE_USAGE,
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
 )
@@ -264,7 +268,7 @@ class BaseEngine(ABC):
 # ─── oMLX ─────────────────────────────────────────────────────────────────────
 
 class OMLXEngine(BaseEngine):
-    name = "omlx"
+    name = ENGINE_NAME_OMLX
     default_port = 8000
     expected_process_names = ("omlx", "python")
 
@@ -287,15 +291,21 @@ class OMLXEngine(BaseEngine):
 # ─── Rapid-MLX ────────────────────────────────────────────────────────────────
 
 class RapidMLXEngine(BaseEngine):
-    name = "rapid-mlx"
+    name = ENGINE_NAME_RAPID_MLX
     default_port = 8001
     expected_process_names = ("rapid-mlx", "python")
-    
-    _global_model_id_cache: dict[str, str] = {}
+
+    def __init__(
+        self,
+        port: int | None = None,
+        model_id_cache: dict[str, str] | None = None,
+    ):
+        super().__init__(port=port)
+        self._model_id_cache = model_id_cache if model_id_cache is not None else {}
 
     def _resolve_model_id(self, model: str) -> str | None:
-        if model in self._global_model_id_cache:
-            return self._global_model_id_cache[model]
+        if model in self._model_id_cache:
+            return self._model_id_cache[model]
 
         try:
             r = httpx.get(f"{self.base_url()}/models", timeout=3.0)
@@ -308,7 +318,7 @@ class RapidMLXEngine(BaseEngine):
                     continue
 
                 if model_id == model or model_id.endswith(f"/{model}"):
-                    self._global_model_id_cache[model] = model_id
+                    self._model_id_cache[model] = model_id
                     return model_id
 
         except Exception:
@@ -339,7 +349,7 @@ class RapidMLXEngine(BaseEngine):
 # ─── mlx-lm ───────────────────────────────────────────────────────────────────
 
 class MLXLMEngine(BaseEngine):
-    name = "mlx-lm"
+    name = ENGINE_NAME_MLX_LM
     default_port = 8080
     expected_process_names = ("mlx_lm", "mlx-lm", "python")
 
@@ -356,7 +366,7 @@ class MLXLMEngine(BaseEngine):
 # ─── Ollama ───────────────────────────────────────────────────────────────────
 
 class OllamaEngine(BaseEngine):
-    name = "ollama"
+    name = ENGINE_NAME_OLLAMA
     default_port = 11434
     expected_process_names = ("ollama",)
 
@@ -377,10 +387,10 @@ class OllamaEngine(BaseEngine):
 # ─── Registry ─────────────────────────────────────────────────────────────────
 
 ENGINES = {
-    "omlx": OMLXEngine,
-    "rapid-mlx": RapidMLXEngine,
-    "mlx-lm": MLXLMEngine,
-    "ollama": OllamaEngine,
+    ENGINE_NAME_OMLX: OMLXEngine,
+    ENGINE_NAME_RAPID_MLX: RapidMLXEngine,
+    ENGINE_NAME_MLX_LM: MLXLMEngine,
+    ENGINE_NAME_OLLAMA: OllamaEngine,
 }
 
 def get_engine(name: str) -> BaseEngine:

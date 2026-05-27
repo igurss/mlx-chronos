@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator, field_valida
 from typing import Optional, Annotated, Literal
 
 from mlx_chronos.constants import (
+    VALID_ENGINE_NAMES,
     MAX_TRIALS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
@@ -48,9 +49,10 @@ class Engine(ChronosBaseModel):
     @field_validator("name")
     @classmethod
     def validate_engine_name(cls, value: str) -> str:
-        from mlx_chronos.engines import ENGINES
-        if value not in ENGINES:
-            raise ValueError(f"Unknown engine: '{value}'. Available: {list(ENGINES.keys())}")
+        if value not in VALID_ENGINE_NAMES:
+            raise ValueError(
+                f"Unknown engine: '{value}'. Available: {sorted(VALID_ENGINE_NAMES)}"
+            )
         return value
 
 

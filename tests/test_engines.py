@@ -1,8 +1,9 @@
 import pytest
 import httpx
 from unittest.mock import MagicMock, patch
+from mlx_chronos.constants import VALID_ENGINE_NAMES
 from mlx_chronos.engines import (
-    OMLXEngine, MLXLMEngine, RapidMLXEngine, OllamaEngine, get_engine
+    ENGINES, OMLXEngine, MLXLMEngine, RapidMLXEngine, OllamaEngine, get_engine
 )
 
 def test_stream_chunk_role_is_not_counted_as_content():
@@ -33,6 +34,9 @@ def test_get_engine():
     assert isinstance(get_engine("omlx"), OMLXEngine)
     with pytest.raises(ValueError, match="Unknown engine: 'fake'"):
         get_engine("fake")
+
+def test_engine_registry_matches_schema_constants():
+    assert set(ENGINES) == VALID_ENGINE_NAMES
 
 @patch("httpx.post")
 def test_measure_tokens_per_second(mock_post):
@@ -109,4 +113,15 @@ def test_rapid_mlx_resolve_model_id(mock_get):
     engine = RapidMLXEngine()
     resolved = engine._resolve_model_id("test")
     assert resolved == "local/model/test"
-    assert RapidMLXEngine._global_model_id_cache["test"] == "local/model/test"
+    assert engine._model_id_cache["test"] == "local/model/test"
+
+@patch("httpx.get")
+def test_rapid_mlx_model_id_cache_is_instance_scoped(mock_get):
+    shared_cache = {"test": "local/model/test"}
+
+    cached_engine = RapidMLXEngine(model_id_cache=shared_cache)
+    assert cached_engine._resolve_model_id("test") == "local/model/test"
+    mock_get.assert_not_called()
+
+    fresh_engine = RapidMLXEngine()
+    assert fresh_engine._model_id_cache == {}
