@@ -21,6 +21,8 @@ from mlx_chronos.constants import (
 
 logger = logging.getLogger("mlx_chronos")
 
+ERROR_RESPONSE_BODY_LIMIT = 500
+
 
 # ─── Base class ───────────────────────────────────────────────────────────────
 
@@ -85,6 +87,91 @@ class BaseEngine(ABC):
     def _request_model_name(self, model: str) -> str:
         return model.strip() or "default"
 
+    def _request_context(
+        self,
+        action: str,
+        url: str,
+        model: str | None = None,
+        request_model: str | None = None,
+    ) -> str:
+        parts = [f"engine={self.name}", f"action={action}", f"url={url}"]
+        if model is not None:
+            parts.append(f"model={model!r}")
+        if request_model is not None:
+            parts.append(f"request_model={request_model!r}")
+        return "; ".join(parts)
+
+    def _response_body_excerpt(self, response: httpx.Response | None) -> str | None:
+        if response is None:
+            return None
+        try:
+            body = response.text.strip()
+        except Exception:
+            return None
+        if not body:
+            return None
+        body = " ".join(body.split())
+        if len(body) > ERROR_RESPONSE_BODY_LIMIT:
+            body = f"{body[:ERROR_RESPONSE_BODY_LIMIT]}..."
+        return body
+
+    def _request_error_message(
+        self,
+        action: str,
+        url: str,
+        exc: httpx.HTTPError,
+        model: str | None = None,
+        request_model: str | None = None,
+    ) -> str:
+        context = self._request_context(
+            action=action,
+            url=url,
+            model=model,
+            request_model=request_model,
+        )
+        response = getattr(exc, "response", None)
+        if response is not None:
+            details = [context, f"status={response.status_code}"]
+            reason = getattr(response, "reason_phrase", "")
+            if reason:
+                details.append(f"reason={reason}")
+            body = self._response_body_excerpt(response)
+            if body:
+                details.append(f"response={body!r}")
+            return "; ".join(details)
+        return f"{context}; error={exc}"
+
+    def _invalid_json_message(
+        self,
+        action: str,
+        url: str,
+        model: str | None = None,
+        request_model: str | None = None,
+    ) -> str:
+        context = self._request_context(
+            action=action,
+            url=url,
+            model=model,
+            request_model=request_model,
+        )
+        return f"{context}; error=invalid JSON response"
+
+    def _invalid_response_message(
+        self,
+        action: str,
+        url: str,
+        reason: str,
+        model: str | None = None,
+        request_model: str | None = None,
+    ) -> str:
+        context = self._request_context(
+            action=action,
+            url=url,
+            model=model,
+            request_model=request_model,
+        )
+        return f"{context}; error={reason}"
+
     def is_server_running(self) -> bool:
         try:
             r = httpx.get(f"{self.base_url()}/models", timeout=2.0)
@@ -95,22 +182,35 @@ class BaseEngine(ABC):
     def list_model_ids(self) -> list[str]:
         """Return model ids exposed by the OpenAI-compatible /models endpoint."""
         url = f"{self.base_url()}/models"
+        action = "list models"
         try:
             r = httpx.get(url, timeout=5.0)
             r.raise_for_status()
             data = r.json()
         except httpx.HTTPError as exc:
-            raise RuntimeError(f"{self.name} model list request failed at {url}: {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{self.name} returned invalid JSON at {url}") from exc
+            raise RuntimeError(self._request_error_message(action, url, exc)) from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(self._invalid_json_message(action, url)) from exc
 
         if not isinstance(data, dict):
-            raise RuntimeError(f"{self.name} returned an invalid model list at {url}")
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid model list: response must be a JSON object",
+                )
+            )
 
         models = []
         items = data.get("data", [])
         if not isinstance(items, list):
-            raise RuntimeError(f"{self.name} returned an invalid model list at {url}")
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid model list: response field 'data' must be a list",
+                )
+            )
 
         for item in items:
             if isinstance(item, dict):
@@ -145,22 +245,55 @@ class BaseEngine(ABC):
             stream=False,
         )
         url = f"{self.base_url()}{self.endpoint()}"
+        request_model = str(payload["model"])
+        action = "validate completion"
         try:
             r = httpx.post(url, json=payload, timeout=30.0)
             r.raise_for_status()
             data = r.json()
         except httpx.HTTPError as exc:
-            raise RuntimeError(f"{self.name} completion request failed at {url}: {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{self.name} returned invalid JSON at {url}") from exc
+            raise RuntimeError(
+                self._request_error_message(
+                    action,
+                    url,
+                    exc,
+                    model=model,
+                    request_model=request_model,
+                )
+            ) from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                self._invalid_json_message(
+                    action,
+                    url,
+                    model=model,
+                    request_model=request_model,
+                )
+            ) from exc
 
         if not isinstance(data, dict):
-            raise RuntimeError(f"{self.name} returned an invalid completion response at {url}")
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid completion response: completion response must be a JSON object",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
 
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
-            raise RuntimeError(f"{self.name} returned no completion choices at {url}")
-        return str(payload["model"])
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid completion response: field 'choices' must be a non-empty list",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+        return request_model
 
     def wait_for_server(self, timeout: int = 60) -> bool:
         start = time.perf_counter()
@@ -214,7 +347,11 @@ class BaseEngine(ABC):
             return False
 
         choice = choices[0]
+        if not isinstance(choice, dict):
+            return False
         delta = choice.get("delta", {})
+        if not isinstance(delta, dict):
+            delta = {}
 
         for key in ("content", "reasoning", "reasoning_content"):
             value = delta.get(key)
@@ -236,6 +373,8 @@ class BaseEngine(ABC):
         start = time.perf_counter()
 
         url = f"{self.base_url()}{self.endpoint()}"
+        request_model = str(payload["model"])
+        action = "measure TTFT"
         try:
             with httpx.stream("POST", url, json=payload, timeout=30.0) as r:
                 r.raise_for_status()
@@ -260,9 +399,25 @@ class BaseEngine(ABC):
                     if self._stream_chunk_has_content(chunk):
                         return round(time.perf_counter() - start, 3)
         except httpx.HTTPError as exc:
-            raise RuntimeError(f"{self.name} request failed at {url}: {exc}") from exc
+            raise RuntimeError(
+                self._request_error_message(
+                    action,
+                    url,
+                    exc,
+                    model=model,
+                    request_model=request_model,
+                )
+            ) from exc
 
-        raise RuntimeError(f"No valid token received from {self.name} stream.")
+        raise RuntimeError(
+            self._invalid_response_message(
+                action,
+                url,
+                "stream ended before a valid content token was received",
+                model=model,
+                request_model=request_model,
+            )
+        )
 
     def measure_tokens_per_second(self, prompt: str, model: str = "default", max_tokens: int = 100) -> float:
         """Measure throughput."""
@@ -270,11 +425,21 @@ class BaseEngine(ABC):
         start = time.perf_counter()
 
         url = f"{self.base_url()}{self.endpoint()}"
+        request_model = str(payload["model"])
+        action = "measure throughput"
         try:
             r = httpx.post(url, json=payload, timeout=60.0)
             r.raise_for_status()
         except httpx.HTTPError as exc:
-            raise RuntimeError(f"{self.name} request failed at {url}: {exc}") from exc
+            raise RuntimeError(
+                self._request_error_message(
+                    action,
+                    url,
+                    exc,
+                    model=model,
+                    request_model=request_model,
+                )
+            ) from exc
 
         elapsed = time.perf_counter() - start
         if elapsed <= 0:
@@ -282,18 +447,41 @@ class BaseEngine(ABC):
 
         try:
             data = r.json()
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"{self.name} returned invalid JSON at {url}") from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                self._invalid_json_message(
+                    action,
+                    url,
+                    model=model,
+                    request_model=request_model,
+                )
+            ) from exc
 
-        tokens = data.get("usage", {}).get("completion_tokens")
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid completion response: completion response must be a JSON object",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+
+        usage = data.get("usage", {})
+        tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
 
         if isinstance(tokens, (int, float)) and tokens > 0:
             self.last_token_count_source = TOKEN_COUNT_SOURCE_USAGE
         else:
             text = ""
-            if "choices" in data and data["choices"]:
-                choice = data["choices"][0]
-                text = choice.get("text") or choice.get("message", {}).get("content", "")
+            choices = data.get("choices")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                choice = choices[0]
+                message = choice.get("message", {})
+                if not isinstance(message, dict):
+                    message = {}
+                text = choice.get("text") or message.get("content", "")
             tokens = max(1, len(text.split()))
             self.last_token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
