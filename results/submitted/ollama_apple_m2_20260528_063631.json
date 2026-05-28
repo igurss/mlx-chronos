@@ -6,7 +6,7 @@
     "macos_version": "26.5",
     "python_version": "3.14.5",
     "architecture": "arm64",
-    "thermal_state": "fair"
+    "thermal_state": "nominal"
   },
   "engine": {
     "name": "ollama",
@@ -18,66 +18,66 @@
   },
   "metrics": {
     "ttft_cold": {
-      "mean": 0.427,
-      "stddev": 0.024,
-      "min": 0.395,
-      "max": 0.469
+      "mean": 0.426,
+      "stddev": 0.023,
+      "min": 0.39,
+      "max": 0.454
     },
     "ttft_cached": {
-      "mean": 0.117,
-      "stddev": 0.028,
-      "min": 0.103,
-      "max": 0.186
+      "mean": 0.11,
+      "stddev": 0.031,
+      "min": 0.095,
+      "max": 0.185
     },
     "tokens_per_second": {
-      "mean": 23.35,
-      "stddev": 0.078,
-      "min": 23.19,
-      "max": 23.41
+      "mean": 23.312,
+      "stddev": 0.046,
+      "min": 23.23,
+      "max": 23.36
     },
-    "ram_peak_gb": 0.224,
+    "ram_peak_gb": 0.235,
     "ram_is_process_rss": true,
     "ram_measurement_method": "process_rss",
-    "system_ram_peak_gb": 7.424,
-    "system_ram_peak_percent": 92.8,
+    "system_ram_peak_gb": 7.41,
+    "system_ram_peak_percent": 92.6,
     "token_count_source": "usage.completion_tokens"
   },
   "trials": {
     "count": 8,
     "ttft_cold_raw": [
-      0.469,
+      0.454,
+      0.446,
+      0.421,
+      0.39,
+      0.445,
       0.395,
-      0.428,
-      0.4,
-      0.444,
-      0.416,
-      0.425,
-      0.442
+      0.427,
+      0.429
     ],
     "ttft_cached_raw": [
-      0.186,
-      0.107,
-      0.111,
-      0.107,
-      0.109,
-      0.103,
-      0.109,
+      0.185,
+      0.102,
+      0.099,
+      0.097,
+      0.098,
+      0.095,
+      0.097,
       0.104
     ],
     "tokens_per_second_raw": [
-      23.39,
-      23.39,
-      23.31,
-      23.4,
-      23.41,
-      23.41,
-      23.19,
-      23.3
+      23.34,
+      23.36,
+      23.33,
+      23.23,
+      23.28,
+      23.36,
+      23.32,
+      23.28
     ]
   },
   "meta": {
-    "chronos_version": "0.1.0",
-    "timestamp": "2026-05-27T11:14:29.634234Z",
+    "chronos_version": "0.1.0b1",
+    "timestamp": "2026-05-28T06:36:31.999184Z",
     "ram_sample_interval_seconds": 0.05,
     "notes": "v0.1 live Ollama"
   }

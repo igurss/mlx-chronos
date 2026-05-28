@@ -19,65 +19,65 @@
   "metrics": {
     "ttft_cold": {
       "mean": 0.49,
-      "stddev": 0.01,
-      "min": 0.48,
-      "max": 0.505
+      "stddev": 0.009,
+      "min": 0.47,
+      "max": 0.503
     },
     "ttft_cached": {
-      "mean": 0.302,
-      "stddev": 0.077,
-      "min": 0.24,
-      "max": 0.49
+      "mean": 0.216,
+      "stddev": 0.011,
+      "min": 0.211,
+      "max": 0.244
     },
     "tokens_per_second": {
-      "mean": 20.859,
-      "stddev": 0.908,
-      "min": 19.37,
-      "max": 21.61
+      "mean": 21.087,
+      "stddev": 0.703,
+      "min": 19.36,
+      "max": 21.41
     },
-    "ram_peak_gb": 0.286,
+    "ram_peak_gb": 0.426,
     "ram_is_process_rss": true,
     "ram_measurement_method": "process_rss",
-    "system_ram_peak_gb": 7.24,
-    "system_ram_peak_percent": 90.5,
+    "system_ram_peak_gb": 7.262,
+    "system_ram_peak_percent": 90.8,
     "token_count_source": "usage.completion_tokens"
   },
   "trials": {
     "count": 8,
     "ttft_cold_raw": [
-      0.487,
-      0.505,
-      0.481,
-      0.5,
-      0.483,
-      0.48,
-      0.483,
-      0.498
+      0.47,
+      0.49,
+      0.491,
+      0.495,
+      0.486,
+      0.503,
+      0.49,
+      0.492
     ],
     "ttft_cached_raw": [
-      0.24,
-      0.284,
-      0.276,
-      0.288,
-      0.49,
-      0.276,
-      0.278,
-      0.284
+      0.244,
+      0.212,
+      0.212,
+      0.215,
+      0.211,
+      0.212,
+      0.211,
+      0.211
     ],
     "tokens_per_second_raw": [
-      21.61,
+      19.36,
+      21.16,
       21.37,
+      21.41,
+      21.39,
+      21.39,
       21.31,
-      19.37,
-      21.21,
-      21.32,
-      21.25,
-      19.43
+      21.31
     ]
   },
   "meta": {
-    "chronos_version": "0.1.0",
-    "timestamp": "2026-05-27T11:13:26.354963Z",
+    "chronos_version": "0.1.0b1",
+    "timestamp": "2026-05-28T06:35:23.011251Z",
     "ram_sample_interval_seconds": 0.05,
     "notes": "v0.1 live mlx-lm"
   }
