@@ -29,4 +29,4 @@ First usable public beta of mlx-Chronos, published as tag `v0.1.0-beta.1`.
 - oMLX version not retrievable when server is already running
 - Tool calling rate not yet implemented
 - `mlx-chronos validate` and `mlx-chronos submit` helper commands not yet implemented
-- Published sample results should be refreshed before stable `v0.1.0`
+- Published sample results currently cover Apple M2 8GB only

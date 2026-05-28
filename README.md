@@ -89,8 +89,8 @@ mlx-chronos engines
 # Run benchmark (JSON by default)
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 
-# Optional: also write a Markdown summary
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format markdown
+# Optional: write both JSON and Markdown outputs
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all
 
 # Optional: choose a custom output directory
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Desktop/benchmarks
@@ -135,9 +135,9 @@ is measured, how, and why.
 - [x] GitHub Actions validation for submitted results
 - [x] GitHub Pages leaderboard with engine/chip filters
 - [x] JSON and Markdown result export
+- [x] Published Apple M2 sample results refreshed with the current benchmark protocol
 
 ### Next
-- [ ] Refresh published Apple M2 sample results with the current benchmark protocol
 - [ ] Add `mlx-chronos validate` to check engine availability, ports, model access, and environment readiness before a run
 - [ ] Add `mlx-chronos submit` to help prepare leaderboard submissions
 - [ ] Add warnings for battery mode, low power mode, and non-nominal thermal state

@@ -26,14 +26,26 @@ pip install git+https://github.com/igurss/mlx-chronos.git
 
 **2. Start your engine server**
 
+Use the server command for your engine and model. Examples:
+
 For oMLX:
 ```bash
 omlx serve --model-dir ~/models
 ```
 
+For Rapid-MLX:
+```bash
+rapid-mlx --no-telemetry serve /path/to/model --port 8001
+```
+
 For mlx-lm:
 ```bash
 mlx_lm.server --model /path/to/model --port 8080
+```
+
+For Ollama:
+```bash
+ollama serve
 ```
 
 mlx-Chronos checks these default OpenAI-compatible endpoints:
@@ -90,7 +102,7 @@ pip install -e ".[test]"
 ### Guidelines
 
 - Follow the existing code style
-- Add docstrings to all functions
+- Add docstrings or comments only where they clarify non-obvious behavior
 - Test your changes before opening a PR
 - Reference the relevant Issue in your commit message (e.g. `feat: add engine (#3)`)
 - Keep PRs focused — one feature or fix per PR
