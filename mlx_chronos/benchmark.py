@@ -412,7 +412,7 @@ if __name__ == "__main__":
     )
 
     reporter = JSONReporter()
-    path = reporter.save(result, Path.cwd() / "results" / "submitted")
+    path = reporter.save(result, Path.cwd() / "results" / "local")
 
     logger.info("\n--- Result ---")
     logger.info(json.dumps(result, indent=2))

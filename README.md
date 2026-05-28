@@ -93,7 +93,7 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format markdown
 
 # Optional: choose a custom output directory
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir results/local
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Desktop/benchmarks
 ```
 
 > **Note:** the engine server must be running before you launch mlx-chronos.

@@ -1,8 +1,8 @@
 # Changelog
 
-## [0.1.0-beta.1] — 2026-05-27
+## [0.1.0b1] — 2026-05-27
 
-First usable public beta of mlx-Chronos.
+First usable public beta of mlx-Chronos, published as tag `v0.1.0-beta.1`.
 
 ### Features
 - Benchmark CLI for local Apple Silicon inference engines.

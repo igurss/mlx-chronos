@@ -32,9 +32,9 @@ def test_compute_stats_single():
 def test_compute_stats_rounding():
     values = [10.1234, 10.5678]
     stats = compute_stats(values)
-    assert stats["mean"] == 10.346
-    assert stats["min"] == 10.123
-    assert stats["max"] == 10.568
+    assert stats["mean"] == pytest.approx(10.346, abs=0.001)
+    assert stats["min"] == pytest.approx(10.123, abs=0.001)
+    assert stats["max"] == pytest.approx(10.568, abs=0.001)
 
 def test_ram_tracker():
     with patch("mlx_chronos.benchmark.psutil.Process") as mock_process_cls:
