@@ -81,7 +81,7 @@ View the full leaderboard with all submitted results:
 
 ```bash
 # Install
-pip install git+https://github.com/igurss/mlx-chronos.git
+pip install mlx-chronos
 
 # Check available engines
 mlx-chronos engines

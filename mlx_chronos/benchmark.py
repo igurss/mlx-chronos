@@ -124,7 +124,7 @@ try:
     from importlib.metadata import version
     VERSION = version("mlx-chronos")
 except Exception:
-    VERSION = "0.1.0b1"
+    VERSION = "0.1.0"
 
 # Default RAM sampling interval in seconds
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05

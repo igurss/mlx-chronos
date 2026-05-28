@@ -1,11 +1,25 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
+
 [project]
 name = "mlx-chronos"
-version = "0.1.0b1"
+version = "0.1.0"
 description = "Benchmark suite and community leaderboard for local LLM inference on Apple Silicon"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Igor Pastore" },
+]
+keywords = [
+    "apple-silicon",
+    "benchmark",
+    "inference",
+    "llm",
+    "mlx",
+]
 dependencies = [
     "httpx>=0.24.0",
     "psutil>=5.9.0",
@@ -19,6 +33,13 @@ test = [
 
 [project.scripts]
 mlx-chronos = "mlx_chronos.cli:main"
+
+[project.urls]
+Homepage = "https://igurss.github.io/mlx-chronos"
+Repository = "https://github.com/igurss/mlx-chronos"
+Issues = "https://github.com/igurss/mlx-chronos/issues"
+Changelog = "https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mlx_chronos*"]

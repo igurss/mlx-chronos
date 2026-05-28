@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0] — 2026-05-28
+
+First public PyPI-ready release.
+
+### Features
+- Add `mlx-chronos validate` to preflight hardware detection, engine availability, server health, model listing, and optional model completion checks before running a benchmark.
+- Add direct PyPI packaging metadata so the CLI can be installed with `pip install mlx-chronos`.
+
+### Reliability
+- Preserve full model identifiers containing `/` in saved benchmark results.
+- Reject blank model names before benchmark execution.
+- Improve engine/model request errors with attempted URL, engine, model, HTTP status, and response body context.
+- Harden engine response parsing so malformed `/models` or completion responses produce controlled `RuntimeError` messages.
+- Run smoke checks and tests on macOS in CI.
+
+### Known Limitations
+- oMLX version not retrievable when server is already running.
+- Tool calling rate not yet implemented.
+- `mlx-chronos submit` helper command not yet implemented.
+- Published sample results currently cover Apple M2 8GB only.
+
 ## [0.1.0b1] — 2026-05-27
 
 First usable public beta of mlx-Chronos, published as tag `v0.1.0-beta.1`.
