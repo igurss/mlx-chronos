@@ -211,6 +211,9 @@ def run_benchmark(
         raise ValueError("trials must be at least 1")
     if ram_sample_interval <= 0:
         raise ValueError("ram_sample_interval must be greater than 0")
+    model_name = model_name.strip()
+    if not model_name:
+        raise ValueError("model name must not be empty")
 
     logger.info(f"\n{'='*50}")
     logger.info(f"  mlx-Chronos Benchmark")
@@ -355,8 +358,6 @@ def run_benchmark(
     token_count_source = _summarize_token_count_sources(token_count_sources)
 
 
-    model_display_name = model_name.split("/")[-1] if "/" in model_name else model_name
-
     # 7. Build result
     result = {
         "hardware": hw,
@@ -365,7 +366,7 @@ def run_benchmark(
             "version": version,
         },
         "model": {
-            "name": model_display_name,
+            "name": model_name,
             "quantization": model_quantization,
         },
         "metrics": {

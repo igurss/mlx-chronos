@@ -100,7 +100,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         
         result = run_benchmark(
             engine_name="omlx",
-            model_name="test-model",
+            model_name="org/test-model",
             model_quantization="4bit",
             trials=2,
             notes="test run",
@@ -109,7 +109,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     
     assert result["engine"]["name"] == "omlx"
     assert result["engine"]["version"] == "1.0.0"
-    assert result["model"]["name"] == "test-model"
+    assert result["model"]["name"] == "org/test-model"
     assert result["metrics"]["tokens_per_second"]["mean"] == 20.0
     assert result["metrics"]["ttft_cold"]["mean"] == 0.5
     assert result["metrics"]["token_count_source"] == "usage.completion_tokens"
@@ -125,3 +125,18 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         CACHED_TTFT_PROMPT,
         CACHED_TTFT_PROMPT,
     ]
+
+    for call in mock_engine.measure_ttft.call_args_list:
+        assert call.kwargs["model"] == "org/test-model"
+    for call in mock_engine.measure_tokens_per_second.call_args_list:
+        assert call.kwargs["model"] == "org/test-model"
+
+
+def test_run_benchmark_rejects_empty_model_name():
+    with pytest.raises(ValueError, match="model name must not be empty"):
+        run_benchmark(
+            engine_name="omlx",
+            model_name="  ",
+            model_quantization="4bit",
+            trials=1,
+        )

@@ -19,6 +19,9 @@ def cmd_run(args):
     if args.ram_sample_interval <= 0:
         print("Error: --ram-sample-interval must be greater than 0.", file=sys.stderr)
         raise SystemExit(2)
+    if not args.model.strip():
+        print("Error: --model must not be empty.", file=sys.stderr)
+        raise SystemExit(2)
     try:
         result = run_benchmark(
             engine_name=args.engine,

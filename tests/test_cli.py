@@ -20,6 +20,13 @@ def test_cmd_run_invalid_ram_interval(capsys):
     assert exc.value.code == 2
     assert "Error: --ram-sample-interval must be greater than 0." in capsys.readouterr().err
 
+def test_cmd_run_invalid_model(capsys):
+    args = Namespace(trials=1, ram_sample_interval=0.1, model="  ", format="json")
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+    assert exc.value.code == 2
+    assert "Error: --model must not be empty." in capsys.readouterr().err
+
 def test_main_engines_command():
     with patch.object(sys, "argv", ["mlx-chronos", "engines"]):
         with patch("mlx_chronos.cli.cmd_engines") as mock_engines:

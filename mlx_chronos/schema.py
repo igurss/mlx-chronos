@@ -60,6 +60,14 @@ class Model(ChronosBaseModel):
     name: str = Field(..., description="Model name (e.g. 'Qwen3.5-9B')")
     quantization: str = Field(..., description="Quantization format (e.g. '4bit', '8bit')")
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("model name must not be empty")
+        return normalized
+
     @field_validator("quantization")
     @classmethod
     def normalize_quantization(cls, value: str) -> str:

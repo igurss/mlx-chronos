@@ -109,6 +109,14 @@ def test_empty_quantization_is_rejected():
     with pytest.raises(ValidationError, match="quantization must not be empty"):
         BenchmarkResult(**invalid_data)
 
+def test_empty_model_name_is_rejected():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["model"] = invalid_data["model"].copy()
+    invalid_data["model"]["name"] = "  "
+
+    with pytest.raises(ValidationError, match="model name must not be empty"):
+        BenchmarkResult(**invalid_data)
+
 def test_trial_count_has_maximum():
     invalid_data = EXAMPLE_RESULT.copy()
     invalid_data["trials"] = invalid_data["trials"].copy()
