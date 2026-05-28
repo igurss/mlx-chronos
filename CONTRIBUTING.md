@@ -63,6 +63,8 @@ You can override a port with an environment variable such as
 **3. Run the benchmark**
 ```bash
 mlx-chronos engines                          # check engine status
+mlx-chronos validate --engine omlx \
+  --model "Qwen3.5-4B-OptiQ-4bit"
 mlx-chronos run --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \
   --trials 5

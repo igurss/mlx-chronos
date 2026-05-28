@@ -86,6 +86,9 @@ pip install git+https://github.com/igurss/mlx-chronos.git
 # Check available engines
 mlx-chronos engines
 
+# Validate setup before a run
+mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
+
 # Run benchmark (JSON by default)
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 
@@ -132,13 +135,13 @@ is measured, how, and why.
 - [x] Hardware detection for chip, machine model, memory, macOS, Python, architecture, and thermal state
 - [x] Strict JSON schema validation with raw-trial consistency checks
 - [x] Continuous engine RSS and system RAM peak sampling
+- [x] Preflight validation for engine, server, and model access
 - [x] GitHub Actions validation for submitted results
 - [x] GitHub Pages leaderboard with engine/chip filters
 - [x] JSON and Markdown result export
 - [x] Published Apple M2 sample results refreshed with the current benchmark protocol
 
 ### Next
-- [ ] Add `mlx-chronos validate` to check engine availability, ports, model access, and environment readiness before a run
 - [ ] Add `mlx-chronos submit` to help prepare leaderboard submissions
 - [ ] Add warnings for battery mode, low power mode, and non-nominal thermal state
 - [ ] Improve leaderboard filtering by machine model and add broader column tooltips

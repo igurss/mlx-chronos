@@ -70,6 +70,60 @@ def test_measure_tokens_per_second_wraps_http_errors(mock_post):
     with pytest.raises(RuntimeError, match="omlx request failed"):
         engine.measure_tokens_per_second("test prompt", "default", 100)
 
+@patch("httpx.get")
+def test_list_model_ids(mock_get):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "data": [
+            {"id": "org/test-model"},
+            {"id": ""},
+            {"object": "model"},
+        ]
+    }
+    mock_get.return_value = mock_response
+
+    assert OMLXEngine().list_model_ids() == ["org/test-model"]
+
+@patch("httpx.get")
+def test_list_model_ids_rejects_invalid_shape(mock_get):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"data": {"id": "org/test-model"}}
+    mock_get.return_value = mock_response
+
+    with pytest.raises(RuntimeError, match="invalid model list"):
+        OMLXEngine().list_model_ids()
+
+def test_resolve_listed_model_id_matches_suffix():
+    engine = OMLXEngine()
+    resolved = engine.resolve_listed_model_id(
+        "test-model",
+        ["org/test-model"],
+    )
+    assert resolved == "org/test-model"
+
+@patch("httpx.post")
+def test_validate_completion_request(mock_post):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+    mock_post.return_value = mock_response
+
+    request_model = OMLXEngine().validate_completion_request("org/test-model")
+
+    assert request_model == "org/test-model"
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["model"] == "org/test-model"
+    assert payload["max_tokens"] == 1
+    assert payload["stream"] is False
+
+@patch("httpx.post")
+def test_validate_completion_request_rejects_invalid_shape(mock_post):
+    mock_response = MagicMock()
+    mock_response.json.return_value = []
+    mock_post.return_value = mock_response
+
+    with pytest.raises(RuntimeError, match="invalid completion response"):
+        OMLXEngine().validate_completion_request("org/test-model")
+
 def test_engine_port_env_override(monkeypatch):
     monkeypatch.setenv("MLX_CHRONOS_MLX_LM_PORT", "8090")
     assert MLXLMEngine().port == 8090

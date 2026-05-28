@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 from argparse import Namespace
-from mlx_chronos.cli import cmd_run, main
+from mlx_chronos.cli import cmd_run, cmd_validate, main
 from mlx_chronos.schema import EXAMPLE_RESULT
 
 def test_cmd_run_invalid_trials(capsys):
@@ -27,11 +27,93 @@ def test_cmd_run_invalid_model(capsys):
     assert exc.value.code == 2
     assert "Error: --model must not be empty." in capsys.readouterr().err
 
+def test_cmd_validate_invalid_model(capsys):
+    args = Namespace(engine="omlx", model="  ")
+    with pytest.raises(SystemExit) as exc:
+        cmd_validate(args)
+    assert exc.value.code == 2
+    assert "Error: --model must not be empty." in capsys.readouterr().err
+
 def test_main_engines_command():
     with patch.object(sys, "argv", ["mlx-chronos", "engines"]):
         with patch("mlx_chronos.cli.cmd_engines") as mock_engines:
             main()
             mock_engines.assert_called_once()
+
+def test_main_validate_command():
+    with patch.object(sys, "argv", ["mlx-chronos", "validate"]):
+        with patch("mlx_chronos.cli.cmd_validate") as mock_validate:
+            main()
+            mock_validate.assert_called_once()
+
+@patch("mlx_chronos.engines.get_engine")
+@patch("mlx_chronos.detect.detect_hardware")
+def test_cmd_validate_engine_only(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+    }
+
+    mock_engine = mock_get_engine.return_value
+    mock_engine.is_installed.return_value = True
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+    mock_engine.list_model_ids.return_value = ["org/test-model"]
+
+    cmd_validate(Namespace(engine="omlx", model=None))
+
+    mock_engine.list_model_ids.assert_called_once()
+    mock_engine.validate_completion_request.assert_not_called()
+
+@patch("mlx_chronos.engines.get_engine")
+@patch("mlx_chronos.detect.detect_hardware")
+def test_cmd_validate_with_model(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+    }
+
+    mock_engine = mock_get_engine.return_value
+    mock_engine.is_installed.return_value = True
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+    mock_engine.list_model_ids.return_value = ["org/test-model"]
+    mock_engine.resolve_listed_model_id.return_value = "org/test-model"
+    mock_engine.validate_completion_request.return_value = "org/test-model"
+
+    cmd_validate(Namespace(engine="omlx", model="org/test-model"))
+
+    mock_engine.resolve_listed_model_id.assert_called_once_with(
+        "org/test-model",
+        ["org/test-model"],
+    )
+    mock_engine.validate_completion_request.assert_called_once_with("org/test-model")
+
+@patch("mlx_chronos.engines.get_engine")
+@patch("mlx_chronos.detect.detect_hardware")
+def test_cmd_validate_fails_when_server_is_down(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+    }
+
+    mock_engine = mock_get_engine.return_value
+    mock_engine.is_installed.return_value = True
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.is_server_running.return_value = False
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_validate(Namespace(engine="omlx", model="org/test-model"))
+
+    assert exc.value.code == 1
+    mock_engine.list_model_ids.assert_not_called()
+    mock_engine.validate_completion_request.assert_not_called()
 
 def test_cmd_run_format_all_calls_reporters():
     args = Namespace(

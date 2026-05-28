@@ -92,6 +92,76 @@ class BaseEngine(ABC):
         except Exception:
             return False
 
+    def list_model_ids(self) -> list[str]:
+        """Return model ids exposed by the OpenAI-compatible /models endpoint."""
+        url = f"{self.base_url()}/models"
+        try:
+            r = httpx.get(url, timeout=5.0)
+            r.raise_for_status()
+            data = r.json()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"{self.name} model list request failed at {url}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"{self.name} returned invalid JSON at {url}") from exc
+
+        if not isinstance(data, dict):
+            raise RuntimeError(f"{self.name} returned an invalid model list at {url}")
+
+        models = []
+        items = data.get("data", [])
+        if not isinstance(items, list):
+            raise RuntimeError(f"{self.name} returned an invalid model list at {url}")
+
+        for item in items:
+            if isinstance(item, dict):
+                model_id = item.get("id")
+                if isinstance(model_id, str) and model_id.strip():
+                    models.append(model_id)
+        return models
+
+    def resolve_listed_model_id(self, model: str, model_ids: list[str] | None = None) -> str | None:
+        """Return a matching listed model id for user input when one is available."""
+        requested = model.strip()
+        if not requested:
+            return None
+
+        model_ids = self.list_model_ids() if model_ids is None else model_ids
+        request_model = self._request_model_name(requested)
+        candidates = {requested, request_model}
+
+        for model_id in model_ids:
+            if model_id in candidates:
+                return model_id
+            if any(model_id.endswith(f"/{candidate}") for candidate in candidates):
+                return model_id
+        return None
+
+    def validate_completion_request(self, model: str) -> str:
+        """Send a tiny non-streaming completion request and return the request model id."""
+        payload = self.build_payload(
+            prompt="Reply with one word: ok",
+            model=model,
+            max_tokens=1,
+            stream=False,
+        )
+        url = f"{self.base_url()}{self.endpoint()}"
+        try:
+            r = httpx.post(url, json=payload, timeout=30.0)
+            r.raise_for_status()
+            data = r.json()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(f"{self.name} completion request failed at {url}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"{self.name} returned invalid JSON at {url}") from exc
+
+        if not isinstance(data, dict):
+            raise RuntimeError(f"{self.name} returned an invalid completion response at {url}")
+
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise RuntimeError(f"{self.name} returned no completion choices at {url}")
+        return str(payload["model"])
+
     def wait_for_server(self, timeout: int = 60) -> bool:
         start = time.perf_counter()
         while time.perf_counter() - start < timeout:

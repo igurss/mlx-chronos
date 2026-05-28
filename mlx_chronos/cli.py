@@ -62,6 +62,93 @@ def cmd_engines(args):
     logger.info("")
 
 
+def log_validation_check(status: str, label: str, detail: str) -> None:
+    logger.info(f"[{status}] {label}: {detail}")
+
+
+def cmd_validate(args):
+    """Validate the local environment before running a benchmark."""
+    from mlx_chronos.detect import detect_hardware
+    from mlx_chronos.engines import get_engine
+
+    model = args.model.strip() if args.model is not None else None
+    if args.model is not None and not model:
+        print("Error: --model must not be empty.", file=sys.stderr)
+        raise SystemExit(2)
+
+    failures = 0
+    logger.info("\nValidating mlx-chronos setup:\n")
+
+    try:
+        hardware = detect_hardware()
+        log_validation_check(
+            "ok",
+            "hardware detection",
+            (
+                f"{hardware['chip']} / {hardware['memory_gb']} GB / "
+                f"macOS {hardware['macos_version']}"
+            ),
+        )
+    except Exception as exc:
+        failures += 1
+        log_validation_check("fail", "hardware detection", str(exc))
+
+    engine = get_engine(args.engine)
+    if engine.is_installed():
+        log_validation_check(
+            "ok",
+            "engine installed",
+            f"{args.engine} ({engine.get_version()})",
+        )
+    else:
+        failures += 1
+        log_validation_check("fail", "engine installed", args.engine)
+
+    if engine.is_server_running():
+        log_validation_check("ok", "server reachable", engine.base_url())
+    else:
+        failures += 1
+        log_validation_check("fail", "server reachable", engine.base_url())
+
+    model_ids = []
+    if failures == 0:
+        try:
+            model_ids = engine.list_model_ids()
+            detail = f"{len(model_ids)} model(s)" if model_ids else "no models listed"
+            log_validation_check("ok", "model list", detail)
+        except RuntimeError as exc:
+            failures += 1
+            log_validation_check("fail", "model list", str(exc))
+
+    if model is None:
+        log_validation_check("skip", "model request", "pass --model to validate model access")
+    elif failures:
+        log_validation_check("skip", "model request", "fix failed checks first")
+    elif failures == 0:
+        resolved_model = engine.resolve_listed_model_id(model, model_ids)
+        if resolved_model is None:
+            log_validation_check(
+                "warn",
+                "model listed",
+                f"{model} was not found in /models; trying a completion request",
+            )
+        else:
+            log_validation_check("ok", "model listed", resolved_model)
+
+        try:
+            request_model = engine.validate_completion_request(model)
+            log_validation_check("ok", "completion request", request_model)
+        except RuntimeError as exc:
+            failures += 1
+            log_validation_check("fail", "completion request", str(exc))
+
+    if failures:
+        logger.info(f"\nValidation failed with {failures} error(s).")
+        raise SystemExit(1)
+
+    logger.info("\nValidation passed.")
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
@@ -125,6 +212,24 @@ def main():
     # --- engines ---
     engines_parser = subparsers.add_parser("engines", help="List available engines and their status")
     engines_parser.set_defaults(func=cmd_engines)
+
+    # --- validate ---
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="Validate engine, server, and optional model access before a run",
+    )
+    validate_parser.add_argument(
+        "--engine",
+        choices=list(ENGINES.keys()),
+        default="omlx",
+        help="Engine to validate (default: omlx)",
+    )
+    validate_parser.add_argument(
+        "--model",
+        default=None,
+        help="Optional model name to validate with a tiny completion request",
+    )
+    validate_parser.set_defaults(func=cmd_validate)
 
     # Parse and dispatch
     args = parser.parse_args()
