@@ -355,14 +355,14 @@ class BaseEngine(ABC):
 
         for key in ("content", "reasoning", "reasoning_content"):
             value = delta.get(key)
-            if isinstance(value, str) and value.strip():
+            if isinstance(value, str) and value:
                 return True
 
         if delta.get("tool_calls"):
             return True
 
         text = choice.get("text")
-        if isinstance(text, str) and text.strip():
+        if isinstance(text, str) and text:
             return True
 
         return False

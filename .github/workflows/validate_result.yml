@@ -6,6 +6,9 @@ on:
       - 'results/submitted/*.json'
       - 'results/submitted/**/*.json'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest

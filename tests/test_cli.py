@@ -162,6 +162,7 @@ def test_cmd_run_custom_output_dir():
         mock_json.return_value.save.assert_called_once_with(EXAMPLE_RESULT, output_dir)
 
 def test_submitted_results_are_not_gitignored():
-    gitignore = Path(".gitignore").read_text()
+    project_root = Path(__file__).resolve().parent.parent
+    gitignore = (project_root / ".gitignore").read_text()
     assert "results/submitted/*.json" not in gitignore
     assert "results/local/" in gitignore

@@ -30,6 +30,7 @@ class RAMTracker:
         self.interval = interval
         self._process = psutil.Process(self.pid)
         self.peak_ram_bytes = 0
+        self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
 
@@ -49,8 +50,9 @@ class RAMTracker:
         while not self._stop_event.is_set():
             try:
                 current_ram = self._sample_rss()
-                if current_ram > self.peak_ram_bytes:
-                    self.peak_ram_bytes = current_ram
+                with self._lock:
+                    if current_ram > self.peak_ram_bytes:
+                        self.peak_ram_bytes = current_ram
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 try:
                     is_running = self._process.is_running()
@@ -76,7 +78,9 @@ class RAMTracker:
             self._thread.join()
 
         # Byte conversion to GB
-        return self.peak_ram_bytes / (1024 ** 3)
+        with self._lock:
+            peak = self.peak_ram_bytes
+        return peak / (1024 ** 3)
 
 
 class SystemRAMTracker:
@@ -86,6 +90,7 @@ class SystemRAMTracker:
         self.interval = interval
         self.peak_used_bytes = 0
         self.peak_percent = 0.0
+        self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
 
@@ -98,9 +103,10 @@ class SystemRAMTracker:
     def _monitor(self):
         while not self._stop_event.is_set():
             used_bytes, percent = self._sample_system_ram()
-            if used_bytes > self.peak_used_bytes:
-                self.peak_used_bytes = used_bytes
-                self.peak_percent = percent
+            with self._lock:
+                if used_bytes > self.peak_used_bytes:
+                    self.peak_used_bytes = used_bytes
+                    self.peak_percent = percent
             time.sleep(self.interval)
 
     def start(self):
@@ -113,7 +119,10 @@ class SystemRAMTracker:
         self._stop_event.set()
         if self._thread:
             self._thread.join()
-        return self.peak_used_bytes / (1024 ** 3), self.peak_percent
+        with self._lock:
+            peak_used = self.peak_used_bytes
+            peak_pct = self.peak_percent
+        return peak_used / (1024 ** 3), peak_pct
 
 
 logging.getLogger("httpx").setLevel(logging.WARNING)

@@ -1,6 +1,9 @@
-import pytest
-import httpx
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
+
+import httpx
+import pytest
+
 from mlx_chronos.constants import VALID_ENGINE_NAMES
 from mlx_chronos.engines import (
     ENGINES, OMLXEngine, MLXLMEngine, RapidMLXEngine, OllamaEngine, get_engine
@@ -18,10 +21,10 @@ def test_stream_chunk_role_is_not_counted_as_content():
     chunk = {"choices": [{"delta": {"role": "assistant"}}]}
     assert engine._stream_chunk_has_content(chunk) is False
 
-def test_stream_chunk_whitespace_is_not_counted_as_content():
+def test_stream_chunk_whitespace_is_counted_as_content():
     engine = OMLXEngine()
     chunk = {"choices": [{"delta": {"content": "   "}}]}
-    assert engine._stream_chunk_has_content(chunk) is False
+    assert engine._stream_chunk_has_content(chunk) is True
 
 def test_stream_chunk_text_content_is_counted():
     engine = OMLXEngine()
@@ -55,7 +58,7 @@ def test_measure_tokens_per_second(mock_post):
     mock_response = MagicMock()
     mock_response.json.return_value = {"usage": {"completion_tokens": 150}}
     mock_post.return_value = mock_response
-    
+
     engine = OMLXEngine()
     with patch("time.perf_counter", side_effect=[0.0, 1.5]):
         tps = engine.measure_tokens_per_second("test prompt", "default", 100)
@@ -236,7 +239,7 @@ def test_ollama_get_version(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "ollama version is 0.24.0\n"
     mock_run.return_value = mock_result
-    
+
     engine = OllamaEngine()
     assert engine.get_version() == "0.24.0"
 
@@ -247,7 +250,7 @@ def test_rapid_mlx_resolve_model_id(mock_get):
         "data": [{"id": "local/model/test"}]
     }
     mock_get.return_value = mock_response
-    
+
     engine = RapidMLXEngine()
     resolved = engine._resolve_model_id("test")
     assert resolved == "local/model/test"
@@ -263,3 +266,40 @@ def test_rapid_mlx_model_id_cache_is_instance_scoped(mock_get):
 
     fresh_engine = RapidMLXEngine()
     assert fresh_engine._model_id_cache == {}
+
+@contextmanager
+def mock_stream_response(*args, **kwargs):
+    class MockResponse:
+        def raise_for_status(self):
+            pass
+        def iter_lines(self):
+            yield 'data: {"choices": [{"delta": {"role": "assistant"}}]}'
+            yield 'data: {"choices": [{"delta": {"content": "Hello"}}]}'
+            yield 'data: [DONE]'
+    yield MockResponse()
+
+@patch("httpx.stream", side_effect=mock_stream_response)
+def test_measure_ttft_success(mock_stream):
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 0.5]):
+        ttft = engine.measure_ttft("hello")
+        assert ttft == 0.5
+
+@contextmanager
+def mock_stream_response_empty(*args, **kwargs):
+    class MockResponse:
+        def raise_for_status(self):
+            pass
+        def iter_lines(self):
+            yield 'data: {"choices": [{"delta": {"role": "assistant"}}]}'
+            yield 'data: [DONE]'
+    yield MockResponse()
+
+@patch("httpx.stream", side_effect=mock_stream_response_empty)
+def test_measure_ttft_no_content_raises(mock_stream):
+    engine = OMLXEngine()
+    with pytest.raises(
+        RuntimeError,
+        match="stream ended before a valid content token was received",
+    ):
+        engine.measure_ttft("hello")
