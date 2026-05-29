@@ -3,10 +3,10 @@
 > Benchmark suite and community leaderboard for local LLM inference on Apple Silicon.  
 > Run it. Share your results. Compare across hardware.
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/igurss/mlx-chronos/blob/main/LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://python.org)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1_|_M2_|_M3_|_M4_|_M5-black?logo=apple)](https://apple.com)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 
 ---
 
@@ -21,7 +21,7 @@ contribute to the community leaderboard.
 - [Ollama](https://github.com/ollama/ollama) (MLX backend)
 - [oMLX](https://github.com/jundot/omlx)
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
-- [mlx-lm (Apple MLX)](https://github.com/ml-explore/mlx-examples)
+- [mlx-lm (Apple MLX)](https://github.com/ml-explore/mlx-lm)
 
 **Metrics measured:**
 - **TTFT** — Time to First Token (cold and cached, with statistics)
@@ -101,7 +101,7 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Des
 ```
 
 > **Note:** the engine server must be running before you launch mlx-chronos.
-> See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions.
+> See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for setup instructions.
 
 ---
 
@@ -117,13 +117,13 @@ Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens`. Local runs can still be saved with a fallback token
 estimate, but those results are not accepted for the public leaderboard.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions.
+See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for detailed instructions.
 
 ---
 
 ## Benchmark Methodology
 
-See [docs/methodology.md](docs/methodology.md) for a full explanation of what
+See [docs/methodology.md](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md) for a full explanation of what
 is measured, how, and why.
 
 ---
@@ -161,4 +161,4 @@ is measured, how, and why.
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE)
+Apache 2.0 — see [LICENSE](https://github.com/igurss/mlx-chronos/blob/main/LICENSE)

@@ -14,7 +14,7 @@
   },
   "model": {
     "name": "qwen3.5:4b-mlx",
-    "quantization": "bf16"
+    "quantization": "nvfp4"
   },
   "metrics": {
     "ttft_cold": {

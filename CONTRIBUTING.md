@@ -14,7 +14,7 @@ There are two ways to contribute: submitting benchmark results and improving the
   - [Ollama](https://github.com/ollama/ollama) (MLX backend)
   - [oMLX](https://github.com/jundot/omlx)
   - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
-  - [mlx-lm](https://github.com/ml-explore/mlx-examples)
+  - [mlx-lm](https://github.com/ml-explore/mlx-lm)
 - Python 3.10+
 
 ### Steps

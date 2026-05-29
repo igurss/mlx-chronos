@@ -13,6 +13,9 @@ First public PyPI-ready release.
 - Reject blank model names before benchmark execution.
 - Improve engine/model request errors with attempted URL, engine, model, HTTP status, and response body context.
 - Harden engine response parsing so malformed `/models` or completion responses produce controlled `RuntimeError` messages.
+- Add a timeout to the Rapid-MLX version probe to avoid hanging validation or runs.
+- Correct Ollama sample quantization metadata and generated leaderboard index.
+- Update mlx-lm documentation links to the dedicated upstream repository.
 - Run smoke checks and tests on macOS in CI.
 
 ### Known Limitations

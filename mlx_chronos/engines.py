@@ -571,7 +571,12 @@ class RapidMLXEngine(BaseEngine):
 
     def get_version(self) -> str:
         try:
-            result = subprocess.run(["rapid-mlx", "version"], capture_output=True, text=True)
+            result = subprocess.run(
+                ["rapid-mlx", "version"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
             return result.stdout.strip() or "unknown"
         except Exception:
             return "unknown"

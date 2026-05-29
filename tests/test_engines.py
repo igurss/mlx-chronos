@@ -243,6 +243,15 @@ def test_ollama_get_version(mock_run):
     engine = OllamaEngine()
     assert engine.get_version() == "0.24.0"
 
+@patch("subprocess.run")
+def test_rapid_mlx_get_version_uses_timeout(mock_run):
+    mock_result = MagicMock()
+    mock_result.stdout = "rapid-mlx 0.6.68\n"
+    mock_run.return_value = mock_result
+
+    assert RapidMLXEngine().get_version() == "rapid-mlx 0.6.68"
+    assert mock_run.call_args.kwargs["timeout"] == 3
+
 @patch("httpx.get")
 def test_rapid_mlx_resolve_model_id(mock_get):
     mock_response = MagicMock()
