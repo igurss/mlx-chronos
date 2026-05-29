@@ -45,14 +45,27 @@
       flex-wrap: wrap;
     }
 
-    .filters select {
+    .filters select,
+    .filters input {
       background: #161b22;
       color: #e6edf3;
       border: 1px solid #30363d;
       border-radius: 6px;
       padding: 0.4rem 0.8rem;
       font-size: 0.9rem;
+    }
+
+    .filters select {
       cursor: pointer;
+    }
+
+    .filters input {
+      min-width: 240px;
+      flex: 1;
+    }
+
+    .filters input::placeholder {
+      color: #8b949e;
     }
 
     .table-wrap {
@@ -135,6 +148,7 @@
 </header>
 
 <div class="filters">
+  <input id="filter-model" type="search" placeholder="Search models" aria-label="Search models" />
   <select id="filter-engine">
     <option value="">All engines</option>
     <option value="ollama">Ollama</option>
@@ -275,10 +289,12 @@
   }
 
   function render() {
+    const modelFilter = document.getElementById("filter-model").value.trim().toLowerCase();
     const engineFilter = document.getElementById("filter-engine").value;
     const chipFilter   = document.getElementById("filter-chip").value;
 
     let rows = allRows.filter(r =>
+      (!modelFilter || String(r.model ?? "").toLowerCase().includes(modelFilter)) &&
       (!engineFilter || r.engine === engineFilter) &&
       (!chipFilter   || r.chip   === chipFilter)
     );
@@ -327,6 +343,7 @@
   });
 
   // ── Filters ─────────────────────────────────────────────────────────────────
+  document.getElementById("filter-model").addEventListener("input", render);
   document.getElementById("filter-engine").addEventListener("change", render);
   document.getElementById("filter-chip").addEventListener("change", render);
 
