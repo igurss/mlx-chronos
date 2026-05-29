@@ -206,8 +206,6 @@ def run_benchmark(
     Returns a structured result dict with trial statistics.
     """
 
-    if len(COLD_PROMPTS) != MAX_TRIALS:
-        raise RuntimeError("MAX_TRIALS must match the number of cold prompts")
     if trials > MAX_TRIALS:
         raise ValueError(
             f"Max trials is {MAX_TRIALS} (one unique cold prompt per trial). "

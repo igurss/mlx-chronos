@@ -8,9 +8,10 @@ and why each decision was made. Reproducibility and transparency are core goals.
 ## Metrics
 
 ### TTFT Cold — Time to First Token (cold)
-Time in seconds from sending the request to receiving the first real content
-token in the streaming response. "Cold" means the model has not seen this
-prompt before — no cache advantage.
+Time in seconds from sending the request to receiving the first non-empty
+streamed content, reasoning, or text delta. Whitespace-only streamed text
+counts because it is still a generated token observed from the engine. "Cold"
+means the model has not seen this prompt before — no cache advantage.
 
 TTFT is measured with Python's monotonic high-resolution performance counter,
 so wall-clock changes during a run do not affect the latency value.

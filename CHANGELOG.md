@@ -34,7 +34,8 @@ First usable public beta of mlx-Chronos, published as tag `v0.1.0-beta.1`.
 - GitHub Pages leaderboard with engine/chip filters and submitted Apple M2 sample results.
 
 ### Benchmark Methodology
-- TTFT measures the first real streamed content token and uses a monotonic high-resolution timer.
+- TTFT measures the first non-empty streamed content/reasoning/text delta and uses a monotonic high-resolution timer.
+- Whitespace-only streamed text is counted for TTFT because it is still the first generated token observed from the engine.
 - Cold TTFT, cached TTFT, and throughput run in separate phases to avoid cache pollution between metrics.
 - Engine RSS and total system RAM are sampled continuously during the benchmark.
 - Throughput submissions require `usage.completion_tokens` for comparable leaderboard results.

@@ -38,7 +38,8 @@ When you run mlx-Chronos, it executes a fixed benchmark protocol against the
 running engine:
 
 **Cold TTFT** — sends a prompt to the model and measures the time from request
-to first real token. Each trial uses a unique prompt to avoid cache hits.
+to first non-empty streamed token, including whitespace-only text tokens. Each
+trial uses a unique prompt to avoid cache hits.
 
 **Cached TTFT** — sends the same fixed prompt on every cached trial. A priming
 call loads it into cache first, then cached trials run consecutively. This
