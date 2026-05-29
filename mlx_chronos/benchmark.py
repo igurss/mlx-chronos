@@ -9,6 +9,7 @@ import os
 import psutil
 
 from mlx_chronos.constants import (
+    MAX_TRIALS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
     TOKEN_COUNT_SOURCE_MIXED,
@@ -16,6 +17,7 @@ from mlx_chronos.constants import (
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
     TOKEN_COUNT_SOURCES,
 )
+from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware
 from mlx_chronos.engines import get_engine
 from mlx_chronos.schema import BenchmarkResult
@@ -128,13 +130,6 @@ class SystemRAMTracker:
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mlx_chronos")
 
-# mlx-chronos version
-try:
-    from importlib.metadata import version
-    VERSION = version("mlx-chronos")
-except Exception:
-    VERSION = "0.1.0"
-
 # Default RAM sampling interval in seconds
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
 
@@ -211,9 +206,11 @@ def run_benchmark(
     Returns a structured result dict with trial statistics.
     """
 
-    if trials > len(COLD_PROMPTS):
+    if len(COLD_PROMPTS) != MAX_TRIALS:
+        raise RuntimeError("MAX_TRIALS must match the number of cold prompts")
+    if trials > MAX_TRIALS:
         raise ValueError(
-            f"Max trials is {len(COLD_PROMPTS)} (one unique cold prompt per trial). "
+            f"Max trials is {MAX_TRIALS} (one unique cold prompt per trial). "
             f"Requested: {trials}"
         )
     if trials < 1:
@@ -249,8 +246,8 @@ def run_benchmark(
         )
 
     # 3. Engine version
-    version = engine.get_version()
-    logger.info(f"Engine version: {version}\n")
+    engine_version = engine.get_version()
+    logger.info(f"Engine version: {engine_version}\n")
 
     # 4. Start system memory sampling before warmup so load/cache pressure is captured.
     logger.info(
@@ -372,7 +369,7 @@ def run_benchmark(
         "hardware": hw,
         "engine": {
             "name": engine_name,
-            "version": version,
+            "version": engine_version,
         },
         "model": {
             "name": model_name,

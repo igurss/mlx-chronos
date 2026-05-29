@@ -53,3 +53,6 @@ Changelog = "https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["mlx_chronos*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

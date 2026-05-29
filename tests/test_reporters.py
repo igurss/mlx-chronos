@@ -53,4 +53,10 @@ def test_markdown_reporter_save(tmp_path):
     content = output_path.read_text()
     assert "# mlx-chronos Benchmark Result" in content
     assert "**Engine:** omlx" in content
+    assert "**Timestamp:** 2026-05-23T15:08:36Z" in content
+    assert "**Chronos version:** 0.1.0" in content
+    assert "**Trials:** 5" in content
+    assert "**Token count source:** usage.completion_tokens" in content
     assert "Apple M2" in content
+    assert "## Raw Trials" in content
+    assert "**Cold TTFT:** 0.044, 0.066, 0.028, 0.039, 0.03" in content

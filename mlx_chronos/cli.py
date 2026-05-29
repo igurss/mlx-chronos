@@ -4,7 +4,8 @@ import logging
 
 from pathlib import Path
 from mlx_chronos.benchmark import DEFAULT_RAM_SAMPLE_INTERVAL, run_benchmark
-from mlx_chronos.engines import ENGINES
+from mlx_chronos.detect import detect_hardware
+from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 
 
@@ -51,7 +52,6 @@ def cmd_run(args):
 
 def cmd_engines(args):
     """List available engines and their status."""
-    from mlx_chronos.engines import ENGINES, get_engine
     logger.info("\nAvailable engines:\n")
     for name in ENGINES:
         engine = get_engine(name)
@@ -68,9 +68,6 @@ def log_validation_check(status: str, label: str, detail: str) -> None:
 
 def cmd_validate(args):
     """Validate the local environment before running a benchmark."""
-    from mlx_chronos.detect import detect_hardware
-    from mlx_chronos.engines import get_engine
-
     model = args.model.strip() if args.model is not None else None
     if args.model is not None and not model:
         print("Error: --model must not be empty.", file=sys.stderr)
@@ -124,7 +121,7 @@ def cmd_validate(args):
         log_validation_check("skip", "model request", "pass --model to validate model access")
     elif failures:
         log_validation_check("skip", "model request", "fix failed checks first")
-    elif failures == 0:
+    else:
         resolved_model = engine.resolve_listed_model_id(model, model_ids)
         if resolved_model is None:
             log_validation_check(
@@ -210,7 +207,10 @@ def main():
     run_parser.set_defaults(func=cmd_run)
 
     # --- engines ---
-    engines_parser = subparsers.add_parser("engines", help="List available engines and their status")
+    engines_parser = subparsers.add_parser(
+        "engines",
+        help="List available engines and their status",
+    )
     engines_parser.set_defaults(func=cmd_engines)
 
     # --- validate ---

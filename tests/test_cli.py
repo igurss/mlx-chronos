@@ -46,8 +46,8 @@ def test_main_validate_command():
             main()
             mock_validate.assert_called_once()
 
-@patch("mlx_chronos.engines.get_engine")
-@patch("mlx_chronos.detect.detect_hardware")
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
 def test_cmd_validate_engine_only(mock_detect, mock_get_engine):
     mock_detect.return_value = {
         "chip": "Apple M2",
@@ -67,8 +67,8 @@ def test_cmd_validate_engine_only(mock_detect, mock_get_engine):
     mock_engine.list_model_ids.assert_called_once()
     mock_engine.validate_completion_request.assert_not_called()
 
-@patch("mlx_chronos.engines.get_engine")
-@patch("mlx_chronos.detect.detect_hardware")
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
 def test_cmd_validate_with_model(mock_detect, mock_get_engine):
     mock_detect.return_value = {
         "chip": "Apple M2",
@@ -93,8 +93,8 @@ def test_cmd_validate_with_model(mock_detect, mock_get_engine):
     )
     mock_engine.validate_completion_request.assert_called_once_with("org/test-model")
 
-@patch("mlx_chronos.engines.get_engine")
-@patch("mlx_chronos.detect.detect_hardware")
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
 def test_cmd_validate_fails_when_server_is_down(mock_detect, mock_get_engine):
     mock_detect.return_value = {
         "chip": "Apple M2",

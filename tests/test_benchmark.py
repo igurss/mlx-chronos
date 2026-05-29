@@ -8,6 +8,7 @@ from mlx_chronos.benchmark import (
     compute_stats,
     run_benchmark,
 )
+from mlx_chronos.constants import MAX_TRIALS
 
 def test_compute_stats_normal():
     values = [10.0, 12.0, 14.0, 16.0, 18.0]
@@ -35,6 +36,18 @@ def test_compute_stats_rounding():
     assert stats["mean"] == pytest.approx(10.346, abs=0.001)
     assert stats["min"] == pytest.approx(10.123, abs=0.001)
     assert stats["max"] == pytest.approx(10.568, abs=0.001)
+
+def test_cold_prompt_count_matches_max_trials():
+    assert len(COLD_PROMPTS) == MAX_TRIALS
+
+def test_run_benchmark_rejects_trials_above_max():
+    with pytest.raises(ValueError, match=f"Max trials is {MAX_TRIALS}"):
+        run_benchmark(
+            engine_name="omlx",
+            model_name="Qwen3.5-4B-OptiQ-4bit",
+            model_quantization="4bit",
+            trials=MAX_TRIALS + 1,
+        )
 
 def test_ram_tracker():
     with patch("mlx_chronos.benchmark.psutil.Process") as mock_process_cls:
