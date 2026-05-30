@@ -558,12 +558,10 @@ class RapidMLXEngine(BaseEngine):
         return None
 
     def _request_model_name(self, model: str) -> str:
-        model_name = super()._request_model_name(model)
+        model_name = os.path.expanduser(super()._request_model_name(model))
         cache_key = model_name
         if cache_key in self._request_model_cache:
             return self._request_model_cache[cache_key]
-
-        model_name = os.path.expanduser(model_name)
 
         if "/" in model_name and os.path.exists(model_name):
             request_model = model_name

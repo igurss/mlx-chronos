@@ -287,6 +287,26 @@ def test_rapid_mlx_request_model_name_caches_local_path_checks(mock_exists):
     mock_exists.assert_called_once_with("/models/test")
     engine._resolve_model_id.assert_not_called()
 
+def test_rapid_mlx_request_model_name_caches_expanded_local_paths(monkeypatch):
+    mock_exists = MagicMock(return_value=True)
+    mock_expanduser = MagicMock(
+        side_effect=lambda value: value.replace("~", "/Users/igor", 1)
+    )
+    monkeypatch.setattr("mlx_chronos.engines.os.path.exists", mock_exists)
+    monkeypatch.setattr("mlx_chronos.engines.os.path.expanduser", mock_expanduser)
+
+    engine = RapidMLXEngine()
+    engine._resolve_model_id = MagicMock()
+
+    assert engine._request_model_name("~/models/test") == "/Users/igor/models/test"
+    assert (
+        engine._request_model_name("/Users/igor/models/test")
+        == "/Users/igor/models/test"
+    )
+
+    mock_exists.assert_called_once_with("/Users/igor/models/test")
+    engine._resolve_model_id.assert_not_called()
+
 @contextmanager
 def mock_stream_response(*args, **kwargs):
     class MockResponse:
