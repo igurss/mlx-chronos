@@ -9,6 +9,8 @@ from mlx_chronos.schema import BenchmarkResult
 
 SUBMIT_ENDPOINT_ENV = "MLX_CHRONOS_SUBMIT_ENDPOINT"
 DEFAULT_SUBMIT_ENDPOINT = "https://usebasin.com/f/29157002c003"
+SUBMITTER_EMAIL_ENV = "MLX_CHRONOS_SUBMITTER_EMAIL"
+DEFAULT_SUBMITTER_EMAIL = "182094468+igurss@users.noreply.github.com"
 PUBLIC_TOKEN_COUNT_SOURCE = "usage.completion_tokens"
 
 
@@ -49,6 +51,7 @@ def submit_result_file(
     path: Path,
     endpoint: str,
     timeout: float = 30.0,
+    submitter_email: str = DEFAULT_SUBMITTER_EMAIL,
 ) -> BenchmarkResult:
     """Send a validated result JSON file to a maintainer inbox endpoint."""
     endpoint = endpoint.strip()
@@ -58,6 +61,19 @@ def submit_result_file(
         )
 
     raw, result = load_publishable_result(path)
+    data = {
+        "email": submitter_email.strip() or DEFAULT_SUBMITTER_EMAIL,
+        "name": "mlx-chronos CLI",
+        "subject": f"mlx-chronos benchmark result: {result.engine.name}",
+        "message": (
+            "Automated mlx-chronos benchmark result submission.\n"
+            f"Engine: {result.engine.name}\n"
+            f"Model: {result.model.name}\n"
+            f"Hardware: {result.hardware.chip} / {result.hardware.memory_gb} GB\n"
+            f"Token count source: {result.metrics.token_count_source}\n"
+            "The full benchmark result is attached as result_json."
+        ),
+    }
     files = {
         "result_json": (
             path.name,
@@ -69,6 +85,7 @@ def submit_result_file(
     try:
         response = httpx.post(
             endpoint,
+            data=data,
             files=files,
             timeout=timeout,
             follow_redirects=True,

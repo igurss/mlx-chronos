@@ -77,8 +77,14 @@ mlx-chronos submit --file results/local/your-result.json
 ```
 
 The first command validates the JSON locally without sending it. The second
-command sends only the JSON file to the maintainer inbox. Accepted results are
-reviewed and published manually.
+command sends the JSON file to the maintainer inbox with brief form metadata so
+the provider does not classify the submission as blank spam. Accepted results
+are reviewed and published manually.
+
+To include a real contact address with the submission:
+```bash
+mlx-chronos submit --file results/local/your-result.json --email you@example.com
+```
 
 Public leaderboard submissions must use `usage.completion_tokens` as the
 throughput token-count source. If your JSON says `"token_count_source":

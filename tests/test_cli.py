@@ -181,7 +181,13 @@ def write_result(path: Path, data: dict | None = None) -> Path:
 
 def test_cmd_submit_dry_run_validates_without_endpoint(tmp_path):
     result_path = write_result(tmp_path / "result.json")
-    args = Namespace(file=result_path, endpoint=None, timeout=30.0, dry_run=True)
+    args = Namespace(
+        file=result_path,
+        endpoint=None,
+        email=None,
+        timeout=30.0,
+        dry_run=True,
+    )
 
     with patch("mlx_chronos.cli.submit_result_file") as mock_submit_file:
         cmd_submit(args)
@@ -189,7 +195,13 @@ def test_cmd_submit_dry_run_validates_without_endpoint(tmp_path):
     mock_submit_file.assert_not_called()
 
 def test_cmd_submit_invalid_timeout(capsys):
-    args = Namespace(file=Path("result.json"), endpoint=None, timeout=0, dry_run=True)
+    args = Namespace(
+        file=Path("result.json"),
+        endpoint=None,
+        email=None,
+        timeout=0,
+        dry_run=True,
+    )
     with pytest.raises(SystemExit) as exc:
         cmd_submit(args)
 
@@ -198,8 +210,15 @@ def test_cmd_submit_invalid_timeout(capsys):
 
 def test_cmd_submit_uses_default_endpoint(tmp_path, monkeypatch):
     monkeypatch.delenv("MLX_CHRONOS_SUBMIT_ENDPOINT", raising=False)
+    monkeypatch.delenv("MLX_CHRONOS_SUBMITTER_EMAIL", raising=False)
     result_path = write_result(tmp_path / "result.json")
-    args = Namespace(file=result_path, endpoint=None, timeout=30.0, dry_run=False)
+    args = Namespace(
+        file=result_path,
+        endpoint=None,
+        email=None,
+        timeout=30.0,
+        dry_run=False,
+    )
 
     with patch("mlx_chronos.submit.httpx.post") as mock_post:
         mock_post.return_value.status_code = 200
@@ -209,12 +228,23 @@ def test_cmd_submit_uses_default_endpoint(tmp_path, monkeypatch):
     mock_post.assert_called_once()
     endpoint = mock_post.call_args.args[0]
     assert endpoint == "https://usebasin.com/f/29157002c003"
+    data = mock_post.call_args.kwargs["data"]
+    assert data["email"] == "182094468+igurss@users.noreply.github.com"
+    assert data["name"] == "mlx-chronos CLI"
+    assert data["subject"] == "mlx-chronos benchmark result: omlx"
+    assert "The full benchmark result is attached as result_json." in data["message"]
 
 def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
     result = copy.deepcopy(EXAMPLE_RESULT)
     result["metrics"]["token_count_source"] = "word_fallback"
     result_path = write_result(tmp_path / "result.json", result)
-    args = Namespace(file=result_path, endpoint="https://example.test/form", timeout=30.0, dry_run=False)
+    args = Namespace(
+        file=result_path,
+        endpoint="https://example.test/form",
+        email=None,
+        timeout=30.0,
+        dry_run=False,
+    )
 
     with pytest.raises(SystemExit) as exc:
         cmd_submit(args)
@@ -228,7 +258,13 @@ def test_cmd_submit_env_endpoint_overrides_default(mock_post, tmp_path, monkeypa
     result_path = write_result(tmp_path / "result.json")
     mock_post.return_value.status_code = 200
     mock_post.return_value.text = "ok"
-    args = Namespace(file=result_path, endpoint=None, timeout=30.0, dry_run=False)
+    args = Namespace(
+        file=result_path,
+        endpoint=None,
+        email=None,
+        timeout=30.0,
+        dry_run=False,
+    )
 
     cmd_submit(args)
 
@@ -236,11 +272,36 @@ def test_cmd_submit_env_endpoint_overrides_default(mock_post, tmp_path, monkeypa
     assert endpoint == "https://example.test/env-form"
 
 @patch("mlx_chronos.submit.httpx.post")
+def test_cmd_submit_email_overrides_default(mock_post, tmp_path, monkeypatch):
+    monkeypatch.setenv("MLX_CHRONOS_SUBMITTER_EMAIL", "env@example.test")
+    result_path = write_result(tmp_path / "result.json")
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.text = "ok"
+    args = Namespace(
+        file=result_path,
+        endpoint="https://example.test/form",
+        email="arg@example.test",
+        timeout=30.0,
+        dry_run=False,
+    )
+
+    cmd_submit(args)
+
+    data = mock_post.call_args.kwargs["data"]
+    assert data["email"] == "arg@example.test"
+
+@patch("mlx_chronos.submit.httpx.post")
 def test_cmd_submit_sends_result_file(mock_post, tmp_path):
     result_path = write_result(tmp_path / "result.json")
     mock_post.return_value.status_code = 200
     mock_post.return_value.text = "ok"
-    args = Namespace(file=result_path, endpoint="https://example.test/form", timeout=12.0, dry_run=False)
+    args = Namespace(
+        file=result_path,
+        endpoint="https://example.test/form",
+        email="submitter@example.test",
+        timeout=12.0,
+        dry_run=False,
+    )
 
     cmd_submit(args)
 
@@ -248,6 +309,9 @@ def test_cmd_submit_sends_result_file(mock_post, tmp_path):
     _, kwargs = mock_post.call_args
     assert kwargs["timeout"] == 12.0
     assert kwargs["follow_redirects"] is True
+    assert kwargs["data"]["email"] == "submitter@example.test"
+    assert kwargs["data"]["name"] == "mlx-chronos CLI"
+    assert "Engine: omlx" in kwargs["data"]["message"]
     filename, content, content_type = kwargs["files"]["result_json"]
     assert filename == "result.json"
     assert json.loads(content.decode("utf-8"))["engine"]["name"] == "omlx"
@@ -258,7 +322,13 @@ def test_cmd_submit_reports_http_error(mock_post, tmp_path, capsys):
     result_path = write_result(tmp_path / "result.json")
     mock_post.return_value.status_code = 500
     mock_post.return_value.text = "server error"
-    args = Namespace(file=result_path, endpoint="https://example.test/form", timeout=30.0, dry_run=False)
+    args = Namespace(
+        file=result_path,
+        endpoint="https://example.test/form",
+        email=None,
+        timeout=30.0,
+        dry_run=False,
+    )
 
     with pytest.raises(SystemExit) as exc:
         cmd_submit(args)

@@ -124,7 +124,10 @@ Leaderboard submissions must report throughput using the engine response's
 estimate, but those results are not accepted for the public leaderboard.
 
 Maintainers can override the public inbox endpoint with `--endpoint` or the
-`MLX_CHRONOS_SUBMIT_ENDPOINT` environment variable.
+`MLX_CHRONOS_SUBMIT_ENDPOINT` environment variable. The command sends the JSON
+file as `result_json` plus brief form metadata so the inbox provider does not
+classify the submission as blank spam. To include a real contact address, pass
+`--email` or set `MLX_CHRONOS_SUBMITTER_EMAIL`.
 
 See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for detailed instructions.
 

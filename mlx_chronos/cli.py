@@ -10,7 +10,9 @@ from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
+    DEFAULT_SUBMITTER_EMAIL,
     SUBMIT_ENDPOINT_ENV,
+    SUBMITTER_EMAIL_ENV,
     SubmissionError,
     load_publishable_result,
     submit_result_file,
@@ -181,8 +183,18 @@ def cmd_submit(args):
         or os.environ.get(SUBMIT_ENDPOINT_ENV)
         or DEFAULT_SUBMIT_ENDPOINT
     )
+    submitter_email = (
+        args.email
+        or os.environ.get(SUBMITTER_EMAIL_ENV)
+        or DEFAULT_SUBMITTER_EMAIL
+    )
     try:
-        submit_result_file(args.file, endpoint, timeout=args.timeout)
+        submit_result_file(
+            args.file,
+            endpoint,
+            timeout=args.timeout,
+            submitter_email=submitter_email,
+        )
     except SubmissionError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -292,6 +304,14 @@ def main():
         help=(
             "Submission endpoint URL "
             f"(default: project inbox; overrides ${SUBMIT_ENDPOINT_ENV})"
+        ),
+    )
+    submit_parser.add_argument(
+        "--email",
+        default=None,
+        help=(
+            "Contact email included in submission metadata "
+            f"(default: project no-reply; overrides ${SUBMITTER_EMAIL_ENV})"
         ),
     )
     submit_parser.add_argument(
