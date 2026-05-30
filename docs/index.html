@@ -159,25 +159,31 @@
   <select id="filter-chip">
     <option value="">All chips</option>
   </select>
+  <select id="filter-machine">
+    <option value="">All machine models</option>
+  </select>
+  <select id="filter-memory">
+    <option value="">All RAM sizes</option>
+  </select>
 </div>
 
 <div class="table-wrap">
   <table id="leaderboard">
     <thead>
       <tr>
-        <th data-col="chip">Chip</th>
-        <th data-col="memory">RAM</th>
-        <th data-col="engine">Engine</th>
-        <th data-col="model">Model</th>
-        <th data-col="quant">Quant</th>
-        <th data-col="tps" class="sorted">tok/s ↓</th>
-        <th data-col="ttft_cold">TTFT cold (s)</th>
-        <th data-col="ttft_cached">TTFT cached (s)</th>
+        <th data-col="chip" title="Apple Silicon chip reported by the benchmark host.">Chip</th>
+        <th data-col="memory" title="Unified memory installed on the benchmark host.">RAM</th>
+        <th data-col="engine" title="Local inference engine used to serve the model.">Engine</th>
+        <th data-col="model" title="Model identifier submitted with the benchmark result.">Model</th>
+        <th data-col="quant" title="Quantization label submitted for the model.">Quant</th>
+        <th data-col="tps" class="sorted" title="Mean generated tokens per second. Higher is better.">tok/s ↓</th>
+        <th data-col="ttft_cold" title="Time to first generated token for cold prompt trials. Lower is better.">TTFT cold (s)</th>
+        <th data-col="ttft_cached" title="Time to first generated token after cache priming. Lower is better.">TTFT cached (s)</th>
         <th data-col="ram" title="Peak RSS of the engine server process after warmup through trials when available.">Engine RSS (GB)</th>
         <th data-col="system_ram_peak" title="Peak total Mac RAM usage during the benchmark.">System RAM Peak</th>
-        <th data-col="thermal">Thermal</th>
-        <th data-col="trials">Trials</th>
-        <th data-col="date">Date</th>
+        <th data-col="thermal" title="macOS thermal pressure state reported during the benchmark.">Thermal</th>
+        <th data-col="trials" title="Number of repeated benchmark trials used for the reported metrics.">Trials</th>
+        <th data-col="date" title="Date the benchmark result was generated.">Date</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
@@ -227,7 +233,7 @@
     } catch {
       allRows = [];
     }
-    populateChipFilter();
+    populateHardwareFilters();
     render();
   }
 
@@ -277,26 +283,41 @@
     return sortAsc ? cmp : -cmp;
   }
 
-  function populateChipFilter() {
-    const chips = [...new Set(allRows.map(r => r.chip))].sort();
-    const sel = document.getElementById("filter-chip");
-    sel.replaceChildren(new Option("All chips", ""));
-    chips.forEach(c => {
+  function populateSelect(id, label, values, formatter = value => value) {
+    const sel = document.getElementById(id);
+    sel.replaceChildren(new Option(label, ""));
+    values.forEach(value => {
       const opt = document.createElement("option");
-      opt.value = c; opt.textContent = c;
+      opt.value = String(value);
+      opt.textContent = formatter(value);
       sel.appendChild(opt);
     });
+  }
+
+  function populateHardwareFilters() {
+    const chips = [...new Set(allRows.map(r => r.chip))].sort();
+    const machineModels = [...new Set(allRows.map(r => r.machine_model).filter(Boolean))].sort();
+    const memorySizes = [...new Set(allRows.map(r => r.memory_gb).filter(v => v != null))]
+      .sort((a, b) => Number(a) - Number(b));
+
+    populateSelect("filter-chip", "All chips", chips);
+    populateSelect("filter-machine", "All machine models", machineModels);
+    populateSelect("filter-memory", "All RAM sizes", memorySizes, value => `${value} GB`);
   }
 
   function render() {
     const modelFilter = document.getElementById("filter-model").value.trim().toLowerCase();
     const engineFilter = document.getElementById("filter-engine").value;
     const chipFilter   = document.getElementById("filter-chip").value;
+    const machineFilter = document.getElementById("filter-machine").value;
+    const memoryFilter = document.getElementById("filter-memory").value;
 
     let rows = allRows.filter(r =>
       (!modelFilter || String(r.model ?? "").toLowerCase().includes(modelFilter)) &&
       (!engineFilter || r.engine === engineFilter) &&
-      (!chipFilter   || r.chip   === chipFilter)
+      (!chipFilter   || r.chip   === chipFilter) &&
+      (!machineFilter || r.machine_model === machineFilter) &&
+      (!memoryFilter || String(r.memory_gb) === memoryFilter)
     );
 
     rows.sort(compareRows);
@@ -346,6 +367,8 @@
   document.getElementById("filter-model").addEventListener("input", render);
   document.getElementById("filter-engine").addEventListener("change", render);
   document.getElementById("filter-chip").addEventListener("change", render);
+  document.getElementById("filter-machine").addEventListener("change", render);
+  document.getElementById("filter-memory").addEventListener("change", render);
 
   // ── Init ────────────────────────────────────────────────────────────────────
   loadResults();
