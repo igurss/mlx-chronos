@@ -276,6 +276,17 @@ def test_rapid_mlx_model_id_cache_is_instance_scoped(mock_get):
     fresh_engine = RapidMLXEngine()
     assert fresh_engine._model_id_cache == {}
 
+@patch("mlx_chronos.engines.os.path.exists", return_value=True)
+def test_rapid_mlx_request_model_name_caches_local_path_checks(mock_exists):
+    engine = RapidMLXEngine()
+    engine._resolve_model_id = MagicMock()
+
+    assert engine._request_model_name("/models/test") == "/models/test"
+    assert engine._request_model_name("/models/test") == "/models/test"
+
+    mock_exists.assert_called_once_with("/models/test")
+    engine._resolve_model_id.assert_not_called()
+
 @contextmanager
 def mock_stream_response(*args, **kwargs):
     class MockResponse:

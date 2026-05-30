@@ -533,6 +533,7 @@ class RapidMLXEngine(BaseEngine):
     ):
         super().__init__(port=port)
         self._model_id_cache = model_id_cache if model_id_cache is not None else {}
+        self._request_model_cache: dict[str, str] = {}
 
     def _resolve_model_id(self, model: str) -> str | None:
         if model in self._model_id_cache:
@@ -558,13 +559,20 @@ class RapidMLXEngine(BaseEngine):
 
     def _request_model_name(self, model: str) -> str:
         model_name = super()._request_model_name(model)
+        cache_key = model_name
+        if cache_key in self._request_model_cache:
+            return self._request_model_cache[cache_key]
+
         model_name = os.path.expanduser(model_name)
 
         if "/" in model_name and os.path.exists(model_name):
-            return model_name
+            request_model = model_name
+        else:
+            resolved = self._resolve_model_id(model_name)
+            request_model = resolved or model_name
 
-        resolved = self._resolve_model_id(model_name)
-        return resolved or model_name
+        self._request_model_cache[cache_key] = request_model
+        return request_model
 
     def is_installed(self) -> bool:
         return shutil.which("rapid-mlx") is not None

@@ -42,6 +42,9 @@ class BaseReporter(ABC):
             return value
         return "unknown"
 
+    def _format_optional(self, value: object) -> object:
+        return "unknown" if value is None else value
+
 class JSONReporter(BaseReporter):
     """Saves benchmark results as JSON."""
     
@@ -97,13 +100,19 @@ class MarkdownReporter(BaseReporter):
             f"- **Cached TTFT:** {metrics['ttft_cached']['mean']} s "
             f"(±{metrics['ttft_cached']['stddev']})\n"
         )
+        ram_peak_gb = self._format_optional(metrics.get("ram_peak_gb"))
+        system_ram_peak_gb = self._format_optional(metrics.get("system_ram_peak_gb"))
+        system_ram_peak_percent = self._format_optional(
+            metrics.get("system_ram_peak_percent")
+        )
+
         if metrics.get("ram_is_process_rss", False):
-            md += f"- **Peak engine RSS:** {metrics['ram_peak_gb']} GB\n"
+            md += f"- **Peak engine RSS:** {ram_peak_gb} GB\n"
         else:
-            md += f"- **Peak engine RSS fallback (system RAM):** {metrics['ram_peak_gb']} GB\n"
+            md += f"- **Peak engine RSS fallback (system RAM):** {ram_peak_gb} GB\n"
         md += (
-            f"- **Peak system RAM:** {metrics['system_ram_peak_gb']} GB "
-            f"({metrics['system_ram_peak_percent']}%)\n"
+            f"- **Peak system RAM:** {system_ram_peak_gb} GB "
+            f"({system_ram_peak_percent}%)\n"
         )
 
         raw_sections = [

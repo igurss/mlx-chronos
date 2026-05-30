@@ -1,4 +1,5 @@
 import json
+import copy
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,3 +61,15 @@ def test_markdown_reporter_save(tmp_path):
     assert "Apple M2" in content
     assert "## Raw Trials" in content
     assert "**Cold TTFT:** 0.044, 0.066, 0.028, 0.039, 0.03" in content
+
+def test_markdown_reporter_handles_missing_ram_fields(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    del result["metrics"]["ram_peak_gb"]
+    del result["metrics"]["system_ram_peak_gb"]
+    del result["metrics"]["system_ram_peak_percent"]
+
+    output_path = MarkdownReporter().save(result, tmp_path)
+
+    content = output_path.read_text()
+    assert "**Peak engine RSS fallback (system RAM):** unknown GB" in content
+    assert "**Peak system RAM:** unknown GB (unknown%)" in content
