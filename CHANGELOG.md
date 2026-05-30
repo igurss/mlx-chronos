@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- Add `mlx-chronos submit` for validated benchmark result submissions to the maintainer inbox.
+- Add dry-run submission validation and optional submitter contact email metadata.
+- Add model search plus machine model and memory filters to the leaderboard.
+- Add broader leaderboard column tooltips to clarify result fields.
+
+### Reliability
+- Require public submissions to use `usage.completion_tokens` for throughput comparability.
+- Send benchmark JSON as `result_json` with minimal form metadata so the inbox provider does not classify submissions as blank spam.
+- Keep leaderboard publication manual: maintainers review accepted JSON before adding it to `results/submitted/`.
+
+### Documentation
+- Update README and CONTRIBUTING with the inbox submission flow.
+- Update methodology notes to include dry-run validation before submission.
+
 ## [0.1.0] — 2026-05-28
 
 First public PyPI-ready release.
@@ -18,10 +35,10 @@ First public PyPI-ready release.
 - Update mlx-lm documentation links to the dedicated upstream repository.
 - Run smoke checks and tests on macOS in CI.
 
-### Known Limitations
+### Known Limitations At Release
 - oMLX version not retrievable when server is already running.
 - Tool calling rate not yet implemented.
-- `mlx-chronos submit` helper command not yet implemented.
+- `mlx-chronos submit` helper command was not included in 0.1.0; it is added under Unreleased.
 - Published sample results currently cover Apple M2 8GB only.
 
 ## [0.1.0b1] — 2026-05-27
@@ -50,8 +67,8 @@ First usable public beta of mlx-Chronos, published as tag `v0.1.0-beta.1`.
 - Unit tests cover schema, benchmark math, SSE parsing, CLI behavior, engine helpers, and hardware detection.
 - Documentation covers setup, methodology, memory semantics, and contribution flow.
 
-### Known Limitations
+### Known Limitations At Release
 - oMLX version not retrievable when server is already running
 - Tool calling rate not yet implemented
-- `mlx-chronos validate` and `mlx-chronos submit` helper commands not yet implemented
+- `mlx-chronos validate` and `mlx-chronos submit` helper commands were not included in this beta
 - Published sample results currently cover Apple M2 8GB only

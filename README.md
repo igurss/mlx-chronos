@@ -64,9 +64,9 @@ or serving requests.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. The default is 5 trials, with a maximum of 8 unique cold prompts.
-Results are saved as structured JSON in `results/local/` by default. Copy a
-reviewed JSON into `results/submitted/` only when you want to publish it to the
-community leaderboard.
+Results are saved as structured JSON in `results/local/` by default. Maintainers
+publish reviewed JSON files into `results/submitted/` after accepting them for
+the community leaderboard.
 
 ---
 
@@ -75,6 +75,10 @@ community leaderboard.
 View the full leaderboard with all submitted results:
 
 **[→ igurss.github.io/mlx-chronos](https://igurss.github.io/mlx-chronos)**
+
+The leaderboard supports model search plus engine, chip, machine model, and
+memory filters so contributors can quickly compare a specific model across
+local inference engines and Apple Silicon hardware.
 
 ---
 
@@ -150,14 +154,13 @@ is measured, how, and why.
 - [x] Continuous engine RSS and system RAM peak sampling
 - [x] Preflight validation for engine, server, and model access
 - [x] GitHub Actions validation for submitted results
-- [x] GitHub Pages leaderboard with engine/chip filters
+- [x] GitHub Pages leaderboard with model search and engine/chip/machine/memory filters
 - [x] JSON and Markdown result export
 - [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
 - [x] Published Apple M2 sample results refreshed with the current benchmark protocol
 
 ### Next
 - [ ] Add warnings for battery mode, low power mode, and non-nominal thermal state
-- [ ] Improve leaderboard filtering by machine model and add broader column tooltips
 - [ ] Add integration tests against mock OpenAI-compatible servers
 
 ### Future

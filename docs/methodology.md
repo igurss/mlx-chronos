@@ -128,7 +128,8 @@ To reproduce a result:
 3. Run on the same hardware (chip + memory)
 4. Ensure no other GPU-intensive processes are running
 5. Run `mlx-chronos run` with default trial count (5)
-6. Submit only results whose throughput token source is `usage.completion_tokens`
+6. Check the JSON with `mlx-chronos submit --file results/local/your-result.json --dry-run`
+7. Submit only results whose throughput token source is `usage.completion_tokens`
 
 Results may vary slightly across runs due to thermal state and system load.
 This is expected and reflected in the stddev field.
