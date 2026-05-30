@@ -1,12 +1,19 @@
 import argparse
 import sys
 import logging
+import os
 
 from pathlib import Path
 from mlx_chronos.benchmark import DEFAULT_RAM_SAMPLE_INTERVAL, run_benchmark
 from mlx_chronos.detect import detect_hardware
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
+from mlx_chronos.submit import (
+    SUBMIT_ENDPOINT_ENV,
+    SubmissionError,
+    load_publishable_result,
+    submit_result_file,
+)
 
 
 logger = logging.getLogger("mlx_chronos")
@@ -146,6 +153,38 @@ def cmd_validate(args):
     logger.info("\nValidation passed.")
 
 
+def cmd_submit(args):
+    """Validate and submit a benchmark result to the maintainer inbox."""
+    if args.timeout <= 0:
+        print("Error: --timeout must be greater than 0.", file=sys.stderr)
+        raise SystemExit(2)
+
+    try:
+        _, result = load_publishable_result(args.file)
+    except SubmissionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    logger.info(
+        "Validated result: "
+        f"{result.engine.name} / {result.model.name} / "
+        f"{result.hardware.chip} / {result.hardware.memory_gb} GB"
+    )
+
+    if args.dry_run:
+        logger.info("Dry run only; result was not submitted.")
+        return
+
+    endpoint = args.endpoint or os.environ.get(SUBMIT_ENDPOINT_ENV, "")
+    try:
+        submit_result_file(args.file, endpoint, timeout=args.timeout)
+    except SubmissionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    logger.info("Submission sent.")
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
@@ -230,6 +269,35 @@ def main():
         help="Optional model name to validate with a tiny completion request",
     )
     validate_parser.set_defaults(func=cmd_validate)
+
+    # --- submit ---
+    submit_parser = subparsers.add_parser(
+        "submit",
+        help="Send a validated benchmark result to the maintainer inbox",
+    )
+    submit_parser.add_argument(
+        "--file",
+        type=Path,
+        required=True,
+        help="Path to a benchmark result JSON file",
+    )
+    submit_parser.add_argument(
+        "--endpoint",
+        default=None,
+        help=f"Submission endpoint URL (default: ${SUBMIT_ENDPOINT_ENV})",
+    )
+    submit_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Submission request timeout in seconds (default: 30)",
+    )
+    submit_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate the result without sending it",
+    )
+    submit_parser.set_defaults(func=cmd_submit)
 
     # Parse and dispatch
     args = parser.parse_args()

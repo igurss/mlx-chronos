@@ -1,9 +1,11 @@
 import pytest
 import sys
+import json
+import copy
 from pathlib import Path
 from unittest.mock import patch
 from argparse import Namespace
-from mlx_chronos.cli import cmd_run, cmd_validate, main
+from mlx_chronos.cli import cmd_run, cmd_submit, cmd_validate, main
 from mlx_chronos.schema import EXAMPLE_RESULT
 
 def test_cmd_run_invalid_trials(capsys):
@@ -45,6 +47,12 @@ def test_main_validate_command():
         with patch("mlx_chronos.cli.cmd_validate") as mock_validate:
             main()
             mock_validate.assert_called_once()
+
+def test_main_submit_command():
+    with patch.object(sys, "argv", ["mlx-chronos", "submit", "--file", "result.json"]):
+        with patch("mlx_chronos.cli.cmd_submit") as mock_submit:
+            main()
+            mock_submit.assert_called_once()
 
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")
@@ -166,3 +174,78 @@ def test_submitted_results_are_not_gitignored():
     gitignore = (project_root / ".gitignore").read_text()
     assert "results/submitted/*.json" not in gitignore
     assert "results/local/" in gitignore
+
+def write_result(path: Path, data: dict | None = None) -> Path:
+    path.write_text(json.dumps(data or EXAMPLE_RESULT), encoding="utf-8")
+    return path
+
+def test_cmd_submit_dry_run_validates_without_endpoint(tmp_path):
+    result_path = write_result(tmp_path / "result.json")
+    args = Namespace(file=result_path, endpoint=None, timeout=30.0, dry_run=True)
+
+    with patch("mlx_chronos.cli.submit_result_file") as mock_submit_file:
+        cmd_submit(args)
+
+    mock_submit_file.assert_not_called()
+
+def test_cmd_submit_invalid_timeout(capsys):
+    args = Namespace(file=Path("result.json"), endpoint=None, timeout=0, dry_run=True)
+    with pytest.raises(SystemExit) as exc:
+        cmd_submit(args)
+
+    assert exc.value.code == 2
+    assert "Error: --timeout must be greater than 0." in capsys.readouterr().err
+
+def test_cmd_submit_requires_endpoint_when_sending(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("MLX_CHRONOS_SUBMIT_ENDPOINT", raising=False)
+    result_path = write_result(tmp_path / "result.json")
+    args = Namespace(file=result_path, endpoint=None, timeout=30.0, dry_run=False)
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_submit(args)
+
+    assert exc.value.code == 1
+    assert "submission endpoint is required" in capsys.readouterr().err
+
+def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["metrics"]["token_count_source"] = "word_fallback"
+    result_path = write_result(tmp_path / "result.json", result)
+    args = Namespace(file=result_path, endpoint="https://example.test/form", timeout=30.0, dry_run=False)
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_submit(args)
+
+    assert exc.value.code == 1
+    assert "usage.completion_tokens" in capsys.readouterr().err
+
+@patch("mlx_chronos.submit.httpx.post")
+def test_cmd_submit_sends_result_file(mock_post, tmp_path):
+    result_path = write_result(tmp_path / "result.json")
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.text = "ok"
+    args = Namespace(file=result_path, endpoint="https://example.test/form", timeout=12.0, dry_run=False)
+
+    cmd_submit(args)
+
+    mock_post.assert_called_once()
+    _, kwargs = mock_post.call_args
+    assert kwargs["timeout"] == 12.0
+    assert kwargs["follow_redirects"] is True
+    filename, content, content_type = kwargs["files"]["result_json"]
+    assert filename == "result.json"
+    assert json.loads(content.decode("utf-8"))["engine"]["name"] == "omlx"
+    assert content_type == "application/json"
+
+@patch("mlx_chronos.submit.httpx.post")
+def test_cmd_submit_reports_http_error(mock_post, tmp_path, capsys):
+    result_path = write_result(tmp_path / "result.json")
+    mock_post.return_value.status_code = 500
+    mock_post.return_value.text = "server error"
+    args = Namespace(file=result_path, endpoint="https://example.test/form", timeout=30.0, dry_run=False)
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_submit(args)
+
+    assert exc.value.code == 1
+    assert "HTTP 500" in capsys.readouterr().err
