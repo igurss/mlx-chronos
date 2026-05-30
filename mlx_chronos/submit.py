@@ -8,6 +8,7 @@ from mlx_chronos.schema import BenchmarkResult
 
 
 SUBMIT_ENDPOINT_ENV = "MLX_CHRONOS_SUBMIT_ENDPOINT"
+DEFAULT_SUBMIT_ENDPOINT = "https://usebasin.com/f/29157002c003"
 PUBLIC_TOKEN_COUNT_SOURCE = "usage.completion_tokens"
 
 

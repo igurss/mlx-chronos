@@ -9,6 +9,7 @@ from mlx_chronos.detect import detect_hardware
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 from mlx_chronos.submit import (
+    DEFAULT_SUBMIT_ENDPOINT,
     SUBMIT_ENDPOINT_ENV,
     SubmissionError,
     load_publishable_result,
@@ -175,7 +176,11 @@ def cmd_submit(args):
         logger.info("Dry run only; result was not submitted.")
         return
 
-    endpoint = args.endpoint or os.environ.get(SUBMIT_ENDPOINT_ENV, "")
+    endpoint = (
+        args.endpoint
+        or os.environ.get(SUBMIT_ENDPOINT_ENV)
+        or DEFAULT_SUBMIT_ENDPOINT
+    )
     try:
         submit_result_file(args.file, endpoint, timeout=args.timeout)
     except SubmissionError as exc:
@@ -284,7 +289,10 @@ def main():
     submit_parser.add_argument(
         "--endpoint",
         default=None,
-        help=f"Submission endpoint URL (default: ${SUBMIT_ENDPOINT_ENV})",
+        help=(
+            "Submission endpoint URL "
+            f"(default: project inbox; overrides ${SUBMIT_ENDPOINT_ENV})"
+        ),
     )
     submit_parser.add_argument(
         "--timeout",

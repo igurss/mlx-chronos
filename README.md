@@ -109,13 +109,22 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Des
 
 1. Run `mlx-chronos run` on your Mac
 2. A JSON file is generated in `results/local/` (use `--format all` for a Markdown summary too)
-3. Fork this repo and copy the JSON you want to publish into `results/submitted/`
-4. GitHub Actions validates your result automatically
-5. Once merged, the leaderboard updates
+3. Check the result without sending it:
+   ```bash
+   mlx-chronos submit --file results/local/your-result.json --dry-run
+   ```
+4. Send the JSON to the maintainer inbox:
+   ```bash
+   mlx-chronos submit --file results/local/your-result.json
+   ```
+5. The maintainer reviews accepted JSON files and publishes verified results manually
 
 Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens`. Local runs can still be saved with a fallback token
 estimate, but those results are not accepted for the public leaderboard.
+
+Maintainers can override the public inbox endpoint with `--endpoint` or the
+`MLX_CHRONOS_SUBMIT_ENDPOINT` environment variable.
 
 See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for detailed instructions.
 
@@ -140,10 +149,10 @@ is measured, how, and why.
 - [x] GitHub Actions validation for submitted results
 - [x] GitHub Pages leaderboard with engine/chip filters
 - [x] JSON and Markdown result export
+- [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
 - [x] Published Apple M2 sample results refreshed with the current benchmark protocol
 
 ### Next
-- [ ] Add `mlx-chronos submit` to help prepare leaderboard submissions
 - [ ] Add warnings for battery mode, low power mode, and non-nominal thermal state
 - [ ] Improve leaderboard filtering by machine model and add broader column tooltips
 - [ ] Add integration tests against mock OpenAI-compatible servers

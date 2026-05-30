@@ -196,16 +196,19 @@ def test_cmd_submit_invalid_timeout(capsys):
     assert exc.value.code == 2
     assert "Error: --timeout must be greater than 0." in capsys.readouterr().err
 
-def test_cmd_submit_requires_endpoint_when_sending(tmp_path, monkeypatch, capsys):
+def test_cmd_submit_uses_default_endpoint(tmp_path, monkeypatch):
     monkeypatch.delenv("MLX_CHRONOS_SUBMIT_ENDPOINT", raising=False)
     result_path = write_result(tmp_path / "result.json")
     args = Namespace(file=result_path, endpoint=None, timeout=30.0, dry_run=False)
 
-    with pytest.raises(SystemExit) as exc:
+    with patch("mlx_chronos.submit.httpx.post") as mock_post:
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.text = "ok"
         cmd_submit(args)
 
-    assert exc.value.code == 1
-    assert "submission endpoint is required" in capsys.readouterr().err
+    mock_post.assert_called_once()
+    endpoint = mock_post.call_args.args[0]
+    assert endpoint == "https://usebasin.com/f/29157002c003"
 
 def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
     result = copy.deepcopy(EXAMPLE_RESULT)
@@ -218,6 +221,19 @@ def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
 
     assert exc.value.code == 1
     assert "usage.completion_tokens" in capsys.readouterr().err
+
+@patch("mlx_chronos.submit.httpx.post")
+def test_cmd_submit_env_endpoint_overrides_default(mock_post, tmp_path, monkeypatch):
+    monkeypatch.setenv("MLX_CHRONOS_SUBMIT_ENDPOINT", "https://example.test/env-form")
+    result_path = write_result(tmp_path / "result.json")
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.text = "ok"
+    args = Namespace(file=result_path, endpoint=None, timeout=30.0, dry_run=False)
+
+    cmd_submit(args)
+
+    endpoint = mock_post.call_args.args[0]
+    assert endpoint == "https://example.test/env-form"
 
 @patch("mlx_chronos.submit.httpx.post")
 def test_cmd_submit_sends_result_file(mock_post, tmp_path):

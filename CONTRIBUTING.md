@@ -71,11 +71,14 @@ mlx-chronos run --engine omlx \
 ```
 
 **4. Submit your result**
-- Fork this repository
-- Copy the JSON you want to publish from `results/local/` into `results/submitted/`
-- Open a Pull Request
-- GitHub Actions will validate your result automatically
-- Once approved and merged, the leaderboard updates
+```bash
+mlx-chronos submit --file results/local/your-result.json --dry-run
+mlx-chronos submit --file results/local/your-result.json
+```
+
+The first command validates the JSON locally without sending it. The second
+command sends only the JSON file to the maintainer inbox. Accepted results are
+reviewed and published manually.
 
 Public leaderboard submissions must use `usage.completion_tokens` as the
 throughput token-count source. If your JSON says `"token_count_source":
