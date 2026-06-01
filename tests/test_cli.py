@@ -2,10 +2,12 @@ import pytest
 import sys
 import json
 import copy
+import logging
 from pathlib import Path
 from unittest.mock import patch
 from argparse import Namespace
 from mlx_chronos.cli import cmd_run, cmd_submit, cmd_validate, main
+from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.schema import EXAMPLE_RESULT
 
 def test_cmd_run_invalid_trials(capsys):
@@ -74,6 +76,43 @@ def test_cmd_validate_engine_only(mock_detect, mock_get_engine):
 
     mock_engine.list_model_ids.assert_called_once()
     mock_engine.validate_completion_request.assert_not_called()
+
+@patch("mlx_chronos.cli.get_benchmark_condition_warnings")
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_validate_emits_condition_warnings(
+    mock_detect,
+    mock_get_engine,
+    mock_warnings,
+    caplog,
+):
+    hardware = {
+        "chip": "Apple M2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "thermal_state": "unavailable_no_sudo",
+    }
+    mock_detect.return_value = hardware
+    mock_warnings.return_value = [
+        BenchmarkConditionWarning(
+            "thermal state unavailable",
+            "thermal_state=unavailable_no_sudo",
+        )
+    ]
+
+    mock_engine = mock_get_engine.return_value
+    mock_engine.is_installed.return_value = True
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+    mock_engine.list_model_ids.return_value = ["org/test-model"]
+
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_validate(Namespace(engine="omlx", model=None))
+
+    mock_warnings.assert_called_once_with(hardware)
+    assert "[warn] thermal state unavailable: thermal_state=unavailable_no_sudo" in caplog.text
 
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")

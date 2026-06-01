@@ -17,7 +17,7 @@ from mlx_chronos.constants import (
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
 )
 from mlx_chronos import __version__ as VERSION
-from mlx_chronos.detect import detect_hardware
+from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import get_engine
 from mlx_chronos.schema import BenchmarkResult
 
@@ -245,6 +245,11 @@ def run_benchmark(
     logger.info("Detecting hardware...")
     hw = detect_hardware()
     logger.info(f"  {hw['chip']} — {hw['memory_gb']}GB — macOS {hw['macos_version']}\n")
+    condition_warnings = get_benchmark_condition_warnings(hw)
+    for warning in condition_warnings:
+        logger.warning(f"  Warning: {warning.label}: {warning.detail}")
+    if condition_warnings:
+        logger.info("")
 
     # 2. Get engine
     engine = get_engine(engine_name)

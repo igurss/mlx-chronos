@@ -8,16 +8,19 @@
 - Add model search plus machine model and memory filters to the leaderboard.
 - Add broader leaderboard column tooltips to clarify result fields.
 - Add throughput completion-token counts to new benchmark JSON output and the leaderboard.
+- Warn during `mlx-chronos validate` and `mlx-chronos run` when thermal state, battery power, or Low Power Mode may make results less comparable.
 
 ### Reliability
 - Require public submissions to use `usage.completion_tokens` for throughput comparability.
 - Send benchmark JSON as `result_json` with minimal form metadata so the inbox provider does not classify submissions as blank spam.
 - Keep leaderboard publication manual: maintainers review accepted JSON before adding it to `results/submitted/`.
 - Use System RAM Peak as the main public leaderboard memory metric; keep process RSS as diagnostic JSON data.
+- Add deterministic integration tests against mock OpenAI-compatible `/v1/models` and `/v1/chat/completions` endpoints.
 
 ### Documentation
 - Update README and CONTRIBUTING with the inbox submission flow.
 - Update methodology notes to include dry-run validation before submission.
+- Clarify that TTFT fields measure client-observed streamed-token latency and preserve the v0.1 field names for compatibility.
 
 ## [0.1.0] — 2026-05-28
 

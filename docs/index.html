@@ -178,8 +178,8 @@
         <th data-col="quant" title="Quantization label submitted for the model.">Quant</th>
         <th data-col="tps" class="sorted" title="Mean generated tokens per second. Higher is better.">tok/s ↓</th>
         <th data-col="completion_tokens" title="Generated completion token counts for each throughput trial.">Output tokens</th>
-        <th data-col="ttft_cold" title="Time to first generated token for cold prompt trials. Lower is better.">TTFT cold (s)</th>
-        <th data-col="ttft_cached" title="Time to first generated token after cache priming. Lower is better.">TTFT cached (s)</th>
+        <th data-col="ttft_cold" title="Client-observed time to first streamed token for unique cold prompts. Lower is better.">TTFT cold (s)</th>
+        <th data-col="ttft_cached" title="Client-observed time to first streamed token for a fixed prompt after priming. Lower is better.">TTFT cached (s)</th>
         <th data-col="system_ram_peak" title="Peak total Mac RAM usage during the benchmark. This is the public memory comparison metric.">System RAM Peak</th>
         <th data-col="thermal" title="macOS thermal pressure state reported during the benchmark.">Thermal</th>
         <th data-col="trials" title="Number of repeated benchmark trials used for the reported metrics.">Trials</th>

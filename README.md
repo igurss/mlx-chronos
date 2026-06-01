@@ -161,10 +161,11 @@ is measured, how, and why.
 - [x] JSON and Markdown result export
 - [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
 - [x] Published Apple M2 sample results refreshed with the current benchmark protocol
+- [x] Warnings for battery mode, Low Power Mode, non-nominal thermal state, and unavailable thermal state
+- [x] Integration tests against mock OpenAI-compatible servers
 
 ### Next
-- [ ] Add warnings for battery mode, low power mode, and non-nominal thermal state
-- [ ] Add integration tests against mock OpenAI-compatible servers
+- [ ] Add richer benchmark condition metadata without breaking the v0.1 JSON contract
 
 ### Future
 - [ ] Support larger trial counts with a bigger cold-prompt pool

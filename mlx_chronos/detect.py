@@ -3,7 +3,16 @@ import platform
 import os
 import importlib
 import psutil
+from dataclasses import dataclass
 from functools import lru_cache
+
+
+@dataclass(frozen=True)
+class BenchmarkConditionWarning:
+    """A user-facing warning about conditions that can skew benchmark results."""
+
+    label: str
+    detail: str
 
 
 @lru_cache(maxsize=1)
@@ -129,6 +138,112 @@ def get_thermal_state() -> str:
         return "unavailable_powermetrics_not_found"
     except Exception:
         return "unavailable_error"
+
+
+def get_power_source() -> str:
+    """Return the current macOS power source when pmset is available."""
+    try:
+        result = subprocess.run(
+            ["pmset", "-g", "batt"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        return "unavailable_timeout"
+    except FileNotFoundError:
+        return "unavailable_pmset_not_found"
+    except Exception:
+        return "unavailable_error"
+
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    if "battery power" in output:
+        return "battery"
+    if "ac power" in output:
+        return "ac_power"
+    return "unavailable_parse_error"
+
+
+def get_low_power_mode() -> str:
+    """Return whether macOS Low Power Mode is enabled when pmset is available."""
+    try:
+        result = subprocess.run(
+            ["pmset", "-g"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        return "unavailable_timeout"
+    except FileNotFoundError:
+        return "unavailable_pmset_not_found"
+    except Exception:
+        return "unavailable_error"
+
+    for line in f"{result.stdout}\n{result.stderr}".splitlines():
+        parts = line.strip().lower().split()
+        if len(parts) >= 2 and parts[0] == "lowpowermode":
+            if parts[-1] == "1":
+                return "on"
+            if parts[-1] == "0":
+                return "off"
+            return "unavailable_parse_error"
+    return "unavailable_parse_error"
+
+
+def get_benchmark_condition_warnings(
+    hardware: dict,
+    power_source: str | None = None,
+    low_power_mode: str | None = None,
+) -> list[BenchmarkConditionWarning]:
+    """Return warnings for detectable local conditions that can skew results."""
+    warnings: list[BenchmarkConditionWarning] = []
+    thermal_state = str(hardware.get("thermal_state") or "unavailable_unknown")
+
+    if thermal_state.startswith("unavailable"):
+        warnings.append(
+            BenchmarkConditionWarning(
+                "thermal state unavailable",
+                (
+                    f"thermal_state={thermal_state}; mlx-chronos could not read "
+                    "macOS thermal pressure without Foundation/PyObjC or sudo "
+                    "powermetrics. The run can continue, but thermal context is "
+                    "missing."
+                ),
+            )
+        )
+    elif thermal_state != "nominal":
+        warnings.append(
+            BenchmarkConditionWarning(
+                "thermal state",
+                (
+                    f"thermal_state={thermal_state}; thermal pressure can reduce "
+                    "performance and make results less comparable."
+                ),
+            )
+        )
+
+    power_source = get_power_source() if power_source is None else power_source
+    if power_source == "battery":
+        warnings.append(
+            BenchmarkConditionWarning(
+                "power source",
+                "running on battery power can reduce performance; use AC power for comparable runs.",
+            )
+        )
+
+    low_power_mode = (
+        get_low_power_mode() if low_power_mode is None else low_power_mode
+    )
+    if low_power_mode == "on":
+        warnings.append(
+            BenchmarkConditionWarning(
+                "low power mode",
+                "Low Power Mode is enabled; disable it for comparable benchmark runs.",
+            )
+        )
+
+    return warnings
 
 
 def detect_hardware() -> dict:

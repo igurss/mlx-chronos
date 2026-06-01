@@ -18,12 +18,34 @@ so wall-clock changes during a run do not affect the latency value.
 
 Each trial uses a **unique prompt** from a fixed pool defined in `benchmark.py`.
 This ensures the engine cannot serve the response from a previous cache hit.
+The JSON field remains `metrics.ttft_cold` for compatibility with existing
+v0.1 submissions.
 
 ### TTFT Cached — Time to First Token (cached)
 Same measurement, but using a **fixed prompt** that is sent on every cached
 trial. After cold TTFT trials finish, a priming call (not recorded) loads this
 prompt into the engine cache. Cached TTFT trials then run consecutively so
 unrelated prompts do not evict or overwrite the cache between measurements.
+The JSON field remains `metrics.ttft_cached` for compatibility with existing
+v0.1 submissions.
+
+### TTFT Interpretation Across Engines
+TTFT is an observed client-side latency: mlx-Chronos starts timing before the
+HTTP request and stops when the OpenAI-compatible stream yields the first valid
+content/reasoning/text delta. It is not a direct measurement of an engine's
+internal prefill or decode boundary.
+
+Different engines and proxy layers may buffer streamed output differently. Some
+emit role-only chunks before text, some batch small deltas, and some may delay
+the first visible token until their HTTP layer flushes. For that reason,
+`ttft_cold` and `ttft_cached` are most reliable for comparing repeated runs of
+the same engine and model configuration. Cross-engine comparisons are still
+useful, but should be read as end-to-end user-observed latency rather than pure
+model latency.
+
+The cached metric is intentionally named `ttft_cached` in the v0.1 JSON schema.
+It means "fixed prompt after one priming request"; it does not guarantee that
+all engines implement identical KV-cache or prefix-cache behavior.
 
 ### Throughput (tok/s)
 Tokens generated per second, measured using a fixed standard prompt defined
@@ -85,6 +107,11 @@ Foundation bridge is available. If that path is unavailable, mlx-Chronos falls
 back to `powermetrics`, which requires sudo; otherwise the result records an
 `unavailable_*` status.
 
+`mlx-chronos validate` and `mlx-chronos run` warn when thermal state is
+unavailable, when macOS reports a non-nominal thermal state, or when battery
+power / Low Power Mode are detected. These warnings are informational: the run
+continues and the JSON thermal value remains unchanged.
+
 Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB
 causes swapping and slows down inference, whereas 7GB used out of 16GB does
 not). System RAM peak helps explain performance variances between identical
@@ -120,7 +147,7 @@ to the observed maximum and adds no information.
 ## What Is Not Measured (Yet)
 
 - Tool calling success rate — planned for v0.2
-- Thermal throttling awareness — planned for v0.2
+- Thermal throttling attribution — planned for v0.2
 - CPU/GPU load at benchmark time — planned for v0.2
 - Multi-turn conversation latency
 
@@ -137,5 +164,6 @@ To reproduce a result:
 6. Check the JSON with `mlx-chronos submit --file results/local/your-result.json --dry-run`
 7. Submit only results whose throughput token source is `usage.completion_tokens`
 
-Results may vary slightly across runs due to thermal state and system load.
-This is expected and reflected in the stddev field.
+Results may vary slightly across runs due to thermal state, battery/Low Power
+Mode behavior, and system load. This is expected and reflected in the stddev
+field.

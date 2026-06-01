@@ -5,7 +5,7 @@ import os
 
 from pathlib import Path
 from mlx_chronos.benchmark import DEFAULT_RAM_SAMPLE_INTERVAL, run_benchmark
-from mlx_chronos.detect import detect_hardware
+from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 from mlx_chronos.submit import (
@@ -96,6 +96,8 @@ def cmd_validate(args):
                 f"macOS {hardware['macos_version']}"
             ),
         )
+        for warning in get_benchmark_condition_warnings(hardware):
+            log_validation_check("warn", warning.label, warning.detail)
     except Exception as exc:
         failures += 1
         log_validation_check("fail", "hardware detection", str(exc))
