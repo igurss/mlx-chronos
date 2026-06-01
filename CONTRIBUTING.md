@@ -21,7 +21,7 @@ There are two ways to contribute: submitting benchmark results and improving the
 
 **1. Install mlx-Chronos**
 ```bash
-pip install git+https://github.com/igurss/mlx-chronos.git
+pip install mlx-chronos
 ```
 
 **2. Start your engine server**

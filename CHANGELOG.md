@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## [0.1.1] — 2026-06-01
+
+Patch release focused on safer community submissions, clearer leaderboard
+semantics, and stronger validation since `0.1.0`.
+
 ### Features
 - Add `mlx-chronos submit` for validated benchmark result submissions to the maintainer inbox.
 - Add dry-run submission validation and optional submitter contact email metadata.
@@ -43,7 +48,7 @@ First public PyPI-ready release.
 ### Known Limitations At Release
 - oMLX version not retrievable when server is already running.
 - Tool calling rate not yet implemented.
-- `mlx-chronos submit` helper command was not included in 0.1.0; it is added under Unreleased.
+- `mlx-chronos submit` helper command was not included in 0.1.0; it is added in 0.1.1.
 - Published sample results currently cover Apple M2 8GB only.
 
 ## [0.1.0b1] — 2026-05-27

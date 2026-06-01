@@ -85,6 +85,15 @@ local inference engines and Apple Silicon hardware.
 
 ---
 
+## Current Release
+
+`0.1.1` is a compatibility-preserving patch release over `0.1.0`. It adds the
+submission helper, stricter result validation, clearer TTFT and memory
+methodology, completion-token visibility, benchmark-condition warnings, and
+mock OpenAI-compatible integration coverage.
+
+---
+
 ## Quick Start
 
 ```bash

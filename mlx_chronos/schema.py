@@ -287,7 +287,7 @@ EXAMPLE_RESULT = {
         "completion_tokens_raw": [100, 100, 100, 100, 100]
     },
     "meta": {
-        "chronos_version": "0.1.0",
+        "chronos_version": "0.1.1",
         "timestamp": "2026-05-23T15:08:36Z",
         "ram_sample_interval_seconds": 0.05,
         "notes": "Test run"
