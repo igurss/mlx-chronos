@@ -5,6 +5,7 @@ from mlx_chronos.benchmark import (
     COLD_PROMPTS,
     RAMTracker,
     SystemRAMTracker,
+    THROUGHPUT_PROMPT,
     compute_stats,
     run_benchmark,
 )
@@ -92,8 +93,11 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     mock_engine = MagicMock()
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.return_value = 0.5
-    mock_engine.measure_tokens_per_second.return_value = 20.0
-    mock_engine.last_token_count_source = "usage.completion_tokens"
+    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
+        mock_engine,
+        "last_token_count_source",
+        "usage.completion_tokens",
+    ) or 20.0
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = 12345
     mock_get_engine.return_value = mock_engine
@@ -138,11 +142,99 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         CACHED_TTFT_PROMPT,
         CACHED_TTFT_PROMPT,
     ]
+    tps_prompts = [
+        call.args[0] for call in mock_engine.measure_tokens_per_second.call_args_list
+    ]
+    assert tps_prompts == [THROUGHPUT_PROMPT] * 4
+    assert [
+        call.kwargs.get("max_tokens")
+        for call in mock_engine.measure_tokens_per_second.call_args_list
+    ] == [30, 30, None, None]
 
     for call in mock_engine.measure_ttft.call_args_list:
         assert call.kwargs["model"] == "org/test-model"
     for call in mock_engine.measure_tokens_per_second.call_args_list:
         assert call.kwargs["model"] == "org/test-model"
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_rejects_missing_token_count_source(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        with pytest.raises(RuntimeError, match="valid token count source"):
+            run_benchmark(
+                engine_name="omlx",
+                model_name="org/test-model",
+                model_quantization="4bit",
+                trials=1,
+                ram_sample_interval=0.01,
+            )
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_uses_all_cold_prompts_at_max_trials(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
+        mock_engine,
+        "last_token_count_source",
+        "usage.completion_tokens",
+    ) or 20.0
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=MAX_TRIALS,
+            ram_sample_interval=0.01,
+        )
+
+    ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]
+    assert ttft_prompts[:MAX_TRIALS] == COLD_PROMPTS
 
 
 def test_run_benchmark_rejects_empty_model_name():

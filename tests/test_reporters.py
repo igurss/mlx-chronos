@@ -58,6 +58,8 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Chronos version:** 0.1.0" in content
     assert "**Trials:** 5" in content
     assert "**Token count source:** usage.completion_tokens" in content
+    assert "**Thermal state:** unavailable_no_sudo" in content
+    assert "**RAM measurement method:** system_fallback" in content
     assert "Apple M2" in content
     assert "## Raw Trials" in content
     assert "**Cold TTFT:** 0.044, 0.066, 0.028, 0.039, 0.03" in content

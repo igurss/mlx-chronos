@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
-from mlx_chronos.schema import BenchmarkResult, EXAMPLE_RESULT
+from mlx_chronos.schema import BenchmarkResult, EXAMPLE_RESULT, TrialStats
 
 def test_valid_schema():
     """Test that the example result is fully valid."""
@@ -66,6 +66,10 @@ def test_trial_stats_range_must_be_consistent():
 
     with pytest.raises(ValidationError, match="mean must be between"):
         BenchmarkResult(**invalid_data)
+
+def test_trial_stats_rejects_stddev_when_min_equals_max():
+    with pytest.raises(ValidationError, match="stddev must be 0"):
+        TrialStats(mean=1.0, stddev=0.1, min=1.0, max=1.0)
 
 def test_summary_stats_must_match_raw_trials():
     """Test that summary statistics must be derived from raw trial values."""

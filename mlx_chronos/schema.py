@@ -100,6 +100,8 @@ class TrialStats(ChronosBaseModel):
             raise ValueError("min must be less than or equal to max")
         if not self.min <= self.mean <= self.max:
             raise ValueError("mean must be between min and max")
+        if self.min == self.max and self.stddev != 0:
+            raise ValueError("stddev must be 0 when min and max are equal")
         return self
 
 

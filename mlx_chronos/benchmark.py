@@ -15,7 +15,6 @@ from mlx_chronos.constants import (
     TOKEN_COUNT_SOURCE_MIXED,
     TOKEN_COUNT_SOURCE_USAGE,
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
-    TOKEN_COUNT_SOURCES,
 )
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware
@@ -179,9 +178,16 @@ def compute_stats(values: list[float]) -> dict:
 
 
 def _normalize_token_count_source(source: object) -> str:
-    if isinstance(source, str) and source in TOKEN_COUNT_SOURCES:
+    valid_trial_sources = {
+        TOKEN_COUNT_SOURCE_USAGE,
+        TOKEN_COUNT_SOURCE_WORD_FALLBACK,
+    }
+    if isinstance(source, str) and source in valid_trial_sources:
         return source
-    return TOKEN_COUNT_SOURCE_WORD_FALLBACK
+    raise RuntimeError(
+        "engine did not report a valid token count source after throughput "
+        f"measurement; expected one of {sorted(valid_trial_sources)}, got {source!r}"
+    )
 
 
 def _summarize_token_count_sources(sources: list[str]) -> str:
@@ -285,6 +291,8 @@ def run_benchmark(
             f"Starting continuous background engine RSS sampling "
             f"({ram_sample_interval:.3f}s interval)..."
         )
+        # Engine RSS intentionally starts after warmup, while system RAM started
+        # before warmup to include model loading and cache pressure.
         target_pid = engine.get_server_pid()
         if target_pid is None:
             logger.warning(
@@ -327,6 +335,7 @@ def run_benchmark(
         logger.info("\nRunning throughput trials...")
         for i in range(trials):
             logger.info(f"  Throughput trial {i + 1}/{trials}...")
+            setattr(engine, "last_token_count_source", None)
             tps_trials.append(
                 engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
             )
@@ -407,6 +416,8 @@ def run_benchmark(
 
 if __name__ == "__main__":
     from mlx_chronos.reporters import JSONReporter
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     
     result = run_benchmark(
         engine_name="omlx",

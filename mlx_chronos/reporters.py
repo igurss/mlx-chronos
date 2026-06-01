@@ -77,15 +77,16 @@ class MarkdownReporter(BaseReporter):
         md += f"**Model:** {result['model']['name']} ({result['model']['quantization']})\n\n"
         md += f"## Run\n"
         md += f"- **Timestamp:** {self._format_timestamp(meta.get('timestamp'))}\n"
-        md += f"- **Chronos version:** {meta.get('chronos_version', 'unknown')}\n"
+        md += f"- **Chronos version:** {self._format_optional(meta.get('chronos_version'))}\n"
         md += f"- **Trials:** {trials.get('count', 'unknown')}\n"
-        md += f"- **Token count source:** {metrics.get('token_count_source', 'unknown')}\n\n"
+        md += f"- **Token count source:** {self._format_optional(metrics.get('token_count_source'))}\n\n"
         
         md += f"## Hardware\n"
         md += f"- **Chip:** {hw['chip']}\n"
-        md += f"- **Machine:** {hw.get('machine_model', 'unknown')}\n"
+        md += f"- **Machine:** {self._format_optional(hw.get('machine_model'))}\n"
         md += f"- **Memory:** {hw['memory_gb']} GB\n"
-        md += f"- **macOS:** {hw['macos_version']}\n\n"
+        md += f"- **macOS:** {hw['macos_version']}\n"
+        md += f"- **Thermal state:** {self._format_optional(hw.get('thermal_state'))}\n\n"
         
         md += f"## Metrics\n"
         md += (
@@ -110,6 +111,10 @@ class MarkdownReporter(BaseReporter):
             md += f"- **Peak engine RSS:** {ram_peak_gb} GB\n"
         else:
             md += f"- **Peak engine RSS fallback (system RAM):** {ram_peak_gb} GB\n"
+        md += (
+            f"- **RAM measurement method:** "
+            f"{self._format_optional(metrics.get('ram_measurement_method'))}\n"
+        )
         md += (
             f"- **Peak system RAM:** {system_ram_peak_gb} GB "
             f"({system_ram_peak_percent}%)\n"

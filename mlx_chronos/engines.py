@@ -35,7 +35,7 @@ class BaseEngine(ABC):
 
     def __init__(self, port: int | None = None):
         self.port = port if port is not None else self._configured_port()
-        self.last_token_count_source = TOKEN_COUNT_SOURCE_USAGE
+        self.last_token_count_source: str | None = None
 
     def port_env_var(self) -> str:
         normalized_name = self.name.upper().replace("-", "_")
@@ -227,6 +227,15 @@ class BaseEngine(ABC):
 
         model_ids = self.list_model_ids() if model_ids is None else model_ids
         request_model = self._request_model_name(requested)
+        return self._match_listed_model_id(requested, request_model, model_ids)
+
+    def _match_listed_model_id(
+        self,
+        requested: str,
+        request_model: str,
+        model_ids: list[str],
+    ) -> str | None:
+        """Return a model id matching either user input or request payload id."""
         candidates = {requested, request_model}
 
         for model_id in model_ids:
@@ -540,22 +549,16 @@ class RapidMLXEngine(BaseEngine):
             return self._model_id_cache[model]
 
         try:
-            r = httpx.get(f"{self.base_url()}/models", timeout=3.0)
-            r.raise_for_status()
-            data = r.json()
-
-            for item in data.get("data", []):
-                model_id = item.get("id")
-                if not model_id:
-                    continue
-
-                if model_id == model or model_id.endswith(f"/{model}"):
-                    self._model_id_cache[model] = model_id
-                    return model_id
-
-        except Exception:
+            resolved = self._match_listed_model_id(
+                requested=model,
+                request_model=model,
+                model_ids=self.list_model_ids(),
+            )
+        except RuntimeError:
             return None
-        return None
+        if resolved is not None:
+            self._model_id_cache[model] = resolved
+        return resolved
 
     def _request_model_name(self, model: str) -> str:
         model_name = os.path.expanduser(super()._request_model_name(model))
