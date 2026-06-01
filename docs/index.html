@@ -176,7 +176,7 @@
         <th data-col="engine" title="Local inference engine used to serve the model.">Engine</th>
         <th data-col="model" title="Model identifier submitted with the benchmark result.">Model</th>
         <th data-col="quant" title="Quantization label submitted for the model.">Quant</th>
-        <th data-col="tps" class="sorted" title="Mean generated tokens per second. Higher is better.">tok/s ↓</th>
+        <th data-col="tps" class="sorted" title="Mean generated tokens per second. Higher is better.">tok/s</th>
         <th data-col="completion_tokens" title="Generated completion token counts for each throughput trial.">Output tokens</th>
         <th data-col="ttft_cold" title="Client-observed time to first streamed token for unique cold prompts. Lower is better.">TTFT cold (s)</th>
         <th data-col="ttft_cached" title="Client-observed time to first streamed token for a fixed prompt after priming. Lower is better.">TTFT cached (s)</th>
@@ -224,6 +224,35 @@
   ]);
 
   // ── Fetch & render ──────────────────────────────────────────────────────────
+  function updateSortIndicators() {
+    const headers = {
+      chip: "Chip",
+      memory: "RAM",
+      engine: "Engine",
+      model: "Model",
+      quant: "Quant",
+      tps: "tok/s",
+      completion_tokens: "Output tokens",
+      ttft_cold: "TTFT cold (s)",
+      ttft_cached: "TTFT cached (s)",
+      system_ram_peak: "System RAM Peak",
+      thermal: "Thermal",
+      trials: "Trials",
+      date: "Date"
+    };
+    document.querySelectorAll("thead th[data-col]").forEach(th => {
+      const col = th.dataset.col;
+      const baseText = headers[col];
+      if (sortCol === col) {
+        th.textContent = baseText + (sortAsc ? " ↑" : " ↓");
+        th.classList.add("sorted");
+      } else {
+        th.textContent = baseText;
+        th.classList.remove("sorted");
+      }
+    });
+  }
+
   async function loadResults() {
     try {
       const resp = await fetch(RESULTS_INDEX);
@@ -233,6 +262,7 @@
       allRows = [];
     }
     populateHardwareFilters();
+    updateSortIndicators();
     render();
   }
 
@@ -362,8 +392,7 @@
       const col = th.dataset.col;
       if (sortCol === col) { sortAsc = !sortAsc; }
       else { sortCol = col; sortAsc = false; }
-      document.querySelectorAll("thead th").forEach(t => t.classList.remove("sorted"));
-      th.classList.add("sorted");
+      updateSortIndicators();
       render();
     });
   });
