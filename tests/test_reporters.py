@@ -63,6 +63,7 @@ def test_markdown_reporter_save(tmp_path):
     assert "Apple M2" in content
     assert "## Raw Trials" in content
     assert "**Cold TTFT:** 0.044, 0.066, 0.028, 0.039, 0.03" in content
+    assert "**Completion tokens:** 100, 100, 100, 100, 100" in content
 
 def test_markdown_reporter_handles_missing_ram_fields(tmp_path):
     result = copy.deepcopy(EXAMPLE_RESULT)

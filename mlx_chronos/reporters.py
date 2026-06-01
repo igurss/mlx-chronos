@@ -126,6 +126,7 @@ class MarkdownReporter(BaseReporter):
                 ("Cold TTFT", trials.get("ttft_cold_raw")),
                 ("Cached TTFT", trials.get("ttft_cached_raw")),
                 ("Throughput", trials.get("tokens_per_second_raw")),
+                ("Completion tokens", trials.get("completion_tokens_raw")),
             ]
             if values
         ]

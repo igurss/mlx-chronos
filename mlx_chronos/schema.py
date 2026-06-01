@@ -13,6 +13,7 @@ from mlx_chronos.constants import (
 
 
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+NonNegativeInt = Annotated[int, Field(ge=0)]
 PercentFloat = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
 TokenCountSource = Literal[
     "usage.completion_tokens",
@@ -154,13 +155,26 @@ class Trials(ChronosBaseModel):
     ttft_cold_raw: list[NonNegativeFloat] = Field(..., description="Raw cold TTFT values per trial")
     ttft_cached_raw: list[NonNegativeFloat] = Field(..., description="Raw cached TTFT values per trial")
     tokens_per_second_raw: list[NonNegativeFloat] = Field(..., description="Raw tok/s values per trial")
+    completion_tokens_raw: Optional[list[NonNegativeInt]] = Field(
+        None,
+        description=(
+            "Generated completion token counts per throughput trial when available. "
+            "For word_fallback results this is an estimated output word count."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_raw_lengths(self):
+        raw_lists = [
+            self.ttft_cold_raw,
+            self.ttft_cached_raw,
+            self.tokens_per_second_raw,
+        ]
+        if self.completion_tokens_raw is not None:
+            raw_lists.append(self.completion_tokens_raw)
         lengths = {
-            len(self.ttft_cold_raw),
-            len(self.ttft_cached_raw),
-            len(self.tokens_per_second_raw),
+            len(raw_values)
+            for raw_values in raw_lists
         }
         if lengths != {self.count}:
             raise ValueError("trials.count must match all raw metric list lengths")
@@ -269,7 +283,8 @@ EXAMPLE_RESULT = {
         "count": 5,
         "ttft_cold_raw": [0.044, 0.066, 0.028, 0.039, 0.030],
         "ttft_cached_raw": [0.011, 0.007, 0.008, 0.010, 0.012],
-        "tokens_per_second_raw": [18.48, 18.27, 18.51, 18.48, 18.46]
+        "tokens_per_second_raw": [18.48, 18.27, 18.51, 18.48, 18.46],
+        "completion_tokens_raw": [100, 100, 100, 100, 100]
     },
     "meta": {
         "chronos_version": "0.1.0",

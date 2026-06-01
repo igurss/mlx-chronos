@@ -64,6 +64,7 @@ def test_measure_tokens_per_second(mock_post):
         tps = engine.measure_tokens_per_second("test prompt", "default", 100)
         assert tps == 100.0  # 150 tokens / 1.5s = 100.0
         assert engine.last_token_count_source == "usage.completion_tokens"
+        assert engine.last_completion_tokens == 150
 
 @patch("httpx.post")
 def test_measure_tokens_per_second_marks_word_fallback(mock_post):
@@ -78,6 +79,7 @@ def test_measure_tokens_per_second_marks_word_fallback(mock_post):
         tps = engine.measure_tokens_per_second("test prompt", "default", 100)
         assert tps == 2.0
         assert engine.last_token_count_source == "word_fallback"
+        assert engine.last_completion_tokens == 4
 
 @patch("httpx.post", side_effect=httpx.TimeoutException("timed out"))
 def test_measure_tokens_per_second_wraps_http_errors(mock_post):

@@ -16,6 +16,7 @@ def test_valid_schema():
     assert result.metrics.ram_measurement_method == "system_fallback"
     assert result.metrics.system_ram_peak_gb == 7.22
     assert result.metrics.system_ram_peak_percent == 90.2
+    assert result.trials.completion_tokens_raw == [100, 100, 100, 100, 100]
 
 def test_invalid_engine_name():
     """Test that an unknown engine name raises a validation error."""
@@ -43,6 +44,22 @@ def test_trial_count_must_match_raw_lengths():
 
     with pytest.raises(ValidationError, match="trials.count"):
         BenchmarkResult(**invalid_data)
+
+def test_completion_token_raw_lengths_must_match_trial_count():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["trials"] = invalid_data["trials"].copy()
+    invalid_data["trials"]["completion_tokens_raw"] = [100]
+
+    with pytest.raises(ValidationError, match="trials.count"):
+        BenchmarkResult(**invalid_data)
+
+def test_completion_token_raw_is_optional_for_older_results():
+    data = EXAMPLE_RESULT.copy()
+    data["trials"] = data["trials"].copy()
+    del data["trials"]["completion_tokens_raw"]
+
+    result = BenchmarkResult(**data)
+    assert result.trials.completion_tokens_raw is None
 
 def test_raw_trial_values_must_be_non_negative():
     """Test that raw trial measurements cannot be negative."""

@@ -7,11 +7,13 @@
 - Add dry-run submission validation and optional submitter contact email metadata.
 - Add model search plus machine model and memory filters to the leaderboard.
 - Add broader leaderboard column tooltips to clarify result fields.
+- Add throughput completion-token counts to new benchmark JSON output and the leaderboard.
 
 ### Reliability
 - Require public submissions to use `usage.completion_tokens` for throughput comparability.
 - Send benchmark JSON as `result_json` with minimal form metadata so the inbox provider does not classify submissions as blank spam.
 - Keep leaderboard publication manual: maintainers review accepted JSON before adding it to `results/submitted/`.
+- Use System RAM Peak as the main public leaderboard memory metric; keep process RSS as diagnostic JSON data.
 
 ### Documentation
 - Update README and CONTRIBUTING with the inbox submission flow.

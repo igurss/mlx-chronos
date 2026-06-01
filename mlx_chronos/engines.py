@@ -36,6 +36,7 @@ class BaseEngine(ABC):
     def __init__(self, port: int | None = None):
         self.port = port if port is not None else self._configured_port()
         self.last_token_count_source: str | None = None
+        self.last_completion_tokens: int | None = None
 
     def port_env_var(self) -> str:
         normalized_name = self.name.upper().replace("-", "_")
@@ -430,6 +431,8 @@ class BaseEngine(ABC):
 
     def measure_tokens_per_second(self, prompt: str, model: str = "default", max_tokens: int = 100) -> float:
         """Measure throughput."""
+        self.last_token_count_source = None
+        self.last_completion_tokens = None
         payload = self.build_payload(prompt=prompt, model=model, max_tokens=max_tokens, stream=False)
         start = time.perf_counter()
 
@@ -481,6 +484,7 @@ class BaseEngine(ABC):
         tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
 
         if isinstance(tokens, (int, float)) and tokens > 0:
+            self.last_completion_tokens = int(tokens)
             self.last_token_count_source = TOKEN_COUNT_SOURCE_USAGE
         else:
             text = ""
@@ -492,6 +496,7 @@ class BaseEngine(ABC):
                     message = {}
                 text = choice.get("text") or message.get("content", "")
             tokens = max(1, len(text.split()))
+            self.last_completion_tokens = int(tokens)
             self.last_token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
         return round(tokens / elapsed, 2)

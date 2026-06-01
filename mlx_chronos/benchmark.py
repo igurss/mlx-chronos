@@ -190,6 +190,15 @@ def _normalize_token_count_source(source: object) -> str:
     )
 
 
+def _normalize_completion_tokens(tokens: object) -> int:
+    if isinstance(tokens, int) and tokens >= 0:
+        return tokens
+    raise RuntimeError(
+        "engine did not report a valid completion token count after throughput "
+        f"measurement; expected non-negative int, got {tokens!r}"
+    )
+
+
 def _summarize_token_count_sources(sources: list[str]) -> str:
     unique_sources = set(sources)
     if unique_sources == {TOKEN_COUNT_SOURCE_USAGE}:
@@ -266,6 +275,7 @@ def run_benchmark(
     ttft_cached_trials = []
     tps_trials = []
     token_count_sources = []
+    completion_tokens_trials = []
 
     peak_ram_gb = None
     system_ram_peak_gb = None
@@ -336,12 +346,18 @@ def run_benchmark(
         for i in range(trials):
             logger.info(f"  Throughput trial {i + 1}/{trials}...")
             setattr(engine, "last_token_count_source", None)
+            setattr(engine, "last_completion_tokens", None)
             tps_trials.append(
                 engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
             )
             token_count_sources.append(
                 _normalize_token_count_source(
                     getattr(engine, "last_token_count_source", None)
+                )
+            )
+            completion_tokens_trials.append(
+                _normalize_completion_tokens(
+                    getattr(engine, "last_completion_tokens", None)
                 )
             )
     finally:
@@ -402,6 +418,7 @@ def run_benchmark(
             "ttft_cold_raw": ttft_cold_trials,
             "ttft_cached_raw": ttft_cached_trials,
             "tokens_per_second_raw": tps_trials,
+            "completion_tokens_raw": completion_tokens_trials,
         },
         "meta": {
             "chronos_version": VERSION,

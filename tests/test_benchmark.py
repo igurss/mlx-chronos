@@ -97,7 +97,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         mock_engine,
         "last_token_count_source",
         "usage.completion_tokens",
-    ) or 20.0
+    ) or setattr(mock_engine, "last_completion_tokens", 100) or 20.0
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = 12345
     mock_get_engine.return_value = mock_engine
@@ -133,6 +133,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["metrics"]["ram_measurement_method"] == "process_rss"
     assert result["metrics"]["system_ram_peak_gb"] == 6.0
     assert result["metrics"]["system_ram_peak_percent"] == 75.0
+    assert result["trials"]["completion_tokens_raw"] == [100, 100]
 
     ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]
     assert ttft_prompts == [
@@ -214,7 +215,7 @@ def test_run_benchmark_uses_all_cold_prompts_at_max_trials(mock_detect, mock_get
         mock_engine,
         "last_token_count_source",
         "usage.completion_tokens",
-    ) or 20.0
+    ) or setattr(mock_engine, "last_completion_tokens", 100) or 20.0
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = None
     mock_get_engine.return_value = mock_engine

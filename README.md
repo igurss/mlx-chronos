@@ -26,8 +26,9 @@ contribute to the community leaderboard.
 **Metrics measured:**
 - **TTFT** — Time to First Token (cold and cached, with statistics)
 - **tok/s** — Generation throughput (mean, stddev, min, max across trials)
-- **Engine RSS** — Peak RSS of the engine server process during the benchmark when available
-- **System RAM peak** — Peak total Mac RAM in use during the benchmark
+- **Output tokens** — Completion token counts for throughput trials
+- **System RAM peak** — Peak total Mac RAM in use during the benchmark, used as the public memory comparison metric
+- **Engine RSS** — Diagnostic peak RSS of the engine server process when available
 - **Tool calling** — Success rate *(coming in v0.2)*
 
 ---
@@ -47,20 +48,22 @@ measures cache performance without interleaving unrelated prompts between
 cached measurements.
 
 **Throughput (tok/s)** — measures tokens generated per second using a standard
-fixed prompt, identical across all engines and versions.
-
-**Peak engine RSS** — measures the resident memory of the engine server process
-after warmup, through the recorded benchmark phases. This is
-intentionally not the total memory occupied by the loaded model or by
-macOS/Metal unified memory. It is meant to compare how light or heavy each
-engine process is while serving the same model. The default RSS sampling
-interval is 50ms and can be changed with `--ram-sample-interval`.
+fixed prompt, identical across all engines and versions. When the engine
+returns `usage.completion_tokens`, mlx-Chronos records the generated token
+count for each throughput trial so readers can verify how many output tokens
+were used to compute tok/s.
 
 **System RAM peak** — continuously samples total Mac RAM usage from before
 warmup through the recorded benchmark phases and reports the observed peak in
-GB and percent. This is the metric to use when checking whether a run pushed
-the machine into memory pressure or swap while the model was actually loading
-or serving requests.
+GB and percent. This is the public leaderboard memory metric because it answers
+the practical question of how much memory pressure the run placed on the Mac.
+
+**Peak engine RSS** — records the resident memory of the engine server process
+after warmup, through the recorded benchmark phases, when the process can be
+identified. This is diagnostic only: it is not total model memory or a public
+efficiency ranking metric, because macOS/Metal unified-memory accounting can
+vary across environments. The default RAM sampling interval is 50ms and can be
+changed with `--ram-sample-interval`.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. The default is 5 trials, with a maximum of 8 unique cold prompts.

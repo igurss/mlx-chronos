@@ -57,6 +57,12 @@ jobs:
                   met = data["metrics"]
                   tri = data["trials"]
                   meta = data["meta"]
+                  completion_tokens_raw = tri.get("completion_tokens_raw")
+                  completion_tokens_mean = (
+                      round(sum(completion_tokens_raw) / len(completion_tokens_raw), 1)
+                      if completion_tokens_raw
+                      else None
+                  )
 
                   index.append({
                       "chip": hw["chip"],
@@ -68,6 +74,8 @@ jobs:
                       "quantization": mod["quantization"],
                       "tps": met["tokens_per_second"]["mean"],
                       "tps_stddev": met["tokens_per_second"]["stddev"],
+                      "completion_tokens_raw": completion_tokens_raw,
+                      "completion_tokens_mean": completion_tokens_mean,
                       "ttft_cold": met["ttft_cold"]["mean"],
                       "ttft_cached": met["ttft_cached"]["mean"],
                       "ram_peak_gb": met["ram_peak_gb"],

@@ -36,8 +36,29 @@ from the API response's `usage.completion_tokens` field. The result records
 `metrics.token_count_source`. Leaderboard submissions must use
 `usage.completion_tokens`; local runs that fall back to a word-based estimate
 are marked as `word_fallback` or `mixed` and are not considered comparable.
+New benchmark results also record `trials.completion_tokens_raw`, the generated
+completion-token count for each throughput trial.
 
-### Peak Engine RSS (GB)
+### System RAM Peak
+Total Mac RAM usage is sampled continuously from before warmup through the
+recorded benchmark phases, using the configured RAM sampling interval. The result
+records the observed peak as `metrics.system_ram_peak_gb` and
+`metrics.system_ram_peak_percent`.
+
+This is the public leaderboard memory metric. It answers the practical question
+of how much memory pressure a run placed on the Mac while the model was loading
+or serving requests.
+
+This replaces the old pre-run baseline. mlx-Chronos reports memory pressure
+while inference is actually happening, so model loading, cache growth, swap, and
+other runtime pressure are represented in the result.
+
+The default sampling interval is 50ms (`--ram-sample-interval 0.05`). Lower
+values can catch shorter spikes but add more measurement overhead; higher values
+reduce overhead but may miss brief peaks. The interval is recorded in result
+metadata as `meta.ram_sample_interval_seconds`.
+
+### Diagnostic Peak Engine RSS (GB)
 Resident memory used by the engine server process, sampled continuously after
 warmup through the recorded benchmark phases, then reported as the
 observed RSS peak.
@@ -55,23 +76,8 @@ RSS values.
 
 The result records both `metrics.ram_is_process_rss` and
 `metrics.ram_measurement_method` (`process_rss` or `system_fallback`) so the
-leaderboard can distinguish direct process measurements from system-memory
-fallbacks.
-
-### System RAM Peak
-Total Mac RAM usage is sampled continuously from before warmup through the
-recorded benchmark phases, using the configured RAM sampling interval. The result
-records the observed peak as `metrics.system_ram_peak_gb` and
-`metrics.system_ram_peak_percent`.
-
-This replaces the old pre-run baseline. mlx-Chronos reports memory pressure
-while inference is actually happening, so model loading, cache growth, swap, and
-other runtime pressure are represented in the result.
-
-The default sampling interval is 50ms (`--ram-sample-interval 0.05`). Lower
-values can catch shorter spikes but add more measurement overhead; higher values
-reduce overhead but may miss brief peaks. The interval is recorded in result
-metadata as `meta.ram_sample_interval_seconds`.
+JSON can distinguish direct process measurements from system-memory fallbacks.
+The public leaderboard does not use process RSS as a main comparison metric.
 
 ### Thermal State
 Thermal state is detected without sudo through macOS `NSProcessInfo` when the

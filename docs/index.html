@@ -177,10 +177,10 @@
         <th data-col="model" title="Model identifier submitted with the benchmark result.">Model</th>
         <th data-col="quant" title="Quantization label submitted for the model.">Quant</th>
         <th data-col="tps" class="sorted" title="Mean generated tokens per second. Higher is better.">tok/s ↓</th>
+        <th data-col="completion_tokens" title="Generated completion token counts for each throughput trial.">Output tokens</th>
         <th data-col="ttft_cold" title="Time to first generated token for cold prompt trials. Lower is better.">TTFT cold (s)</th>
         <th data-col="ttft_cached" title="Time to first generated token after cache priming. Lower is better.">TTFT cached (s)</th>
-        <th data-col="ram" title="Peak RSS of the engine server process after warmup through trials when available.">Engine RSS (GB)</th>
-        <th data-col="system_ram_peak" title="Peak total Mac RAM usage during the benchmark.">System RAM Peak</th>
+        <th data-col="system_ram_peak" title="Peak total Mac RAM usage during the benchmark. This is the public memory comparison metric.">System RAM Peak</th>
         <th data-col="thermal" title="macOS thermal pressure state reported during the benchmark.">Thermal</th>
         <th data-col="trials" title="Number of repeated benchmark trials used for the reported metrics.">Trials</th>
         <th data-col="date" title="Date the benchmark result was generated.">Date</th>
@@ -193,9 +193,8 @@
 
 <footer>
   Results are community-submitted and validated automatically via GitHub Actions.<br>
-  <strong>Engine RSS</strong> reports peak RSS of the engine server process after warmup through trials when available.
-  It is not total model or unified-memory usage. <strong>System RAM Peak</strong> is total Mac RAM usage observed during the benchmark.
-  Values marked <span class="fallback">fallback</span> were measured as system memory, not process RSS.
+  <strong>System RAM Peak</strong> is the public memory comparison metric and reports total Mac RAM usage observed during the benchmark.
+  Engine process RSS is retained in result JSON as a diagnostic field, but it is not shown as a main leaderboard metric.
 </footer>
 
 <script>
@@ -210,16 +209,16 @@
   const SORT_KEYS = {
     memory: "memory_gb",
     quant: "quantization",
-    ram: "ram_peak_gb",
+    completion_tokens: "completion_tokens_mean",
     system_ram_peak: "system_ram_peak_percent",
     thermal: "thermal_state",
   };
   const NUMERIC_COLUMNS = new Set([
     "memory",
     "tps",
+    "completion_tokens",
     "ttft_cold",
     "ttft_cached",
-    "ram",
     "system_ram_peak",
     "trials",
   ]);
@@ -248,6 +247,12 @@
 
   function fmt(val, decimals = 3) {
     return val != null ? Number(val).toFixed(decimals) : "—";
+  }
+
+  function fmtTokenCounts(values) {
+    if (!Array.isArray(values) || values.length === 0) return "—";
+    if (values.every(value => value === values[0])) return `${values[0]} each`;
+    return values.join(", ");
   }
 
   function escapeHtml(value) {
@@ -340,9 +345,9 @@
         <td>${escapeHtml(r.model)}</td>
         <td>${escapeHtml(r.quantization)}</td>
         <td><strong>${fmt(r.tps, 2)}</strong></td>
+        <td>${fmtTokenCounts(r.completion_tokens_raw)}</td>
         <td>${fmt(r.ttft_cold)}</td>
         <td>${fmt(r.ttft_cached)}</td>
-        <td>${r.ram_is_process_rss ? fmt(r.ram_peak_gb, 2) + " GB" : `<span class="fallback">${fmt(r.ram_peak_gb, 2)} GB*</span>`}</td>
         <td>${r.system_ram_peak_percent != null ? fmt(r.system_ram_peak_gb, 2) + " GB / " + fmt(r.system_ram_peak_percent, 0) + "%" : "—"}</td>
         <td>${r.thermal_state && !r.thermal_state.startsWith("unavailable") ? "🌡 " + escapeHtml(r.thermal_state) : "—"}</td>
         <td>${r.trials}</td>
