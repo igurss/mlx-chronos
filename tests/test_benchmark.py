@@ -331,7 +331,7 @@ def test_run_benchmark_passes_throughput_token_bounds(mock_detect, mock_get_engi
     mock_engine.measure_ttft.return_value = 0.5
     mock_engine.measure_tokens_per_second.return_value = 20.0
     mock_engine.measure_throughput.return_value = throughput_measurement(
-        tps=20.0,
+        tps=18.0,
         tokens=90,
     )
     mock_engine.get_version.return_value = "1.0.0"
@@ -383,7 +383,7 @@ def test_run_benchmark_records_decode_throughput_when_available(
     mock_engine.measure_ttft.return_value = 0.5
     mock_engine.measure_tokens_per_second.return_value = 20.0
     mock_engine.measure_throughput.return_value = throughput_measurement(
-        tps=18.0,
+        tps=18.18,
         tokens=100,
         elapsed=5.5,
         decode_tps=21.0,

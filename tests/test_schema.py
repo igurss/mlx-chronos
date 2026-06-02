@@ -169,6 +169,44 @@ def test_summary_stats_must_match_raw_trials():
     with pytest.raises(ValidationError, match="metrics.ttft_cold.mean"):
         BenchmarkResult(**invalid_data)
 
+def test_request_tps_must_match_completion_tokens_and_elapsed():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["trials"] = invalid_data["trials"].copy()
+    invalid_data["trials"]["tokens_per_second_raw"] = [
+        99.0,
+        18.27,
+        18.51,
+        18.48,
+        18.46,
+    ]
+    invalid_data["metrics"] = invalid_data["metrics"].copy()
+    invalid_data["metrics"]["tokens_per_second"] = {
+        "mean": 34.544,
+        "stddev": 36.032,
+        "min": 18.27,
+        "max": 99.0,
+    }
+    invalid_data["metrics"]["request_tokens_per_second"] = {
+        **invalid_data["metrics"]["tokens_per_second"]
+    }
+
+    with pytest.raises(ValidationError, match="completion token counts"):
+        BenchmarkResult(**invalid_data)
+
+def test_throughput_elapsed_seconds_must_be_positive():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["trials"] = invalid_data["trials"].copy()
+    invalid_data["trials"]["throughput_elapsed_seconds_raw"] = [
+        0.0,
+        5.473,
+        5.402,
+        5.411,
+        5.417,
+    ]
+
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**invalid_data)
+
 def test_p95_is_required_for_large_trial_sets():
     data = EXAMPLE_RESULT.copy()
     data["trials"] = data["trials"].copy()

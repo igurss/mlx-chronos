@@ -19,6 +19,8 @@
   with structured `ThroughputMeasurement` results.
 - Split benchmark support code for protocol metadata, statistics, and RAM
   trackers into focused modules.
+- Validate request throughput raw trials against completion-token counts and
+  elapsed request seconds when all three values are present.
 
 ## [0.1.1] — 2026-06-01
 

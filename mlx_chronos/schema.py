@@ -20,6 +20,7 @@ from mlx_chronos.measurements import (
 
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+PositiveFloat = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 PositiveInt = Annotated[int, Field(gt=0)]
 PercentFloat = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
 TokenCountSource = Literal[
@@ -208,7 +209,7 @@ class Trials(ChronosBaseModel):
     ttft_cold_raw: list[NonNegativeFloat] = Field(..., description="Raw cold TTFT values per trial")
     ttft_cached_raw: list[NonNegativeFloat] = Field(..., description="Raw cached TTFT values per trial")
     tokens_per_second_raw: list[NonNegativeFloat] = Field(..., description="Raw tok/s values per trial")
-    throughput_elapsed_seconds_raw: Optional[list[NonNegativeFloat]] = Field(
+    throughput_elapsed_seconds_raw: Optional[list[PositiveFloat]] = Field(
         None,
         description="Client-observed elapsed seconds for each throughput request",
     )
@@ -370,7 +371,30 @@ class BenchmarkResult(ChronosBaseModel):
                 self.trials.decode_tokens_per_second_raw,
                 "metrics.decode_tokens_per_second",
             )
+        if (
+            self.trials.completion_tokens_raw is not None
+            and self.trials.throughput_elapsed_seconds_raw is not None
+        ):
+            self._assert_request_tps_matches_tokens_and_elapsed()
         return self
+
+    def _assert_request_tps_matches_tokens_and_elapsed(self) -> None:
+        tolerance = 0.02
+        for index, (tps, tokens, elapsed) in enumerate(
+            zip(
+                self.trials.tokens_per_second_raw,
+                self.trials.completion_tokens_raw,
+                self.trials.throughput_elapsed_seconds_raw,
+            ),
+            start=1,
+        ):
+            expected_tps = round(tokens / elapsed, 2)
+            if abs(tps - expected_tps) > tolerance:
+                raise ValueError(
+                    "trials.tokens_per_second_raw must match completion token "
+                    "counts divided by throughput elapsed seconds "
+                    f"(trial {index}: expected {expected_tps}, got {tps})"
+                )
 
     @staticmethod
     def _assert_stats_match_raw(stats: TrialStats, raw_values: list[float], label: str) -> None:
