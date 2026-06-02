@@ -134,6 +134,10 @@ DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
 
 # Default number of trials
 DEFAULT_TRIALS = 5
+BASELINE_PROTOCOL_VERSION = "1"
+TTFT_MAX_TOKENS = 1
+WARMUP_MAX_TOKENS = 30
+DEFAULT_THROUGHPUT_MAX_TOKENS = 100
 
 # Prompt pool for cold TTFT — each trial uses a different prompt
 # to avoid cache hits between trials
@@ -208,6 +212,59 @@ def _summarize_token_count_sources(sources: list[str]) -> str:
     return TOKEN_COUNT_SOURCE_MIXED
 
 
+def _protocol_phase(
+    prompts: list[str],
+    requested_max_tokens: int,
+    requested_min_tokens: int | None = None,
+) -> dict:
+    return {
+        "prompts": prompts,
+        "requested_max_tokens": requested_max_tokens,
+        "requested_min_tokens": requested_min_tokens,
+        "input_tokens": None,
+        "input_token_count_source": "unavailable",
+    }
+
+
+def _build_benchmark_protocol(
+    trials: int,
+    throughput_max_tokens: int,
+    throughput_min_tokens: int | None,
+) -> dict:
+    return {
+        "name": "baseline",
+        "version": BASELINE_PROTOCOL_VERSION,
+        "warmup": _protocol_phase([THROUGHPUT_PROMPT], WARMUP_MAX_TOKENS),
+        "ttft_cold": _protocol_phase(COLD_PROMPTS[:trials], TTFT_MAX_TOKENS),
+        "ttft_cached": _protocol_phase([CACHED_TTFT_PROMPT], TTFT_MAX_TOKENS),
+        "throughput": _protocol_phase(
+            [THROUGHPUT_PROMPT],
+            throughput_max_tokens,
+            throughput_min_tokens,
+        ),
+    }
+
+
+def _validate_token_bounds(
+    tokens: int,
+    source: str,
+    min_tokens: int | None,
+    max_tokens: int,
+) -> None:
+    if source != TOKEN_COUNT_SOURCE_USAGE:
+        return
+    if tokens > max_tokens:
+        raise RuntimeError(
+            "throughput completion token count exceeded requested max_tokens; "
+            f"requested <= {max_tokens}, got {tokens}"
+        )
+    if min_tokens is not None and tokens < min_tokens:
+        raise RuntimeError(
+            "throughput completion token count was below requested min_tokens; "
+            f"requested >= {min_tokens}, got {tokens}"
+        )
+
+
 def run_benchmark(
     engine_name: str,
     model_name: str,
@@ -215,6 +272,8 @@ def run_benchmark(
     trials: int = DEFAULT_TRIALS,
     notes: str = None,
     ram_sample_interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
+    throughput_max_tokens: int = DEFAULT_THROUGHPUT_MAX_TOKENS,
+    throughput_min_tokens: int | None = None,
 ) -> dict:
     """
     Run a full benchmark session for a given engine and model.
@@ -230,6 +289,15 @@ def run_benchmark(
         raise ValueError("trials must be at least 1")
     if ram_sample_interval <= 0:
         raise ValueError("ram_sample_interval must be greater than 0")
+    if throughput_max_tokens < 1:
+        raise ValueError("throughput_max_tokens must be at least 1")
+    if throughput_min_tokens is not None and throughput_min_tokens < 1:
+        raise ValueError("throughput_min_tokens must be at least 1 when set")
+    if (
+        throughput_min_tokens is not None
+        and throughput_min_tokens > throughput_max_tokens
+    ):
+        raise ValueError("throughput_min_tokens must be <= throughput_max_tokens")
     model_name = model_name.strip()
     if not model_name:
         raise ValueError("model name must not be empty")
@@ -239,6 +307,12 @@ def run_benchmark(
     logger.info(f"  Engine : {engine_name}")
     logger.info(f"  Model  : {model_name} ({model_quantization})")
     logger.info(f"  Trials : {trials}")
+    token_range = (
+        f"{throughput_min_tokens}-{throughput_max_tokens}"
+        if throughput_min_tokens is not None
+        else f"<= {throughput_max_tokens}"
+    )
+    logger.info(f"  Output : throughput tokens {token_range}")
     logger.info(f"{'='*50}\n")
 
     # 1. Detect hardware
@@ -296,7 +370,7 @@ def run_benchmark(
                 engine.measure_tokens_per_second(
                     THROUGHPUT_PROMPT,
                     model=model_name,
-                    max_tokens=30,
+                    max_tokens=WARMUP_MAX_TOKENS,
                 )
             except Exception as exc:
                 logger.warning(f"  Warmup call failed and was skipped: {exc}")
@@ -353,18 +427,27 @@ def run_benchmark(
             setattr(engine, "last_token_count_source", None)
             setattr(engine, "last_completion_tokens", None)
             tps_trials.append(
-                engine.measure_tokens_per_second(THROUGHPUT_PROMPT, model=model_name)
-            )
-            token_count_sources.append(
-                _normalize_token_count_source(
-                    getattr(engine, "last_token_count_source", None)
+                engine.measure_tokens_per_second(
+                    THROUGHPUT_PROMPT,
+                    model=model_name,
+                    max_tokens=throughput_max_tokens,
+                    min_tokens=throughput_min_tokens,
                 )
             )
-            completion_tokens_trials.append(
-                _normalize_completion_tokens(
-                    getattr(engine, "last_completion_tokens", None)
-                )
+            token_source = _normalize_token_count_source(
+                getattr(engine, "last_token_count_source", None)
             )
+            completion_tokens = _normalize_completion_tokens(
+                getattr(engine, "last_completion_tokens", None)
+            )
+            _validate_token_bounds(
+                completion_tokens,
+                token_source,
+                throughput_min_tokens,
+                throughput_max_tokens,
+            )
+            token_count_sources.append(token_source)
+            completion_tokens_trials.append(completion_tokens)
     finally:
         if ram_tracker:
             peak_ram_gb = ram_tracker.stop()
@@ -429,6 +512,11 @@ def run_benchmark(
             "chronos_version": VERSION,
             "timestamp": datetime.now(timezone.utc),
             "ram_sample_interval_seconds": ram_sample_interval,
+            "benchmark_protocol": _build_benchmark_protocol(
+                trials,
+                throughput_max_tokens,
+                throughput_min_tokens,
+            ),
             "notes": notes,
         }
     }

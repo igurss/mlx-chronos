@@ -14,6 +14,7 @@ from mlx_chronos.constants import (
 
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+PositiveInt = Annotated[int, Field(gt=0)]
 PercentFloat = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
 TokenCountSource = Literal[
     "usage.completion_tokens",
@@ -23,6 +24,12 @@ TokenCountSource = Literal[
 RAMMeasurementMethod = Literal[
     "process_rss",
     "system_fallback",
+]
+InputTokenCountSource = Literal[
+    "unavailable",
+    "estimated",
+    "tokenizer",
+    "engine",
 ]
 
 
@@ -181,6 +188,62 @@ class Trials(ChronosBaseModel):
         return self
 
 
+class BenchmarkProtocolPhase(ChronosBaseModel):
+    prompts: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Prompt text used by this benchmark phase",
+    )
+    requested_max_tokens: PositiveInt = Field(
+        ...,
+        description="max_tokens requested from the engine for this phase",
+    )
+    requested_min_tokens: Optional[PositiveInt] = Field(
+        None,
+        description="min_tokens requested from the engine for this phase when used",
+    )
+    input_tokens: Optional[list[NonNegativeInt]] = Field(
+        None,
+        description="Input token counts aligned with prompts when available",
+    )
+    input_token_count_source: InputTokenCountSource = Field(
+        "unavailable",
+        description="How input token counts were obtained",
+    )
+
+    @model_validator(mode="after")
+    def validate_protocol_phase(self):
+        if any(not prompt.strip() for prompt in self.prompts):
+            raise ValueError("protocol prompts must not be empty")
+        if (
+            self.requested_min_tokens is not None
+            and self.requested_min_tokens > self.requested_max_tokens
+        ):
+            raise ValueError("requested_min_tokens must be <= requested_max_tokens")
+        if self.input_tokens is None:
+            if self.input_token_count_source != "unavailable":
+                raise ValueError(
+                    "input_token_count_source must be unavailable when input_tokens is missing"
+                )
+        else:
+            if len(self.input_tokens) != len(self.prompts):
+                raise ValueError("input_tokens must match prompts length")
+            if self.input_token_count_source == "unavailable":
+                raise ValueError(
+                    "input_token_count_source must describe provided input_tokens"
+                )
+        return self
+
+
+class BenchmarkProtocol(ChronosBaseModel):
+    name: str = Field(..., min_length=1, description="Benchmark protocol name")
+    version: str = Field(..., min_length=1, description="Benchmark protocol version")
+    warmup: BenchmarkProtocolPhase
+    ttft_cold: BenchmarkProtocolPhase
+    ttft_cached: BenchmarkProtocolPhase
+    throughput: BenchmarkProtocolPhase
+
+
 class Meta(ChronosBaseModel):
     chronos_version: str = Field(..., min_length=1, description="mlx-chronos version used")
     timestamp: datetime = Field(..., description="Timestamp of the benchmark run")
@@ -188,6 +251,10 @@ class Meta(ChronosBaseModel):
         None,
         gt=0,
         description="Seconds between engine RSS and system RAM samples",
+    )
+    benchmark_protocol: Optional[BenchmarkProtocol] = Field(
+        None,
+        description="Prompt and token-bound metadata for reproducing the benchmark",
     )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 
@@ -290,6 +357,52 @@ EXAMPLE_RESULT = {
         "chronos_version": "0.1.1",
         "timestamp": "2026-05-23T15:08:36Z",
         "ram_sample_interval_seconds": 0.05,
+        "benchmark_protocol": {
+            "name": "baseline",
+            "version": "1",
+            "warmup": {
+                "prompts": [
+                    "Explain in detail how the attention mechanism works in transformer "
+                    "neural networks, including the role of queries, keys, and values."
+                ],
+                "requested_max_tokens": 30,
+                "requested_min_tokens": None,
+                "input_tokens": None,
+                "input_token_count_source": "unavailable",
+            },
+            "ttft_cold": {
+                "prompts": [
+                    "What is the capital of Australia?",
+                    "Explain what a transformer neural network is in one sentence.",
+                    "What does RAM stand for in computing?",
+                    "Describe the difference between a CPU and a GPU briefly.",
+                    "What is the boiling point of water in Celsius?",
+                ],
+                "requested_max_tokens": 1,
+                "requested_min_tokens": None,
+                "input_tokens": None,
+                "input_token_count_source": "unavailable",
+            },
+            "ttft_cached": {
+                "prompts": [
+                    "Explain the concept of unified memory in Apple Silicon in one sentence."
+                ],
+                "requested_max_tokens": 1,
+                "requested_min_tokens": None,
+                "input_tokens": None,
+                "input_token_count_source": "unavailable",
+            },
+            "throughput": {
+                "prompts": [
+                    "Explain in detail how the attention mechanism works in transformer "
+                    "neural networks, including the role of queries, keys, and values."
+                ],
+                "requested_max_tokens": 100,
+                "requested_min_tokens": None,
+                "input_tokens": None,
+                "input_token_count_source": "unavailable",
+            },
+        },
         "notes": "Test run"
     }
 }

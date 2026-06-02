@@ -4,9 +4,12 @@ from unittest.mock import MagicMock, patch
 from mlx_chronos.benchmark import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
     RAMTracker,
     SystemRAMTracker,
     THROUGHPUT_PROMPT,
+    TTFT_MAX_TOKENS,
+    WARMUP_MAX_TOKENS,
     compute_stats,
     run_benchmark,
 )
@@ -136,6 +139,14 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["metrics"]["system_ram_peak_gb"] == 6.0
     assert result["metrics"]["system_ram_peak_percent"] == 75.0
     assert result["trials"]["completion_tokens_raw"] == [100, 100]
+    protocol = result["meta"]["benchmark_protocol"]
+    assert protocol["name"] == "baseline"
+    assert protocol["ttft_cold"]["prompts"] == COLD_PROMPTS[:2]
+    assert protocol["ttft_cold"]["requested_max_tokens"] == TTFT_MAX_TOKENS
+    assert protocol["throughput"]["prompts"] == [THROUGHPUT_PROMPT]
+    assert protocol["throughput"]["requested_max_tokens"] == DEFAULT_THROUGHPUT_MAX_TOKENS
+    assert protocol["throughput"]["requested_min_tokens"] is None
+    assert protocol["throughput"]["input_token_count_source"] == "unavailable"
 
     ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]
     assert ttft_prompts == [
@@ -152,7 +163,16 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert [
         call.kwargs.get("max_tokens")
         for call in mock_engine.measure_tokens_per_second.call_args_list
-    ] == [30, 30, None, None]
+    ] == [
+        WARMUP_MAX_TOKENS,
+        WARMUP_MAX_TOKENS,
+        DEFAULT_THROUGHPUT_MAX_TOKENS,
+        DEFAULT_THROUGHPUT_MAX_TOKENS,
+    ]
+    assert [
+        call.kwargs.get("min_tokens")
+        for call in mock_engine.measure_tokens_per_second.call_args_list
+    ] == [None, None, None, None]
 
     for call in mock_engine.measure_ttft.call_args_list:
         assert call.kwargs["model"] == "org/test-model"
@@ -258,6 +278,101 @@ def test_run_benchmark_rejects_missing_token_count_source(mock_detect, mock_get_
 
 @patch("mlx_chronos.benchmark.get_engine")
 @patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_passes_throughput_token_bounds(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
+        mock_engine,
+        "last_token_count_source",
+        "usage.completion_tokens",
+    ) or setattr(mock_engine, "last_completion_tokens", 90) or 20.0
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        result = run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=1,
+            ram_sample_interval=0.01,
+            throughput_max_tokens=100,
+            throughput_min_tokens=80,
+        )
+
+    throughput_calls = mock_engine.measure_tokens_per_second.call_args_list[2:]
+    assert [call.kwargs["max_tokens"] for call in throughput_calls] == [100]
+    assert [call.kwargs["min_tokens"] for call in throughput_calls] == [80]
+    assert result["meta"]["benchmark_protocol"]["throughput"][
+        "requested_min_tokens"
+    ] == 80
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_rejects_usage_tokens_below_requested_min(
+    mock_detect,
+    mock_get_engine,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
+        mock_engine,
+        "last_token_count_source",
+        "usage.completion_tokens",
+    ) or setattr(mock_engine, "last_completion_tokens", 20) or 20.0
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        with pytest.raises(RuntimeError, match="below requested min_tokens"):
+            run_benchmark(
+                engine_name="omlx",
+                model_name="org/test-model",
+                model_quantization="4bit",
+                trials=1,
+                ram_sample_interval=0.01,
+                throughput_max_tokens=100,
+                throughput_min_tokens=80,
+            )
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
 def test_run_benchmark_uses_all_cold_prompts_at_max_trials(mock_detect, mock_get_engine):
     mock_detect.return_value = {
         "chip": "Apple M2",
@@ -306,4 +421,16 @@ def test_run_benchmark_rejects_empty_model_name():
             model_name="  ",
             model_quantization="4bit",
             trials=1,
+        )
+
+
+def test_run_benchmark_rejects_invalid_throughput_token_bounds():
+    with pytest.raises(ValueError, match="throughput_min_tokens"):
+        run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=1,
+            throughput_max_tokens=20,
+            throughput_min_tokens=30,
         )

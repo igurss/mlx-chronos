@@ -91,6 +91,10 @@ throughput token-count source. If your JSON says `"token_count_source":
 "word_fallback"` or `"mixed"`, keep it as a local result until the engine can
 return a real completion-token count.
 
+New result files include benchmark protocol metadata with the exact prompts and
+requested token bounds. Keep those fields unchanged when submitting results;
+they are used to make runs reproducible and easier to compare.
+
 ### Result File Format
 
 Results must follow the schema defined in `mlx_chronos/schema.py`.

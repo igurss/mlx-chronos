@@ -51,7 +51,9 @@ cached measurements.
 fixed prompt, identical across all engines and versions. When the engine
 returns `usage.completion_tokens`, mlx-Chronos records the generated token
 count for each throughput trial so readers can verify how many output tokens
-were used to compute tok/s.
+were used to compute tok/s. Throughput uses a fixed requested `max_tokens`
+value by default, and optional throughput token bounds can be requested with
+`--max-tokens` / `--min-tokens`.
 
 **System RAM peak** — continuously samples total Mac RAM usage from before
 warmup through the recorded benchmark phases and reports the observed peak in
@@ -70,6 +72,9 @@ and max. The default is 5 trials, with a maximum of 8 unique cold prompts.
 Results are saved as structured JSON in `results/local/` by default. Maintainers
 publish reviewed JSON files into `results/submitted/` after accepting them for
 the community leaderboard.
+New result JSON also records the benchmark protocol metadata, including exact
+prompt text and requested token bounds, so runs can be reproduced without
+digging through source code.
 
 ---
 
@@ -108,6 +113,9 @@ mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 
 # Run benchmark (JSON by default)
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
+
+# Optional: request throughput output token bounds
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --max-tokens 100 --min-tokens 80
 
 # Optional: write both JSON and Markdown outputs
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all

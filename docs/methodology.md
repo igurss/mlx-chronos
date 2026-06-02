@@ -61,6 +61,13 @@ are marked as `word_fallback` or `mixed` and are not considered comparable.
 New benchmark results also record `trials.completion_tokens_raw`, the generated
 completion-token count for each throughput trial.
 
+Throughput trials request a fixed `max_tokens` value, 100 by default. Users can
+override this with `--max-tokens`. An optional `--min-tokens` request can be
+sent to engines that support it; when `usage.completion_tokens` is available,
+mlx-Chronos checks that the recorded throughput output respects the requested
+range. If an engine ignores `min_tokens`, the run is not treated as comparable
+under that requested bound.
+
 ### System RAM Peak
 Total Mac RAM usage is sampled continuously from before warmup through the
 recorded benchmark phases, using the configured RAM sampling interval. The result
@@ -141,6 +148,12 @@ prompt when unrelated prompts are sent between cached trials.
 **Statistics:** mean, stddev, min, max are reported for each metric.
 p95 is intentionally omitted for small sample sizes (n=5) where it collapses
 to the observed maximum and adds no information.
+
+**Protocol metadata:** new results include `meta.benchmark_protocol`, which
+records the baseline protocol version, exact prompt text for warmup, cold TTFT,
+cached TTFT, and throughput, plus the requested min/max token bounds per phase.
+Input token counts are marked as `unavailable` until mlx-Chronos can obtain
+them from a tokenizer or engine response without adding unreliable estimates.
 
 ---
 

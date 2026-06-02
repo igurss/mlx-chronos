@@ -73,12 +73,21 @@ class BaseEngine(ABC):
         """Whether the engine uses OpenAI chat format."""
         return True
 
-    def build_payload(self, prompt: str, model: str, max_tokens: int, stream: bool) -> dict:
+    def build_payload(
+        self,
+        prompt: str,
+        model: str,
+        max_tokens: int,
+        stream: bool,
+        min_tokens: int | None = None,
+    ) -> dict:
         payload = {
             "model": self._request_model_name(model),
             "max_tokens": max_tokens,
             "stream": stream,
         }
+        if min_tokens is not None:
+            payload["min_tokens"] = min_tokens
         if self.uses_chat_api():
             payload["messages"] = [{"role": "user", "content": prompt}]
         else:
@@ -429,11 +438,23 @@ class BaseEngine(ABC):
             )
         )
 
-    def measure_tokens_per_second(self, prompt: str, model: str = "default", max_tokens: int = 100) -> float:
+    def measure_tokens_per_second(
+        self,
+        prompt: str,
+        model: str = "default",
+        max_tokens: int = 100,
+        min_tokens: int | None = None,
+    ) -> float:
         """Measure throughput."""
         self.last_token_count_source = None
         self.last_completion_tokens = None
-        payload = self.build_payload(prompt=prompt, model=model, max_tokens=max_tokens, stream=False)
+        payload = self.build_payload(
+            prompt=prompt,
+            model=model,
+            max_tokens=max_tokens,
+            min_tokens=min_tokens,
+            stream=False,
+        )
         start = time.perf_counter()
 
         url = f"{self.base_url()}{self.endpoint()}"

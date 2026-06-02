@@ -4,7 +4,11 @@ import logging
 import os
 
 from pathlib import Path
-from mlx_chronos.benchmark import DEFAULT_RAM_SAMPLE_INTERVAL, run_benchmark
+from mlx_chronos.benchmark import (
+    DEFAULT_RAM_SAMPLE_INTERVAL,
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
+    run_benchmark,
+)
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
@@ -30,6 +34,17 @@ def cmd_run(args):
     if args.ram_sample_interval <= 0:
         print("Error: --ram-sample-interval must be greater than 0.", file=sys.stderr)
         raise SystemExit(2)
+    max_tokens = getattr(args, "max_tokens", DEFAULT_THROUGHPUT_MAX_TOKENS)
+    min_tokens = getattr(args, "min_tokens", None)
+    if max_tokens < 1:
+        print("Error: --max-tokens must be at least 1.", file=sys.stderr)
+        raise SystemExit(2)
+    if min_tokens is not None and min_tokens < 1:
+        print("Error: --min-tokens must be at least 1.", file=sys.stderr)
+        raise SystemExit(2)
+    if min_tokens is not None and min_tokens > max_tokens:
+        print("Error: --min-tokens must be <= --max-tokens.", file=sys.stderr)
+        raise SystemExit(2)
     if not args.model.strip():
         print("Error: --model must not be empty.", file=sys.stderr)
         raise SystemExit(2)
@@ -41,6 +56,8 @@ def cmd_run(args):
             trials=args.trials,
             notes=args.notes,
             ram_sample_interval=args.ram_sample_interval,
+            throughput_max_tokens=max_tokens,
+            throughput_min_tokens=min_tokens,
         )
     except (RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -248,6 +265,24 @@ def main():
         help=(
             "Seconds between engine RSS and system RAM samples "
             f"(default: {DEFAULT_RAM_SAMPLE_INTERVAL})"
+        ),
+    )
+    run_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_THROUGHPUT_MAX_TOKENS,
+        help=(
+            "Requested max_tokens for throughput trials "
+            f"(default: {DEFAULT_THROUGHPUT_MAX_TOKENS})"
+        ),
+    )
+    run_parser.add_argument(
+        "--min-tokens",
+        type=int,
+        default=None,
+        help=(
+            "Optional requested min_tokens for throughput trials. "
+            "Use only with engines that support it."
         ),
     )
     run_parser.add_argument(

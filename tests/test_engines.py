@@ -81,6 +81,25 @@ def test_measure_tokens_per_second_marks_word_fallback(mock_post):
         assert engine.last_token_count_source == "word_fallback"
         assert engine.last_completion_tokens == 4
 
+@patch("httpx.post")
+def test_measure_tokens_per_second_includes_optional_min_tokens(mock_post):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"usage": {"completion_tokens": 100}}
+    mock_post.return_value = mock_response
+
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 1.0]):
+        engine.measure_tokens_per_second(
+            "test prompt",
+            "default",
+            max_tokens=100,
+            min_tokens=80,
+        )
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["max_tokens"] == 100
+    assert payload["min_tokens"] == 80
+
 @patch("httpx.post", side_effect=httpx.TimeoutException("timed out"))
 def test_measure_tokens_per_second_wraps_http_errors(mock_post):
     engine = OMLXEngine()

@@ -31,6 +31,48 @@ def test_cmd_run_invalid_model(capsys):
     assert exc.value.code == 2
     assert "Error: --model must not be empty." in capsys.readouterr().err
 
+def test_cmd_run_invalid_max_tokens(capsys):
+    args = Namespace(
+        trials=1,
+        ram_sample_interval=0.1,
+        max_tokens=0,
+        min_tokens=None,
+        model="test",
+        format="json",
+    )
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+    assert exc.value.code == 2
+    assert "Error: --max-tokens must be at least 1." in capsys.readouterr().err
+
+def test_cmd_run_invalid_min_tokens(capsys):
+    args = Namespace(
+        trials=1,
+        ram_sample_interval=0.1,
+        max_tokens=100,
+        min_tokens=0,
+        model="test",
+        format="json",
+    )
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+    assert exc.value.code == 2
+    assert "Error: --min-tokens must be at least 1." in capsys.readouterr().err
+
+def test_cmd_run_min_tokens_must_not_exceed_max_tokens(capsys):
+    args = Namespace(
+        trials=1,
+        ram_sample_interval=0.1,
+        max_tokens=50,
+        min_tokens=80,
+        model="test",
+        format="json",
+    )
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+    assert exc.value.code == 2
+    assert "Error: --min-tokens must be <= --max-tokens." in capsys.readouterr().err
+
 def test_cmd_validate_invalid_model(capsys):
     args = Namespace(engine="omlx", model="  ")
     with pytest.raises(SystemExit) as exc:
@@ -170,6 +212,8 @@ def test_cmd_run_format_all_calls_reporters():
         trials=1,
         notes=None,
         ram_sample_interval=0.1,
+        max_tokens=120,
+        min_tokens=80,
         format="all",
         output_dir=None,
     )
@@ -181,7 +225,16 @@ def test_cmd_run_format_all_calls_reporters():
 
         cmd_run(args)
 
-        mock_run.assert_called_once()
+        mock_run.assert_called_once_with(
+            engine_name="omlx",
+            model_name="Qwen3.5-4B-OptiQ-4bit",
+            model_quantization="4bit",
+            trials=1,
+            notes=None,
+            ram_sample_interval=0.1,
+            throughput_max_tokens=120,
+            throughput_min_tokens=80,
+        )
         mock_json.assert_called_once()
         mock_md.assert_called_once()
         expected_dir = Path.cwd() / "results" / "local"

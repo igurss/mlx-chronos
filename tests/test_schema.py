@@ -17,6 +17,13 @@ def test_valid_schema():
     assert result.metrics.system_ram_peak_gb == 7.22
     assert result.metrics.system_ram_peak_percent == 90.2
     assert result.trials.completion_tokens_raw == [100, 100, 100, 100, 100]
+    assert result.meta.benchmark_protocol is not None
+    assert result.meta.benchmark_protocol.name == "baseline"
+    assert result.meta.benchmark_protocol.throughput.requested_max_tokens == 100
+    assert (
+        result.meta.benchmark_protocol.throughput.input_token_count_source
+        == "unavailable"
+    )
 
 def test_invalid_engine_name():
     """Test that an unknown engine name raises a validation error."""
@@ -60,6 +67,44 @@ def test_completion_token_raw_is_optional_for_older_results():
 
     result = BenchmarkResult(**data)
     assert result.trials.completion_tokens_raw is None
+
+def test_benchmark_protocol_is_optional_for_older_results():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    del data["meta"]["benchmark_protocol"]
+
+    result = BenchmarkResult(**data)
+    assert result.meta.benchmark_protocol is None
+
+def test_benchmark_protocol_rejects_invalid_token_bounds():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["benchmark_protocol"] = {
+        **invalid_data["meta"]["benchmark_protocol"],
+        "throughput": {
+            **invalid_data["meta"]["benchmark_protocol"]["throughput"],
+            "requested_max_tokens": 50,
+            "requested_min_tokens": 80,
+        },
+    }
+
+    with pytest.raises(ValidationError, match="requested_min_tokens"):
+        BenchmarkResult(**invalid_data)
+
+def test_benchmark_protocol_rejects_unlabeled_input_tokens():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["benchmark_protocol"] = {
+        **invalid_data["meta"]["benchmark_protocol"],
+        "throughput": {
+            **invalid_data["meta"]["benchmark_protocol"]["throughput"],
+            "input_tokens": [20],
+            "input_token_count_source": "unavailable",
+        },
+    }
+
+    with pytest.raises(ValidationError, match="input_token_count_source"):
+        BenchmarkResult(**invalid_data)
 
 def test_raw_trial_values_must_be_non_negative():
     """Test that raw trial measurements cannot be negative."""

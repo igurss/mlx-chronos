@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Features
+- Add benchmark protocol metadata to new result JSON, including exact prompts,
+  requested token bounds, and input-token count source.
+- Add throughput `--max-tokens` and opt-in `--min-tokens` requests for more
+  explicit token-bound comparability.
+
+### Reliability
+- Validate usage-based throughput completion counts against requested token
+  bounds when those bounds are available.
+
 ## [0.1.1] — 2026-06-01
 
 Patch release focused on safer community submissions, clearer leaderboard
