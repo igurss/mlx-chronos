@@ -15,6 +15,24 @@ from mlx_chronos.benchmark import (
 )
 from mlx_chronos.constants import MAX_TRIALS
 from mlx_chronos.detect import BenchmarkConditionWarning
+from mlx_chronos.measurements import ThroughputMeasurement
+
+
+def throughput_measurement(
+    tps: float = 20.0,
+    tokens: int = 100,
+    source: str = "usage.completion_tokens",
+    elapsed: float = 5.0,
+    decode_tps: float | None = None,
+) -> ThroughputMeasurement:
+    return ThroughputMeasurement(
+        request_tokens_per_second=tps,
+        completion_tokens=tokens,
+        token_count_source=source,
+        elapsed_seconds=elapsed,
+        decode_tokens_per_second=decode_tps,
+        decode_timing_source="engine_response" if decode_tps is not None else "unavailable",
+    )
 
 def test_compute_stats_normal():
     values = [10.0, 12.0, 14.0, 16.0, 18.0]
@@ -43,6 +61,10 @@ def test_compute_stats_rounding():
     assert stats["min"] == pytest.approx(10.123, abs=0.001)
     assert stats["max"] == pytest.approx(10.568, abs=0.001)
 
+def test_compute_stats_adds_p95_for_large_samples():
+    stats = compute_stats([float(value) for value in range(1, 21)])
+    assert stats["p95"] == 19.0
+
 def test_cold_prompt_count_matches_max_trials():
     assert len(COLD_PROMPTS) == MAX_TRIALS
 
@@ -56,7 +78,7 @@ def test_run_benchmark_rejects_trials_above_max():
         )
 
 def test_ram_tracker():
-    with patch("mlx_chronos.benchmark.psutil.Process") as mock_process_cls:
+    with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls:
         mock_process = MagicMock()
         mem_info = MagicMock()
         mem_info.rss = 1024 ** 3
@@ -70,7 +92,7 @@ def test_ram_tracker():
     assert tracker.peak_ram_bytes == 1024 ** 3
 
 def test_system_ram_tracker():
-    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         mem_info = MagicMock()
         mem_info.total = 8 * (1024 ** 3)
         mem_info.available = 2 * (1024 ** 3)
@@ -98,17 +120,18 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     mock_engine = MagicMock()
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.return_value = 0.5
-    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
-        mock_engine,
-        "last_token_count_source",
-        "usage.completion_tokens",
-    ) or setattr(mock_engine, "last_completion_tokens", 100) or 20.0
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tps=20.0,
+        tokens=100,
+        elapsed=5.0,
+    )
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = 12345
     mock_get_engine.return_value = mock_engine
     
-    with patch("mlx_chronos.benchmark.psutil.Process") as mock_process_cls, \
-         patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+    with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls, \
+         patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         mock_process = MagicMock()
         mem_info = MagicMock()
         mem_info.rss = int(1.5 * (1024 ** 3))
@@ -133,12 +156,17 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["engine"]["version"] == "1.0.0"
     assert result["model"]["name"] == "org/test-model"
     assert result["metrics"]["tokens_per_second"]["mean"] == 20.0
+    assert "p95" not in result["metrics"]["tokens_per_second"]
+    assert result["metrics"]["request_tokens_per_second"]["mean"] == 20.0
+    assert result["metrics"]["decode_tokens_per_second"] is None
+    assert result["metrics"]["decode_timing_source"] == "unavailable"
     assert result["metrics"]["ttft_cold"]["mean"] == 0.5
     assert result["metrics"]["token_count_source"] == "usage.completion_tokens"
     assert result["metrics"]["ram_measurement_method"] == "process_rss"
     assert result["metrics"]["system_ram_peak_gb"] == 6.0
     assert result["metrics"]["system_ram_peak_percent"] == 75.0
     assert result["trials"]["completion_tokens_raw"] == [100, 100]
+    assert result["trials"]["throughput_elapsed_seconds_raw"] == [5.0, 5.0]
     protocol = result["meta"]["benchmark_protocol"]
     assert protocol["name"] == "baseline"
     assert protocol["ttft_cold"]["prompts"] == COLD_PROMPTS[:2]
@@ -156,27 +184,36 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         CACHED_TTFT_PROMPT,
         CACHED_TTFT_PROMPT,
     ]
-    tps_prompts = [
+    warmup_prompts = [
         call.args[0] for call in mock_engine.measure_tokens_per_second.call_args_list
     ]
-    assert tps_prompts == [THROUGHPUT_PROMPT] * 4
+    assert warmup_prompts == [THROUGHPUT_PROMPT] * 2
+    throughput_prompts = [
+        call.args[0] for call in mock_engine.measure_throughput.call_args_list
+    ]
+    assert throughput_prompts == [THROUGHPUT_PROMPT] * 2
     assert [
         call.kwargs.get("max_tokens")
         for call in mock_engine.measure_tokens_per_second.call_args_list
-    ] == [
-        WARMUP_MAX_TOKENS,
-        WARMUP_MAX_TOKENS,
-        DEFAULT_THROUGHPUT_MAX_TOKENS,
-        DEFAULT_THROUGHPUT_MAX_TOKENS,
-    ]
+    ] == [WARMUP_MAX_TOKENS, WARMUP_MAX_TOKENS]
+    assert [
+        call.kwargs.get("max_tokens")
+        for call in mock_engine.measure_throughput.call_args_list
+    ] == [DEFAULT_THROUGHPUT_MAX_TOKENS, DEFAULT_THROUGHPUT_MAX_TOKENS]
     assert [
         call.kwargs.get("min_tokens")
         for call in mock_engine.measure_tokens_per_second.call_args_list
-    ] == [None, None, None, None]
+    ] == [None, None]
+    assert [
+        call.kwargs.get("min_tokens")
+        for call in mock_engine.measure_throughput.call_args_list
+    ] == [None, None]
 
     for call in mock_engine.measure_ttft.call_args_list:
         assert call.kwargs["model"] == "org/test-model"
     for call in mock_engine.measure_tokens_per_second.call_args_list:
+        assert call.kwargs["model"] == "org/test-model"
+    for call in mock_engine.measure_throughput.call_args_list:
         assert call.kwargs["model"] == "org/test-model"
 
 
@@ -210,18 +247,15 @@ def test_run_benchmark_emits_condition_warnings(
     mock_engine.is_installed.return_value = True
     mock_engine.is_server_running.return_value = True
     mock_engine.measure_ttft.return_value = 0.5
-    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
-        mock_engine,
-        "last_token_count_source",
-        "usage.completion_tokens",
-    ) or setattr(mock_engine, "last_completion_tokens", 100) or 20.0
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement()
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = None
     mock_get_engine.return_value = mock_engine
 
     caplog.set_level(logging.WARNING, logger="mlx_chronos")
 
-    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         system_mem_info = MagicMock()
         system_mem_info.total = 8 * (1024 ** 3)
         system_mem_info.available = 2 * (1024 ** 3)
@@ -256,11 +290,14 @@ def test_run_benchmark_rejects_missing_token_count_source(mock_detect, mock_get_
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.return_value = 0.5
     mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        source="invalid",
+    )
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = None
     mock_get_engine.return_value = mock_engine
 
-    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         system_mem_info = MagicMock()
         system_mem_info.total = 8 * (1024 ** 3)
         system_mem_info.available = 2 * (1024 ** 3)
@@ -292,16 +329,16 @@ def test_run_benchmark_passes_throughput_token_bounds(mock_detect, mock_get_engi
     mock_engine = MagicMock()
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.return_value = 0.5
-    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
-        mock_engine,
-        "last_token_count_source",
-        "usage.completion_tokens",
-    ) or setattr(mock_engine, "last_completion_tokens", 90) or 20.0
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tps=20.0,
+        tokens=90,
+    )
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = None
     mock_get_engine.return_value = mock_engine
 
-    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         system_mem_info = MagicMock()
         system_mem_info.total = 8 * (1024 ** 3)
         system_mem_info.available = 2 * (1024 ** 3)
@@ -317,12 +354,61 @@ def test_run_benchmark_passes_throughput_token_bounds(mock_detect, mock_get_engi
             throughput_min_tokens=80,
         )
 
-    throughput_calls = mock_engine.measure_tokens_per_second.call_args_list[2:]
+    throughput_calls = mock_engine.measure_throughput.call_args_list
     assert [call.kwargs["max_tokens"] for call in throughput_calls] == [100]
     assert [call.kwargs["min_tokens"] for call in throughput_calls] == [80]
     assert result["meta"]["benchmark_protocol"]["throughput"][
         "requested_min_tokens"
     ] == 80
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_records_decode_throughput_when_available(
+    mock_detect,
+    mock_get_engine,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tps=18.0,
+        tokens=100,
+        elapsed=5.5,
+        decode_tps=21.0,
+    )
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        result = run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=2,
+            ram_sample_interval=0.01,
+        )
+
+    assert result["metrics"]["decode_tokens_per_second"]["mean"] == 21.0
+    assert result["metrics"]["decode_timing_source"] == "engine_response"
+    assert result["trials"]["decode_tokens_per_second_raw"] == [21.0, 21.0]
 
 
 @patch("mlx_chronos.benchmark.get_engine")
@@ -344,16 +430,16 @@ def test_run_benchmark_rejects_usage_tokens_below_requested_min(
     mock_engine = MagicMock()
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.return_value = 0.5
-    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
-        mock_engine,
-        "last_token_count_source",
-        "usage.completion_tokens",
-    ) or setattr(mock_engine, "last_completion_tokens", 20) or 20.0
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tps=20.0,
+        tokens=20,
+    )
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = None
     mock_get_engine.return_value = mock_engine
 
-    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         system_mem_info = MagicMock()
         system_mem_info.total = 8 * (1024 ** 3)
         system_mem_info.available = 2 * (1024 ** 3)
@@ -387,16 +473,13 @@ def test_run_benchmark_uses_all_cold_prompts_at_max_trials(mock_detect, mock_get
     mock_engine = MagicMock()
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.return_value = 0.5
-    mock_engine.measure_tokens_per_second.side_effect = lambda *args, **kwargs: setattr(
-        mock_engine,
-        "last_token_count_source",
-        "usage.completion_tokens",
-    ) or setattr(mock_engine, "last_completion_tokens", 100) or 20.0
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement()
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = None
     mock_get_engine.return_value = mock_engine
 
-    with patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         system_mem_info = MagicMock()
         system_mem_info.total = 8 * (1024 ** 3)
         system_mem_info.available = 2 * (1024 ** 3)

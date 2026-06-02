@@ -21,6 +21,7 @@ from mlx_chronos.submit import (
     load_publishable_result,
     submit_result_file,
 )
+from mlx_chronos.constants import MAX_TRIALS
 
 
 logger = logging.getLogger("mlx_chronos")
@@ -30,6 +31,9 @@ def cmd_run(args):
     """Run a benchmark session."""
     if args.trials < 1:
         print("Error: --trials must be at least 1.", file=sys.stderr)
+        raise SystemExit(2)
+    if args.trials > MAX_TRIALS:
+        print(f"Error: --trials must be <= {MAX_TRIALS}.", file=sys.stderr)
         raise SystemExit(2)
     if args.ram_sample_interval <= 0:
         print("Error: --ram-sample-interval must be greater than 0.", file=sys.stderr)
@@ -251,7 +255,7 @@ def main():
         "--trials",
         type=int,
         default=5,
-        help="Number of trials per metric (default: 5, min: 1)",
+        help=f"Number of trials per metric (default: 5, min: 1, max: {MAX_TRIALS})",
     )
     run_parser.add_argument(
         "--notes",

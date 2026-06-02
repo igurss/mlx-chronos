@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 from argparse import Namespace
 from mlx_chronos.cli import cmd_run, cmd_submit, cmd_validate, main
+from mlx_chronos.constants import MAX_TRIALS
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.schema import EXAMPLE_RESULT
 
@@ -16,6 +17,13 @@ def test_cmd_run_invalid_trials(capsys):
         cmd_run(args)
     assert exc.value.code == 2
     assert "Error: --trials must be at least 1." in capsys.readouterr().err
+
+def test_cmd_run_trials_above_max(capsys):
+    args = Namespace(trials=MAX_TRIALS + 1, ram_sample_interval=0.1, format="json")
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+    assert exc.value.code == 2
+    assert f"Error: --trials must be <= {MAX_TRIALS}." in capsys.readouterr().err
 
 def test_cmd_run_invalid_ram_interval(capsys):
     args = Namespace(trials=1, ram_sample_interval=0, format="json")

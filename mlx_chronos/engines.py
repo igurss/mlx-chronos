@@ -18,6 +18,11 @@ from mlx_chronos.constants import (
     TOKEN_COUNT_SOURCE_USAGE,
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
 )
+from mlx_chronos.measurements import (
+    DECODE_TIMING_ENGINE_RESPONSE,
+    DECODE_TIMING_UNAVAILABLE,
+    ThroughputMeasurement,
+)
 
 logger = logging.getLogger("mlx_chronos")
 
@@ -438,14 +443,39 @@ class BaseEngine(ABC):
             )
         )
 
-    def measure_tokens_per_second(
+    def _extract_completion_text(self, data: dict) -> str:
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            choice = choices[0]
+            message = choice.get("message", {})
+            if not isinstance(message, dict):
+                message = {}
+            text = choice.get("text") or message.get("content", "")
+            return text if isinstance(text, str) else ""
+        return ""
+
+    def _extract_decode_timing(self, data: dict) -> tuple[float | None, str]:
+        eval_count = data.get("eval_count")
+        eval_duration = data.get("eval_duration")
+        if (
+            isinstance(eval_count, (int, float))
+            and eval_count > 0
+            and isinstance(eval_duration, (int, float))
+            and eval_duration > 0
+        ):
+            return round(eval_count / (eval_duration / 1_000_000_000), 2), (
+                DECODE_TIMING_ENGINE_RESPONSE
+            )
+        return None, DECODE_TIMING_UNAVAILABLE
+
+    def measure_throughput(
         self,
         prompt: str,
         model: str = "default",
         max_tokens: int = 100,
         min_tokens: int | None = None,
-    ) -> float:
-        """Measure throughput."""
+    ) -> ThroughputMeasurement:
+        """Measure total request throughput and decode throughput when exposed."""
         self.last_token_count_source = None
         self.last_completion_tokens = None
         payload = self.build_payload(
@@ -475,8 +505,6 @@ class BaseEngine(ABC):
             ) from exc
 
         elapsed = time.perf_counter() - start
-        if elapsed <= 0:
-            return 0.0
 
         try:
             data = r.json()
@@ -505,22 +533,39 @@ class BaseEngine(ABC):
         tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
 
         if isinstance(tokens, (int, float)) and tokens > 0:
-            self.last_completion_tokens = int(tokens)
-            self.last_token_count_source = TOKEN_COUNT_SOURCE_USAGE
+            completion_tokens = int(tokens)
+            token_count_source = TOKEN_COUNT_SOURCE_USAGE
         else:
-            text = ""
-            choices = data.get("choices")
-            if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-                choice = choices[0]
-                message = choice.get("message", {})
-                if not isinstance(message, dict):
-                    message = {}
-                text = choice.get("text") or message.get("content", "")
-            tokens = max(1, len(text.split()))
-            self.last_completion_tokens = int(tokens)
-            self.last_token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
+            completion_tokens = max(1, len(self._extract_completion_text(data).split()))
+            token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
-        return round(tokens / elapsed, 2)
+        self.last_completion_tokens = completion_tokens
+        self.last_token_count_source = token_count_source
+        request_tps = 0.0 if elapsed <= 0 else round(completion_tokens / elapsed, 2)
+        decode_tps, decode_source = self._extract_decode_timing(data)
+        return ThroughputMeasurement(
+            request_tokens_per_second=request_tps,
+            completion_tokens=completion_tokens,
+            token_count_source=token_count_source,
+            elapsed_seconds=round(max(elapsed, 0.0), 3),
+            decode_tokens_per_second=decode_tps,
+            decode_timing_source=decode_source,
+        )
+
+    def measure_tokens_per_second(
+        self,
+        prompt: str,
+        model: str = "default",
+        max_tokens: int = 100,
+        min_tokens: int | None = None,
+    ) -> float:
+        """Measure client-observed total request throughput."""
+        return self.measure_throughput(
+            prompt=prompt,
+            model=model,
+            max_tokens=max_tokens,
+            min_tokens=min_tokens,
+        ).request_tokens_per_second
 
     @abstractmethod
     def is_installed(self) -> bool:

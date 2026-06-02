@@ -2,6 +2,7 @@ from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
+from mlx_chronos.constants import MAX_TRIALS, P95_MIN_TRIALS
 from mlx_chronos.schema import BenchmarkResult, EXAMPLE_RESULT, TrialStats
 
 def test_valid_schema():
@@ -9,6 +10,9 @@ def test_valid_schema():
     result = BenchmarkResult(**EXAMPLE_RESULT)
     assert result.engine.name == "omlx"
     assert result.metrics.tokens_per_second.mean == 18.44
+    assert result.metrics.request_tokens_per_second.mean == 18.44
+    assert result.metrics.decode_tokens_per_second is None
+    assert result.metrics.decode_timing_source == "unavailable"
     assert isinstance(result.meta.timestamp, datetime)
     assert result.meta.ram_sample_interval_seconds == 0.05
     assert result.hardware.architecture == "arm64"
@@ -17,6 +21,13 @@ def test_valid_schema():
     assert result.metrics.system_ram_peak_gb == 7.22
     assert result.metrics.system_ram_peak_percent == 90.2
     assert result.trials.completion_tokens_raw == [100, 100, 100, 100, 100]
+    assert result.trials.throughput_elapsed_seconds_raw == [
+        5.411,
+        5.473,
+        5.402,
+        5.411,
+        5.417,
+    ]
     assert result.meta.benchmark_protocol is not None
     assert result.meta.benchmark_protocol.name == "baseline"
     assert result.meta.benchmark_protocol.throughput.requested_max_tokens == 100
@@ -67,6 +78,21 @@ def test_completion_token_raw_is_optional_for_older_results():
 
     result = BenchmarkResult(**data)
     assert result.trials.completion_tokens_raw is None
+
+def test_new_throughput_raw_fields_are_optional_for_older_results():
+    data = EXAMPLE_RESULT.copy()
+    data["trials"] = data["trials"].copy()
+    del data["trials"]["throughput_elapsed_seconds_raw"]
+    del data["trials"]["decode_tokens_per_second_raw"]
+    data["metrics"] = data["metrics"].copy()
+    del data["metrics"]["request_tokens_per_second"]
+    del data["metrics"]["decode_tokens_per_second"]
+    del data["metrics"]["decode_timing_source"]
+
+    result = BenchmarkResult(**data)
+    assert result.trials.throughput_elapsed_seconds_raw is None
+    assert result.metrics.request_tokens_per_second is None
+    assert result.metrics.decode_timing_source == "unavailable"
 
 def test_benchmark_protocol_is_optional_for_older_results():
     data = EXAMPLE_RESULT.copy()
@@ -143,6 +169,38 @@ def test_summary_stats_must_match_raw_trials():
     with pytest.raises(ValidationError, match="metrics.ttft_cold.mean"):
         BenchmarkResult(**invalid_data)
 
+def test_p95_is_required_for_large_trial_sets():
+    data = EXAMPLE_RESULT.copy()
+    data["trials"] = data["trials"].copy()
+    data["metrics"] = data["metrics"].copy()
+    raw_values = [float(value) for value in range(1, P95_MIN_TRIALS + 1)]
+    data["trials"]["count"] = P95_MIN_TRIALS
+    data["trials"]["ttft_cold_raw"] = raw_values
+    data["trials"]["ttft_cached_raw"] = raw_values
+    data["trials"]["tokens_per_second_raw"] = raw_values
+    data["trials"]["completion_tokens_raw"] = [100] * P95_MIN_TRIALS
+    data["trials"]["throughput_elapsed_seconds_raw"] = [5.0] * P95_MIN_TRIALS
+    data["metrics"]["ttft_cold"] = {
+        "mean": 10.5,
+        "stddev": 5.916,
+        "min": 1.0,
+        "max": 20.0,
+    }
+
+    with pytest.raises(ValidationError, match="p95"):
+        BenchmarkResult(**data)
+
+def test_p95_is_rejected_for_small_trial_sets():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["metrics"] = invalid_data["metrics"].copy()
+    invalid_data["metrics"]["tokens_per_second"] = {
+        **invalid_data["metrics"]["tokens_per_second"],
+        "p95": 18.51,
+    }
+
+    with pytest.raises(ValidationError, match="p95 must be omitted"):
+        BenchmarkResult(**invalid_data)
+
 def test_timestamp_must_be_timezone_aware():
     invalid_data = EXAMPLE_RESULT.copy()
     invalid_data["meta"] = invalid_data["meta"].copy()
@@ -186,10 +244,10 @@ def test_empty_model_name_is_rejected():
 def test_trial_count_has_maximum():
     invalid_data = EXAMPLE_RESULT.copy()
     invalid_data["trials"] = invalid_data["trials"].copy()
-    invalid_data["trials"]["count"] = 9
-    invalid_data["trials"]["ttft_cold_raw"] = [0.1] * 9
-    invalid_data["trials"]["ttft_cached_raw"] = [0.1] * 9
-    invalid_data["trials"]["tokens_per_second_raw"] = [10.0] * 9
+    invalid_data["trials"]["count"] = MAX_TRIALS + 1
+    invalid_data["trials"]["ttft_cold_raw"] = [0.1] * (MAX_TRIALS + 1)
+    invalid_data["trials"]["ttft_cached_raw"] = [0.1] * (MAX_TRIALS + 1)
+    invalid_data["trials"]["tokens_per_second_raw"] = [10.0] * (MAX_TRIALS + 1)
 
     with pytest.raises(ValidationError):
         BenchmarkResult(**invalid_data)

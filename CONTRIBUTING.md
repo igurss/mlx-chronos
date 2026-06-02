@@ -95,6 +95,10 @@ New result files include benchmark protocol metadata with the exact prompts and
 requested token bounds. Keep those fields unchanged when submitting results;
 they are used to make runs reproducible and easier to compare.
 
+New results also distinguish request throughput from decode throughput. Do not
+edit `tokens_per_second`, `request_tokens_per_second`,
+`decode_tokens_per_second`, or the raw trial arrays by hand.
+
 ### Result File Format
 
 Results must follow the schema defined in `mlx_chronos/schema.py`.

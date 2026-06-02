@@ -47,11 +47,17 @@ The cached metric is intentionally named `ttft_cached` in the v0.1 JSON schema.
 It means "fixed prompt after one priming request"; it does not guarantee that
 all engines implement identical KV-cache or prefix-cache behavior.
 
-### Throughput (tok/s)
-Tokens generated per second, measured using a fixed standard prompt defined
-in the project. The prompt is identical across all engines and all versions
-of mlx-Chronos to ensure comparability. Do not change this prompt without
-bumping `chronos_version`.
+### Request Throughput (tok/s)
+Completion tokens divided by the full client-observed request time, measured
+using a fixed standard prompt defined in the project. The prompt is identical
+across all engines and all versions of mlx-Chronos to ensure comparability. Do
+not change this prompt without bumping `chronos_version`.
+
+This metric includes HTTP/client overhead, prompt prefill, and decode. It should
+be read as end-to-end request throughput, not pure decode speed. The legacy JSON
+field remains `metrics.tokens_per_second` for compatibility; new results also
+mirror it as `metrics.request_tokens_per_second` and record per-trial elapsed
+request times in `trials.throughput_elapsed_seconds_raw`.
 
 Non-streaming mode is used (`stream: false`) so the total token count can come
 from the API response's `usage.completion_tokens` field. The result records
@@ -60,6 +66,12 @@ from the API response's `usage.completion_tokens` field. The result records
 are marked as `word_fallback` or `mixed` and are not considered comparable.
 New benchmark results also record `trials.completion_tokens_raw`, the generated
 completion-token count for each throughput trial.
+
+When an engine response exposes reliable decode timing, mlx-Chronos records
+`metrics.decode_tokens_per_second`, `metrics.decode_timing_source`, and
+`trials.decode_tokens_per_second_raw`. If no such timing exists, decode
+throughput is left unavailable rather than estimated from unrelated TTFT
+measurements.
 
 Throughput trials request a fixed `max_tokens` value, 100 by default. Users can
 override this with `--max-tokens`. An optional `--min-tokens` request can be
@@ -130,7 +142,7 @@ chips and models.
 
 | Parameter | Value |
 |-----------|-------|
-| Trials per metric | 5 (default) |
+| Trials per metric | 5 (default), 30 max |
 | Warmup calls | 2 (not recorded, throughput prompt) |
 | Cache priming | 1 call after cold TTFT and before cached TTFT (not recorded) |
 | Max tokens — TTFT | 1 |
@@ -145,9 +157,10 @@ throughput trials. The phases are intentionally not interleaved, because some
 local engines keep only one active KV/prefix cache and can lose the cached
 prompt when unrelated prompts are sent between cached trials.
 
-**Statistics:** mean, stddev, min, max are reported for each metric.
-p95 is intentionally omitted for small sample sizes (n=5) where it collapses
-to the observed maximum and adds no information.
+**Statistics:** mean, stddev, min, max are reported for each metric. p95 is
+reported only when at least 20 trials are available; it is intentionally omitted
+for small sample sizes where it collapses toward the observed maximum and adds
+little information.
 
 **Protocol metadata:** new results include `meta.benchmark_protocol`, which
 records the baseline protocol version, exact prompt text for warmup, cold TTFT,
@@ -173,7 +186,8 @@ To reproduce a result:
 2. Use the same model name and quantization
 3. Run on the same hardware (chip + memory)
 4. Ensure no other GPU-intensive processes are running
-5. Run `mlx-chronos run` with default trial count (5)
+5. Run `mlx-chronos run` with default trial count (5), or use the same explicit
+   trial count when comparing larger runs
 6. Check the JSON with `mlx-chronos submit --file results/local/your-result.json --dry-run`
 7. Submit only results whose throughput token source is `usage.completion_tokens`
 

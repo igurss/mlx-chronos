@@ -1,6 +1,7 @@
 """Shared constants for benchmark result contracts."""
 
-MAX_TRIALS = 8
+MAX_TRIALS = 30
+P95_MIN_TRIALS = 20
 
 ENGINE_NAME_OMLX = "omlx"
 ENGINE_NAME_RAPID_MLX = "rapid-mlx"

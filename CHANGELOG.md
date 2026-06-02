@@ -7,10 +7,18 @@
   requested token bounds, and input-token count source.
 - Add throughput `--max-tokens` and opt-in `--min-tokens` requests for more
   explicit token-bound comparability.
+- Clarify throughput as client-observed request throughput and add optional
+  engine-reported decode throughput when reliable timing is available.
+- Expand the fixed cold-prompt pool to 30 prompts and add p95 reporting only
+  for runs with at least 20 trials.
 
 ### Reliability
 - Validate usage-based throughput completion counts against requested token
   bounds when those bounds are available.
+- Replace mutable engine scratch-state reads during benchmark throughput trials
+  with structured `ThroughputMeasurement` results.
+- Split benchmark support code for protocol metadata, statistics, and RAM
+  trackers into focused modules.
 
 ## [0.1.1] — 2026-06-01
 

@@ -1,4 +1,5 @@
 from datetime import datetime
+import math
 import statistics
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
@@ -7,8 +8,13 @@ from typing import Optional, Annotated, Literal
 from mlx_chronos.constants import (
     VALID_ENGINE_NAMES,
     MAX_TRIALS,
+    P95_MIN_TRIALS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
+)
+from mlx_chronos.measurements import (
+    DECODE_TIMING_ENGINE_RESPONSE,
+    DECODE_TIMING_UNAVAILABLE,
 )
 
 
@@ -30,6 +36,10 @@ InputTokenCountSource = Literal[
     "estimated",
     "tokenizer",
     "engine",
+]
+DecodeTimingSource = Literal[
+    "unavailable",
+    "engine_response",
 ]
 
 
@@ -101,6 +111,10 @@ class TrialStats(ChronosBaseModel):
     stddev: NonNegativeFloat = Field(..., description="Standard deviation across trials")
     min: NonNegativeFloat = Field(..., description="Minimum observed value")
     max: NonNegativeFloat = Field(..., description="Maximum observed value")
+    p95: Optional[NonNegativeFloat] = Field(
+        None,
+        description=f"Nearest-rank p95 when at least {P95_MIN_TRIALS} trials are available",
+    )
 
     @model_validator(mode="after")
     def validate_range(self):
@@ -110,13 +124,36 @@ class TrialStats(ChronosBaseModel):
             raise ValueError("mean must be between min and max")
         if self.min == self.max and self.stddev != 0:
             raise ValueError("stddev must be 0 when min and max are equal")
+        if self.p95 is not None and not self.min <= self.p95 <= self.max:
+            raise ValueError("p95 must be between min and max")
         return self
 
 
 class Metrics(ChronosBaseModel):
     ttft_cold: TrialStats = Field(..., description="Time to first token, cold (seconds)")
     ttft_cached: TrialStats = Field(..., description="Time to first token, cached (seconds)")
-    tokens_per_second: TrialStats = Field(..., description="Generation throughput (tok/s)")
+    tokens_per_second: TrialStats = Field(
+        ...,
+        description=(
+            "Legacy throughput field: client-observed total request throughput (tok/s), "
+            "including request overhead, prefill, and decode"
+        ),
+    )
+    request_tokens_per_second: Optional[TrialStats] = Field(
+        None,
+        description=(
+            "Client-observed total request throughput (tok/s), including request "
+            "overhead, prefill, and decode. New results mirror tokens_per_second here."
+        ),
+    )
+    decode_tokens_per_second: Optional[TrialStats] = Field(
+        None,
+        description="Decode-only throughput (tok/s) when reliable engine timing is available",
+    )
+    decode_timing_source: DecodeTimingSource = Field(
+        DECODE_TIMING_UNAVAILABLE,
+        description="Source used for decode-only throughput timing",
+    )
     ram_peak_gb: NonNegativeFloat = Field(
         ...,
         description=(
@@ -154,6 +191,15 @@ class Metrics(ChronosBaseModel):
         )
         if self.ram_measurement_method != expected:
             raise ValueError("ram_measurement_method must match ram_is_process_rss")
+        if self.decode_tokens_per_second is None:
+            if self.decode_timing_source != DECODE_TIMING_UNAVAILABLE:
+                raise ValueError(
+                    "decode_timing_source must be unavailable when decode throughput is missing"
+                )
+        elif self.decode_timing_source != DECODE_TIMING_ENGINE_RESPONSE:
+            raise ValueError(
+                "decode_timing_source must describe provided decode throughput"
+            )
         return self
 
 
@@ -162,6 +208,14 @@ class Trials(ChronosBaseModel):
     ttft_cold_raw: list[NonNegativeFloat] = Field(..., description="Raw cold TTFT values per trial")
     ttft_cached_raw: list[NonNegativeFloat] = Field(..., description="Raw cached TTFT values per trial")
     tokens_per_second_raw: list[NonNegativeFloat] = Field(..., description="Raw tok/s values per trial")
+    throughput_elapsed_seconds_raw: Optional[list[NonNegativeFloat]] = Field(
+        None,
+        description="Client-observed elapsed seconds for each throughput request",
+    )
+    decode_tokens_per_second_raw: Optional[list[NonNegativeFloat]] = Field(
+        None,
+        description="Raw decode-only tok/s values per throughput trial when available",
+    )
     completion_tokens_raw: Optional[list[NonNegativeInt]] = Field(
         None,
         description=(
@@ -177,6 +231,10 @@ class Trials(ChronosBaseModel):
             self.ttft_cached_raw,
             self.tokens_per_second_raw,
         ]
+        if self.throughput_elapsed_seconds_raw is not None:
+            raw_lists.append(self.throughput_elapsed_seconds_raw)
+        if self.decode_tokens_per_second_raw is not None:
+            raw_lists.append(self.decode_tokens_per_second_raw)
         if self.completion_tokens_raw is not None:
             raw_lists.append(self.completion_tokens_raw)
         lengths = {
@@ -291,6 +349,27 @@ class BenchmarkResult(ChronosBaseModel):
             self.trials.tokens_per_second_raw,
             "metrics.tokens_per_second",
         )
+        if self.metrics.request_tokens_per_second is not None:
+            self._assert_stats_match_raw(
+                self.metrics.request_tokens_per_second,
+                self.trials.tokens_per_second_raw,
+                "metrics.request_tokens_per_second",
+            )
+        if self.trials.decode_tokens_per_second_raw is None:
+            if self.metrics.decode_tokens_per_second is not None:
+                raise ValueError(
+                    "metrics.decode_tokens_per_second requires raw decode trials"
+                )
+        else:
+            if self.metrics.decode_tokens_per_second is None:
+                raise ValueError(
+                    "metrics.decode_tokens_per_second is required when raw decode trials exist"
+                )
+            self._assert_stats_match_raw(
+                self.metrics.decode_tokens_per_second,
+                self.trials.decode_tokens_per_second_raw,
+                "metrics.decode_tokens_per_second",
+            )
         return self
 
     @staticmethod
@@ -301,12 +380,25 @@ class BenchmarkResult(ChronosBaseModel):
             "min": round(min(raw_values), 3),
             "max": round(max(raw_values), 3),
         }
+        if len(raw_values) >= P95_MIN_TRIALS:
+            sorted_values = sorted(raw_values)
+            # Nearest-rank p95, matching mlx_chronos.stats.compute_stats.
+            index = math.ceil(0.95 * len(sorted_values)) - 1
+            expected["p95"] = round(sorted_values[index], 3)
         actual = {
             "mean": stats.mean,
             "stddev": stats.stddev,
             "min": stats.min,
             "max": stats.max,
         }
+        if stats.p95 is not None:
+            actual["p95"] = stats.p95
+        elif "p95" in expected:
+            raise ValueError(f"{label}.p95 must be present for {len(raw_values)} trials")
+        if len(raw_values) < P95_MIN_TRIALS and stats.p95 is not None:
+            raise ValueError(
+                f"{label}.p95 must be omitted for fewer than {P95_MIN_TRIALS} trials"
+            )
         tolerance = 0.001
         for key, expected_value in expected.items():
             if abs(actual[key] - expected_value) > tolerance:
@@ -314,6 +406,14 @@ class BenchmarkResult(ChronosBaseModel):
                     f"{label}.{key} must match raw trials "
                     f"(expected {expected_value}, got {actual[key]})"
                 )
+
+
+def dump_benchmark_result(result: BenchmarkResult) -> dict:
+    data = result.model_dump(mode="json")
+    for stats in data.get("metrics", {}).values():
+        if isinstance(stats, dict) and stats.get("p95") is None:
+            stats.pop("p95", None)
+    return data
 
 
 # Example valid result — used in tests and documentation
@@ -339,6 +439,9 @@ EXAMPLE_RESULT = {
         "ttft_cold": {"mean": 0.041, "stddev": 0.015, "min": 0.028, "max": 0.066},
         "ttft_cached": {"mean": 0.010, "stddev": 0.002, "min": 0.007, "max": 0.012},
         "tokens_per_second": {"mean": 18.44, "stddev": 0.097, "min": 18.27, "max": 18.51},
+        "request_tokens_per_second": {"mean": 18.44, "stddev": 0.097, "min": 18.27, "max": 18.51},
+        "decode_tokens_per_second": None,
+        "decode_timing_source": "unavailable",
         "ram_peak_gb": 7.22,
         "ram_is_process_rss": False,
         "ram_measurement_method": "system_fallback",
@@ -351,6 +454,8 @@ EXAMPLE_RESULT = {
         "ttft_cold_raw": [0.044, 0.066, 0.028, 0.039, 0.030],
         "ttft_cached_raw": [0.011, 0.007, 0.008, 0.010, 0.012],
         "tokens_per_second_raw": [18.48, 18.27, 18.51, 18.48, 18.46],
+        "throughput_elapsed_seconds_raw": [5.411, 5.473, 5.402, 5.411, 5.417],
+        "decode_tokens_per_second_raw": None,
         "completion_tokens_raw": [100, 100, 100, 100, 100]
     },
     "meta": {
@@ -411,5 +516,5 @@ EXAMPLE_RESULT = {
 if __name__ == "__main__":
     import json
     result = BenchmarkResult(**EXAMPLE_RESULT)
-    print(json.dumps(result.model_dump(mode="json"), indent=2))
+    print(json.dumps(dump_benchmark_result(result), indent=2))
     print("\nSchema validation: OK")

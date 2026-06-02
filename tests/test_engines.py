@@ -8,6 +8,7 @@ from mlx_chronos.constants import VALID_ENGINE_NAMES
 from mlx_chronos.engines import (
     ENGINES, OMLXEngine, MLXLMEngine, RapidMLXEngine, OllamaEngine, get_engine
 )
+from mlx_chronos.measurements import ThroughputMeasurement
 
 def http_error_response(method: str, url: str, status_code: int, text: str) -> httpx.Response:
     return httpx.Response(
@@ -65,6 +66,42 @@ def test_measure_tokens_per_second(mock_post):
         assert tps == 100.0  # 150 tokens / 1.5s = 100.0
         assert engine.last_token_count_source == "usage.completion_tokens"
         assert engine.last_completion_tokens == 150
+
+@patch("httpx.post")
+def test_measure_throughput_returns_structured_measurement(mock_post):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"usage": {"completion_tokens": 150}}
+    mock_post.return_value = mock_response
+
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 1.5]):
+        measurement = engine.measure_throughput("test prompt", "default", 100)
+
+    assert isinstance(measurement, ThroughputMeasurement)
+    assert measurement.request_tokens_per_second == 100.0
+    assert measurement.completion_tokens == 150
+    assert measurement.token_count_source == "usage.completion_tokens"
+    assert measurement.elapsed_seconds == 1.5
+    assert measurement.decode_tokens_per_second is None
+    assert measurement.decode_timing_source == "unavailable"
+
+@patch("httpx.post")
+def test_measure_throughput_uses_engine_decode_timing_when_available(mock_post):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "usage": {"completion_tokens": 100},
+        "eval_count": 100,
+        "eval_duration": 5_000_000_000,
+    }
+    mock_post.return_value = mock_response
+
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 6.0]):
+        measurement = engine.measure_throughput("test prompt", "default", 100)
+
+    assert measurement.request_tokens_per_second == pytest.approx(16.67, abs=0.001)
+    assert measurement.decode_tokens_per_second == 20.0
+    assert measurement.decode_timing_source == "engine_response"
 
 @patch("httpx.post")
 def test_measure_tokens_per_second_marks_word_fallback(mock_post):

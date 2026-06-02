@@ -45,6 +45,12 @@ class BaseReporter(ABC):
     def _format_optional(self, value: object) -> object:
         return "unknown" if value is None else value
 
+    def _format_stats(self, stats: dict, unit: str) -> str:
+        text = f"{stats['mean']} {unit} (±{stats['stddev']})"
+        if stats.get("p95") is not None:
+            text += f", p95 {stats['p95']}"
+        return text
+
 class JSONReporter(BaseReporter):
     """Saves benchmark results as JSON."""
     
@@ -90,16 +96,24 @@ class MarkdownReporter(BaseReporter):
         
         md += f"## Metrics\n"
         md += (
-            f"- **Throughput:** {metrics['tokens_per_second']['mean']} tokens/s "
-            f"(±{metrics['tokens_per_second']['stddev']})\n"
+            f"- **Request throughput:** "
+            f"{self._format_stats(metrics['tokens_per_second'], 'tokens/s')}\n"
+        )
+        decode_stats = metrics.get("decode_tokens_per_second")
+        if decode_stats:
+            md += (
+                f"- **Decode throughput:** "
+                f"{self._format_stats(decode_stats, 'tokens/s')}\n"
+            )
+        md += (
+            f"- **Decode timing source:** "
+            f"{self._format_optional(metrics.get('decode_timing_source'))}\n"
         )
         md += (
-            f"- **Cold TTFT:** {metrics['ttft_cold']['mean']} s "
-            f"(±{metrics['ttft_cold']['stddev']})\n"
+            f"- **Cold TTFT:** {self._format_stats(metrics['ttft_cold'], 's')}\n"
         )
         md += (
-            f"- **Cached TTFT:** {metrics['ttft_cached']['mean']} s "
-            f"(±{metrics['ttft_cached']['stddev']})\n"
+            f"- **Cached TTFT:** {self._format_stats(metrics['ttft_cached'], 's')}\n"
         )
         ram_peak_gb = self._format_optional(metrics.get("ram_peak_gb"))
         system_ram_peak_gb = self._format_optional(metrics.get("system_ram_peak_gb"))
@@ -125,7 +139,9 @@ class MarkdownReporter(BaseReporter):
             for label, values in [
                 ("Cold TTFT", trials.get("ttft_cold_raw")),
                 ("Cached TTFT", trials.get("ttft_cached_raw")),
-                ("Throughput", trials.get("tokens_per_second_raw")),
+                ("Request throughput", trials.get("tokens_per_second_raw")),
+                ("Throughput elapsed seconds", trials.get("throughput_elapsed_seconds_raw")),
+                ("Decode throughput", trials.get("decode_tokens_per_second_raw")),
                 ("Completion tokens", trials.get("completion_tokens_raw")),
             ]
             if values

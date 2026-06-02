@@ -25,7 +25,7 @@ contribute to the community leaderboard.
 
 **Metrics measured:**
 - **TTFT** — Time to First Token (cold and cached, with statistics)
-- **tok/s** — Generation throughput (mean, stddev, min, max across trials)
+- **tok/s** — Client-observed request throughput (mean, stddev, min, max across trials)
 - **Output tokens** — Completion token counts for throughput trials
 - **System RAM peak** — Peak total Mac RAM in use during the benchmark, used as the public memory comparison metric
 - **Engine RSS** — Diagnostic peak RSS of the engine server process when available
@@ -47,13 +47,13 @@ call loads it into cache first, then cached trials run consecutively. This
 measures cache performance without interleaving unrelated prompts between
 cached measurements.
 
-**Throughput (tok/s)** — measures tokens generated per second using a standard
-fixed prompt, identical across all engines and versions. When the engine
-returns `usage.completion_tokens`, mlx-Chronos records the generated token
-count for each throughput trial so readers can verify how many output tokens
-were used to compute tok/s. Throughput uses a fixed requested `max_tokens`
-value by default, and optional throughput token bounds can be requested with
-`--max-tokens` / `--min-tokens`.
+**Request throughput (tok/s)** — measures completion tokens divided by the full
+client-observed request time for a standard fixed prompt. This includes request
+overhead, prefill, and decode, so it is an end-to-end throughput metric rather
+than pure decode speed. When an engine exposes reliable decode timing,
+mlx-Chronos also records `decode_tokens_per_second`. Throughput uses a fixed
+requested `max_tokens` value by default, and optional output token bounds can be
+requested with `--max-tokens` / `--min-tokens`.
 
 **System RAM peak** — continuously samples total Mac RAM usage from before
 warmup through the recorded benchmark phases and reports the observed peak in
@@ -68,7 +68,8 @@ vary across environments. The default RAM sampling interval is 50ms and can be
 changed with `--ram-sample-interval`.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
-and max. The default is 5 trials, with a maximum of 8 unique cold prompts.
+and max. p95 is added only when at least 20 trials are available. The default is
+5 trials, with a maximum of 30 unique cold prompts.
 Results are saved as structured JSON in `results/local/` by default. Maintainers
 publish reviewed JSON files into `results/submitted/` after accepting them for
 the community leaderboard.
@@ -180,13 +181,13 @@ is measured, how, and why.
 - [x] Published Apple M2 sample results refreshed with the current benchmark protocol
 - [x] Warnings for battery mode, Low Power Mode, non-nominal thermal state, and unavailable thermal state
 - [x] Integration tests against mock OpenAI-compatible servers
+- [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
+- [x] Request-throughput timing metadata and optional engine-reported decode throughput
 
 ### Next
 - [ ] Add richer benchmark condition metadata without breaking the v0.1 JSON contract
 
 ### Future
-- [ ] Support larger trial counts with a bigger cold-prompt pool
-- [ ] Add p95 reporting for larger sample sizes
 - [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract
 - [ ] Add tool-calling success-rate benchmarks
 - [ ] Explore anti-spoofing checks for community submissions

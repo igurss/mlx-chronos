@@ -1,11 +1,7 @@
 import json
-import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 import logging
-import threading
-import time
-import os
 import psutil
 
 from mlx_chronos.constants import (
@@ -19,111 +15,24 @@ from mlx_chronos.constants import (
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import get_engine
-from mlx_chronos.schema import BenchmarkResult
-
-class RAMTracker:
-    """
-    Continuously samples the RAM (RSS) of the target process in a separate thread.
-    Solves the issue of missing a memory peak between the start and end of inference.
-    """
-    def __init__(self, interval: float = 0.05, target_pid: int = None):
-        self.pid = target_pid or os.getpid()
-        self.interval = interval
-        self._process = psutil.Process(self.pid)
-        self.peak_ram_bytes = 0
-        self._lock = threading.Lock()
-        self._stop_event = threading.Event()
-        self._thread = None
-
-    def _sample_rss(self) -> int:
-        rss_bytes = self._process.memory_info().rss
-        try:
-            for child in self._process.children(recursive=True):
-                try:
-                    rss_bytes += child.memory_info().rss
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-        return rss_bytes
-
-    def _monitor(self):
-        while not self._stop_event.is_set():
-            try:
-                current_ram = self._sample_rss()
-                with self._lock:
-                    if current_ram > self.peak_ram_bytes:
-                        self.peak_ram_bytes = current_ram
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                try:
-                    is_running = self._process.is_running()
-                except psutil.Error:
-                    break
-                if not is_running:
-                    break
-                time.sleep(self.interval)
-                continue
-            time.sleep(self.interval)
-
-    def start(self):
-        """Run the sampling."""
-        self.peak_ram_bytes = self._sample_rss()
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._monitor, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> float:
-        """Stop sampling and return the peak RAM in GB."""
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join()
-
-        # Byte conversion to GB
-        with self._lock:
-            peak = self.peak_ram_bytes
-        return peak / (1024 ** 3)
-
-
-class SystemRAMTracker:
-    """Continuously samples total system RAM usage during the benchmark."""
-
-    def __init__(self, interval: float = 0.05):
-        self.interval = interval
-        self.peak_used_bytes = 0
-        self.peak_percent = 0.0
-        self._lock = threading.Lock()
-        self._stop_event = threading.Event()
-        self._thread = None
-
-    def _sample_system_ram(self) -> tuple[int, float]:
-        mem = psutil.virtual_memory()
-        used_bytes = max(0, mem.total - mem.available)
-        percent = (used_bytes / mem.total * 100) if mem.total else 0.0
-        return used_bytes, percent
-
-    def _monitor(self):
-        while not self._stop_event.is_set():
-            used_bytes, percent = self._sample_system_ram()
-            with self._lock:
-                if used_bytes > self.peak_used_bytes:
-                    self.peak_used_bytes = used_bytes
-                    self.peak_percent = percent
-            time.sleep(self.interval)
-
-    def start(self):
-        self.peak_used_bytes, self.peak_percent = self._sample_system_ram()
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._monitor, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> tuple[float, float]:
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join()
-        with self._lock:
-            peak_used = self.peak_used_bytes
-            peak_pct = self.peak_percent
-        return peak_used / (1024 ** 3), peak_pct
+from mlx_chronos.measurements import (
+    DECODE_TIMING_ENGINE_RESPONSE,
+    DECODE_TIMING_UNAVAILABLE,
+    ThroughputMeasurement,
+)
+from mlx_chronos.protocol import (
+    BASELINE_PROTOCOL_VERSION,
+    CACHED_TTFT_PROMPT,
+    COLD_PROMPTS,
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
+    THROUGHPUT_PROMPT,
+    TTFT_MAX_TOKENS,
+    WARMUP_MAX_TOKENS,
+    build_benchmark_protocol,
+)
+from mlx_chronos.schema import BenchmarkResult, dump_benchmark_result
+from mlx_chronos.stats import compute_stats
+from mlx_chronos.trackers import RAMTracker, SystemRAMTracker
 
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -132,53 +41,7 @@ logger = logging.getLogger("mlx_chronos")
 # Default RAM sampling interval in seconds
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
 
-# Default number of trials
 DEFAULT_TRIALS = 5
-BASELINE_PROTOCOL_VERSION = "1"
-TTFT_MAX_TOKENS = 1
-WARMUP_MAX_TOKENS = 30
-DEFAULT_THROUGHPUT_MAX_TOKENS = 100
-
-# Prompt pool for cold TTFT — each trial uses a different prompt
-# to avoid cache hits between trials
-COLD_PROMPTS = [
-    "What is the capital of Australia?",
-    "Explain what a transformer neural network is in one sentence.",
-    "What does RAM stand for in computing?",
-    "Describe the difference between a CPU and a GPU briefly.",
-    "What is the boiling point of water in Celsius?",
-    "Name the three laws of thermodynamics in one sentence each.",
-    "What is gradient descent in machine learning?",
-    "Explain what an operating system does in simple terms.",
-]
-
-# Fixed prompt used for cached TTFT trials.
-CACHED_TTFT_PROMPT = (
-    "Explain the concept of unified memory in Apple Silicon in one sentence."
-)
-
-# Standard throughput prompt — fixed across all engines and versions
-# Do not change this without bumping chronos_version
-THROUGHPUT_PROMPT = (
-    "Explain in detail how the attention mechanism works in transformer "
-    "neural networks, including the role of queries, keys, and values."
-)
-
-
-def compute_stats(values: list[float]) -> dict:
-    """Compute mean, stddev, min, max from a list of float values.
-    p95 is only meaningful with 20+ trials — use min/max for small samples.
-    """
-    if not values:
-        raise ValueError("values must contain at least one measurement")
-    mean = statistics.mean(values)
-    stddev = statistics.stdev(values) if len(values) > 1 else 0.0
-    return {
-        "mean": round(mean, 3),
-        "stddev": round(stddev, 3),
-        "min": round(min(values), 3),
-        "max": round(max(values), 3),
-    }
 
 
 def _normalize_token_count_source(source: object) -> str:
@@ -212,39 +75,6 @@ def _summarize_token_count_sources(sources: list[str]) -> str:
     return TOKEN_COUNT_SOURCE_MIXED
 
 
-def _protocol_phase(
-    prompts: list[str],
-    requested_max_tokens: int,
-    requested_min_tokens: int | None = None,
-) -> dict:
-    return {
-        "prompts": prompts,
-        "requested_max_tokens": requested_max_tokens,
-        "requested_min_tokens": requested_min_tokens,
-        "input_tokens": None,
-        "input_token_count_source": "unavailable",
-    }
-
-
-def _build_benchmark_protocol(
-    trials: int,
-    throughput_max_tokens: int,
-    throughput_min_tokens: int | None,
-) -> dict:
-    return {
-        "name": "baseline",
-        "version": BASELINE_PROTOCOL_VERSION,
-        "warmup": _protocol_phase([THROUGHPUT_PROMPT], WARMUP_MAX_TOKENS),
-        "ttft_cold": _protocol_phase(COLD_PROMPTS[:trials], TTFT_MAX_TOKENS),
-        "ttft_cached": _protocol_phase([CACHED_TTFT_PROMPT], TTFT_MAX_TOKENS),
-        "throughput": _protocol_phase(
-            [THROUGHPUT_PROMPT],
-            throughput_max_tokens,
-            throughput_min_tokens,
-        ),
-    }
-
-
 def _validate_token_bounds(
     tokens: int,
     source: str,
@@ -263,6 +93,15 @@ def _validate_token_bounds(
             "throughput completion token count was below requested min_tokens; "
             f"requested >= {min_tokens}, got {tokens}"
         )
+
+
+def _validate_throughput_measurement(value: object) -> ThroughputMeasurement:
+    if isinstance(value, ThroughputMeasurement):
+        return value
+    raise RuntimeError(
+        "engine returned an invalid throughput measurement; expected "
+        f"ThroughputMeasurement, got {type(value).__name__}"
+    )
 
 
 def run_benchmark(
@@ -353,6 +192,9 @@ def run_benchmark(
     ttft_cold_trials = []
     ttft_cached_trials = []
     tps_trials = []
+    throughput_elapsed_trials = []
+    decode_tps_trials = []
+    decode_timing_sources = []
     token_count_sources = []
     completion_tokens_trials = []
 
@@ -424,21 +266,19 @@ def run_benchmark(
         logger.info("\nRunning throughput trials...")
         for i in range(trials):
             logger.info(f"  Throughput trial {i + 1}/{trials}...")
-            setattr(engine, "last_token_count_source", None)
-            setattr(engine, "last_completion_tokens", None)
-            tps_trials.append(
-                engine.measure_tokens_per_second(
+            measurement = _validate_throughput_measurement(
+                engine.measure_throughput(
                     THROUGHPUT_PROMPT,
                     model=model_name,
                     max_tokens=throughput_max_tokens,
                     min_tokens=throughput_min_tokens,
                 )
             )
-            token_source = _normalize_token_count_source(
-                getattr(engine, "last_token_count_source", None)
-            )
+            tps_trials.append(measurement.request_tokens_per_second)
+            throughput_elapsed_trials.append(measurement.elapsed_seconds)
+            token_source = _normalize_token_count_source(measurement.token_count_source)
             completion_tokens = _normalize_completion_tokens(
-                getattr(engine, "last_completion_tokens", None)
+                measurement.completion_tokens
             )
             _validate_token_bounds(
                 completion_tokens,
@@ -448,6 +288,9 @@ def run_benchmark(
             )
             token_count_sources.append(token_source)
             completion_tokens_trials.append(completion_tokens)
+            if measurement.decode_tokens_per_second is not None:
+                decode_tps_trials.append(measurement.decode_tokens_per_second)
+                decode_timing_sources.append(measurement.decode_timing_source)
     finally:
         if ram_tracker:
             peak_ram_gb = ram_tracker.stop()
@@ -473,7 +316,17 @@ def run_benchmark(
     ttft_cached_stats = compute_stats(ttft_cached_trials)
     tps_stats = compute_stats(tps_trials)
     token_count_source = _summarize_token_count_sources(token_count_sources)
-
+    decode_tps_stats = None
+    decode_timing_source = DECODE_TIMING_UNAVAILABLE
+    if decode_tps_trials and len(decode_tps_trials) == len(tps_trials):
+        decode_tps_stats = compute_stats(decode_tps_trials)
+        if set(decode_timing_sources) == {DECODE_TIMING_ENGINE_RESPONSE}:
+            decode_timing_source = DECODE_TIMING_ENGINE_RESPONSE
+    elif decode_tps_trials:
+        logger.warning(
+            "Decode throughput was available for only some throughput trials; "
+            "decode_tokens_per_second will be omitted."
+        )
 
     # 7. Build result
     result = {
@@ -490,6 +343,9 @@ def run_benchmark(
             "ttft_cold": ttft_cold_stats,
             "ttft_cached": ttft_cached_stats,
             "tokens_per_second": tps_stats,
+            "request_tokens_per_second": tps_stats,
+            "decode_tokens_per_second": decode_tps_stats,
+            "decode_timing_source": decode_timing_source,
             "ram_peak_gb": round(peak_ram_gb, 3),
             "ram_is_process_rss": ram_is_process_rss,
             "ram_measurement_method": (
@@ -506,13 +362,17 @@ def run_benchmark(
             "ttft_cold_raw": ttft_cold_trials,
             "ttft_cached_raw": ttft_cached_trials,
             "tokens_per_second_raw": tps_trials,
+            "throughput_elapsed_seconds_raw": throughput_elapsed_trials,
+            "decode_tokens_per_second_raw": (
+                decode_tps_trials if len(decode_tps_trials) == len(tps_trials) else None
+            ),
             "completion_tokens_raw": completion_tokens_trials,
         },
         "meta": {
             "chronos_version": VERSION,
             "timestamp": datetime.now(timezone.utc),
             "ram_sample_interval_seconds": ram_sample_interval,
-            "benchmark_protocol": _build_benchmark_protocol(
+            "benchmark_protocol": build_benchmark_protocol(
                 trials,
                 throughput_max_tokens,
                 throughput_min_tokens,
@@ -521,7 +381,7 @@ def run_benchmark(
         }
     }
     # Validate against schema before returning
-    return BenchmarkResult(**result).model_dump(mode="json")
+    return dump_benchmark_result(BenchmarkResult(**result))
 
 
 if __name__ == "__main__":
