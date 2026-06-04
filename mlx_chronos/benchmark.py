@@ -24,7 +24,6 @@ from mlx_chronos.measurements import (
     ThroughputMeasurement,
 )
 from mlx_chronos.protocol import (
-    BASELINE_PROTOCOL_VERSION,
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
     DEFAULT_THROUGHPUT_MAX_TOKENS,

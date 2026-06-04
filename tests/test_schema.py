@@ -12,8 +12,8 @@ def test_valid_schema():
     assert result.engine.name == "omlx"
     assert result.metrics.tokens_per_second.mean == 18.44
     assert result.metrics.request_tokens_per_second.mean == 18.44
-    assert result.metrics.decode_tokens_per_second is None
-    assert result.metrics.decode_timing_source == "unavailable"
+    assert result.metrics.decode_tokens_per_second.mean == 18.654
+    assert result.metrics.decode_timing_source == "client_stream"
     assert isinstance(result.meta.timestamp, datetime)
     assert result.meta.ram_sample_interval_seconds == 0.05
     assert result.meta.phase_timings_seconds.total_runtime == 38.1
@@ -34,7 +34,10 @@ def test_valid_schema():
     ]
     assert result.meta.benchmark_protocol is not None
     assert result.meta.benchmark_protocol.name == "baseline"
+    assert result.meta.benchmark_protocol.version == "2"
     assert result.meta.benchmark_protocol.throughput.requested_max_tokens == 100
+    assert result.meta.benchmark_protocol.throughput.request_mode == "streaming"
+    assert result.meta.benchmark_protocol.throughput.stream_usage_requested is True
     assert (
         result.meta.benchmark_protocol.throughput.input_token_count_source
         == "unavailable"
@@ -226,6 +229,21 @@ def test_benchmark_protocol_rejects_unlabeled_input_tokens():
     with pytest.raises(ValidationError, match="input_token_count_source"):
         BenchmarkResult(**invalid_data)
 
+def test_benchmark_protocol_rejects_stream_usage_for_non_streaming_phase():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["benchmark_protocol"] = {
+        **invalid_data["meta"]["benchmark_protocol"],
+        "throughput": {
+            **invalid_data["meta"]["benchmark_protocol"]["throughput"],
+            "request_mode": "non_streaming",
+            "stream_usage_requested": True,
+        },
+    }
+
+    with pytest.raises(ValidationError, match="stream_usage_requested"):
+        BenchmarkResult(**invalid_data)
+
 def test_raw_trial_values_must_be_non_negative():
     """Test that raw trial measurements cannot be negative."""
     invalid_data = EXAMPLE_RESULT.copy()
@@ -312,6 +330,9 @@ def test_p95_is_required_for_large_trial_sets():
     data["trials"]["tokens_per_second_raw"] = raw_values
     data["trials"]["completion_tokens_raw"] = [100] * P95_MIN_TRIALS
     data["trials"]["throughput_elapsed_seconds_raw"] = [5.0] * P95_MIN_TRIALS
+    data["trials"]["decode_tokens_per_second_raw"] = None
+    data["metrics"]["decode_tokens_per_second"] = None
+    data["metrics"]["decode_timing_source"] = "unavailable"
     data["metrics"]["ttft_cold"] = {
         "mean": 10.5,
         "stddev": 5.916,

@@ -60,7 +60,8 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Token count source:** usage.completion_tokens" in content
     assert "**Total runtime:** 38.1 s" in content
     assert "**Request throughput:** 18.44 tokens/s" in content
-    assert "**Decode timing source:** unavailable" in content
+    assert "**Decode throughput:** 18.654 tokens/s" in content
+    assert "**Decode timing source:** client_stream" in content
     assert "**Thermal state:** unavailable_permission" in content
     assert "## Thermal Monitor" in content
     assert "**Source:** unavailable" in content
@@ -73,6 +74,7 @@ def test_markdown_reporter_save(tmp_path):
     assert "## Raw Trials" in content
     assert "**Cold TTFT:** 0.044, 0.066, 0.028, 0.039, 0.03" in content
     assert "**Throughput elapsed seconds:** 5.411, 5.473, 5.402, 5.411, 5.417" in content
+    assert "**Decode throughput:** 18.7, 18.49, 18.73, 18.69, 18.66" in content
     assert "**Completion tokens:** 100, 100, 100, 100, 100" in content
 
 def test_markdown_reporter_handles_missing_ram_fields(tmp_path):

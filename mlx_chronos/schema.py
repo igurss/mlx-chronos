@@ -44,6 +44,10 @@ DecodeTimingSource = Literal[
     "engine_response",
     "client_stream",
 ]
+RequestMode = Literal[
+    "streaming",
+    "non_streaming",
+]
 ThermalMonitorSource = Literal[
     "foundation",
     "unavailable",
@@ -280,6 +284,14 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
         None,
         description="min_tokens requested from the engine for this phase when used",
     )
+    request_mode: Optional[RequestMode] = Field(
+        None,
+        description="Whether this phase used streaming or non-streaming requests",
+    )
+    stream_usage_requested: Optional[bool] = Field(
+        None,
+        description="Whether stream_options.include_usage was requested for this phase",
+    )
     input_tokens: Optional[list[NonNegativeInt]] = Field(
         None,
         description="Input token counts aligned with prompts when available",
@@ -298,6 +310,10 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
             and self.requested_min_tokens > self.requested_max_tokens
         ):
             raise ValueError("requested_min_tokens must be <= requested_max_tokens")
+        if self.stream_usage_requested and self.request_mode != "streaming":
+            raise ValueError(
+                "stream_usage_requested can only be true for streaming requests"
+            )
         if self.input_tokens is None:
             if self.input_token_count_source != "unavailable":
                 raise ValueError(

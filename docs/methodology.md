@@ -59,10 +59,12 @@ field remains `metrics.tokens_per_second` for compatibility; new results also
 mirror it as `metrics.request_tokens_per_second` and record per-trial elapsed
 request times in `trials.throughput_elapsed_seconds_raw`.
 
-Streaming mode is used (`stream: true`) with
+Protocol v2 uses streaming mode (`stream: true`) with
 `stream_options.include_usage=true` so the same request can expose both
-time-to-first-content and final `usage.completion_tokens`. The result records
-`metrics.token_count_source`. Leaderboard submissions must use
+time-to-first-content and final `usage.completion_tokens`. Protocol v1 used
+non-streaming throughput requests, so v1 and v2 throughput numbers are not the
+same workload and should not be treated as perfectly interchangeable. The result
+records `metrics.token_count_source`. Leaderboard submissions must use
 `usage.completion_tokens`; local runs that fall back to a word-based estimate
 are marked as `word_fallback` or `mixed` and are not considered comparable.
 New benchmark results also record `trials.completion_tokens_raw`, the generated
@@ -75,9 +77,11 @@ When the streaming response provides reliable completion-token usage,
 mlx-Chronos records client-observed decode throughput in
 `metrics.decode_tokens_per_second`, `metrics.decode_timing_source`, and
 `trials.decode_tokens_per_second_raw`. This is computed from the interval
-between first streamed content and the end of the stream. If token usage is not
-available, decode throughput is left unavailable rather than estimated from
-word counts.
+between first streamed content and the end of the stream. This is still a
+client-observed stream metric: it includes engine flush policy and any
+inter-token buffering or batching visible to the client. It is not an internal
+model/kernel decode measurement. If token usage is not available, decode
+throughput is left unavailable rather than estimated from word counts.
 
 Throughput trials request a fixed `max_tokens` value, 100 by default. Users can
 override this with `--max-tokens`. An optional `--min-tokens` request can be
@@ -194,8 +198,11 @@ little information.
 **Protocol metadata:** new results include `meta.benchmark_protocol`, which
 records the baseline protocol version, exact prompt text for warmup, cold TTFT,
 cached TTFT, and throughput, plus the requested min/max token bounds per phase.
-Input token counts are marked as `unavailable` until mlx-Chronos can obtain
-them from a tokenizer or engine response without adding unreliable estimates.
+Protocol phase metadata also records whether the phase used streaming requests
+and whether `stream_options.include_usage` was requested. Results without
+protocol metadata should be treated as protocol v1. Input token counts are
+marked as `unavailable` until mlx-Chronos can obtain them from a tokenizer or
+engine response without adding unreliable estimates.
 
 **Phase timing and thermal metadata:** new results include
 `meta.phase_timings_seconds` and `meta.thermal_monitor` so readers can see how

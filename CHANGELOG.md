@@ -14,6 +14,8 @@
   for runs with at least 20 trials.
 - Add phase timing metadata and lightweight continuous thermal monitoring to
   new benchmark results.
+- Bump the baseline benchmark protocol to v2 for streaming throughput trials
+  with usage metadata.
 
 ### Reliability
 - Validate usage-based throughput completion counts against requested token
@@ -32,6 +34,11 @@
   request throughput and decode throughput come from the same request.
 - Retry throughput streams without usage metadata when an engine rejects
   `stream_options.include_usage`, while keeping the result marked as fallback.
+
+### Compatibility
+- Protocol v1 throughput used non-streaming requests; protocol v2 throughput
+  uses streaming requests. Existing v1 leaderboard rows remain valid, but their
+  throughput workload is not identical to new v2 rows.
 
 ## [0.1.1] — 2026-06-01
 

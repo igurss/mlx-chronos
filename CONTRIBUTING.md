@@ -93,7 +93,9 @@ return a real completion-token count.
 
 New result files include benchmark protocol metadata with the exact prompts and
 requested token bounds. Keep those fields unchanged when submitting results;
-they are used to make runs reproducible and easier to compare.
+they are used to make runs reproducible and easier to compare. Current
+protocol v2 results use streaming throughput requests; older protocol v1
+results used non-streaming throughput requests.
 
 New results also distinguish request throughput from decode throughput. Do not
 edit `tokens_per_second`, `request_tokens_per_second`,

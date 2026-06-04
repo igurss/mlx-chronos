@@ -177,6 +177,7 @@
         <th data-col="model" title="Model identifier submitted with the benchmark result.">Model</th>
         <th data-col="quant" title="Quantization label submitted for the model.">Quant</th>
         <th data-col="tps" class="sorted" title="Mean client-observed request throughput: completion tokens divided by full request time. Higher is better.">tok/s</th>
+        <th data-col="protocol" title="Benchmark protocol version. v1 used non-streaming throughput; v2 uses streaming throughput with usage metadata.">Protocol</th>
         <th data-col="completion_tokens" title="Generated completion token counts for each throughput trial.">Output tokens</th>
         <th data-col="ttft_cold" title="Client-observed time to first streamed token for unique cold prompts. Lower is better.">TTFT cold (s)</th>
         <th data-col="ttft_cached" title="Client-observed time to first streamed token for a fixed prompt after priming. Lower is better.">TTFT cached (s)</th>
@@ -194,7 +195,8 @@
 <footer>
   Results are community-submitted and validated automatically via GitHub Actions.<br>
   <strong>System RAM Peak</strong> is the public memory comparison metric and reports total Mac RAM usage observed during the benchmark.
-  Engine process RSS is retained in result JSON as a diagnostic field, but it is not shown as a main leaderboard metric.
+  Engine process RSS is retained in result JSON as a diagnostic field, but it is not shown as a main leaderboard metric.<br>
+  Protocol v1 and v2 throughput are not identical workloads: v1 used non-streaming throughput, while v2 uses streaming throughput with usage metadata.
 </footer>
 
 <script>
@@ -209,6 +211,7 @@
   const SORT_KEYS = {
     memory: "memory_gb",
     quant: "quantization",
+    protocol: "protocol_version",
     completion_tokens: "completion_tokens_mean",
     system_ram_peak: "system_ram_peak_percent",
     thermal: "thermal_state",
@@ -232,6 +235,7 @@
       model: "Model",
       quant: "Quant",
       tps: "tok/s",
+      protocol: "Protocol",
       completion_tokens: "Output tokens",
       ttft_cold: "TTFT cold (s)",
       ttft_cached: "TTFT cached (s)",
@@ -375,6 +379,7 @@
         <td>${escapeHtml(r.model)}</td>
         <td>${escapeHtml(r.quantization)}</td>
         <td><strong>${fmt(r.tps, 2)}</strong></td>
+        <td>v${escapeHtml(r.protocol_version || "1")}</td>
         <td>${fmtTokenCounts(r.completion_tokens_raw)}</td>
         <td>${fmt(r.ttft_cold)}</td>
         <td>${fmt(r.ttft_cached)}</td>

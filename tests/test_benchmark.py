@@ -241,11 +241,18 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     ]
     protocol = result["meta"]["benchmark_protocol"]
     assert protocol["name"] == "baseline"
+    assert protocol["version"] == "2"
+    assert protocol["warmup"]["request_mode"] == "streaming"
+    assert protocol["warmup"]["stream_usage_requested"] is True
+    assert protocol["ttft_cold"]["request_mode"] == "streaming"
+    assert protocol["ttft_cold"]["stream_usage_requested"] is False
     assert protocol["ttft_cold"]["prompts"] == COLD_PROMPTS[:2]
     assert protocol["ttft_cold"]["requested_max_tokens"] == TTFT_MAX_TOKENS
     assert protocol["throughput"]["prompts"] == [THROUGHPUT_PROMPT]
     assert protocol["throughput"]["requested_max_tokens"] == DEFAULT_THROUGHPUT_MAX_TOKENS
     assert protocol["throughput"]["requested_min_tokens"] is None
+    assert protocol["throughput"]["request_mode"] == "streaming"
+    assert protocol["throughput"]["stream_usage_requested"] is True
     assert protocol["throughput"]["input_token_count_source"] == "unavailable"
 
     ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]

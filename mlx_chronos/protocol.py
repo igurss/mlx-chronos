@@ -1,4 +1,4 @@
-BASELINE_PROTOCOL_VERSION = "1"
+BASELINE_PROTOCOL_VERSION = "2"
 TTFT_MAX_TOKENS = 1
 WARMUP_MAX_TOKENS = 30
 DEFAULT_THROUGHPUT_MAX_TOKENS = 100
@@ -51,11 +51,15 @@ def _protocol_phase(
     prompts: list[str],
     requested_max_tokens: int,
     requested_min_tokens: int | None = None,
+    request_mode: str | None = None,
+    stream_usage_requested: bool | None = None,
 ) -> dict:
     return {
         "prompts": prompts,
         "requested_max_tokens": requested_max_tokens,
         "requested_min_tokens": requested_min_tokens,
+        "request_mode": request_mode,
+        "stream_usage_requested": stream_usage_requested,
         "input_tokens": None,
         "input_token_count_source": "unavailable",
     }
@@ -69,13 +73,29 @@ def build_benchmark_protocol(
     return {
         "name": "baseline",
         "version": BASELINE_PROTOCOL_VERSION,
-        "warmup": _protocol_phase([THROUGHPUT_PROMPT], WARMUP_MAX_TOKENS),
-        "ttft_cold": _protocol_phase(COLD_PROMPTS[:trials], TTFT_MAX_TOKENS),
-        "ttft_cached": _protocol_phase([CACHED_TTFT_PROMPT], TTFT_MAX_TOKENS),
+        "warmup": _protocol_phase(
+            [THROUGHPUT_PROMPT],
+            WARMUP_MAX_TOKENS,
+            request_mode="streaming",
+            stream_usage_requested=True,
+        ),
+        "ttft_cold": _protocol_phase(
+            COLD_PROMPTS[:trials],
+            TTFT_MAX_TOKENS,
+            request_mode="streaming",
+            stream_usage_requested=False,
+        ),
+        "ttft_cached": _protocol_phase(
+            [CACHED_TTFT_PROMPT],
+            TTFT_MAX_TOKENS,
+            request_mode="streaming",
+            stream_usage_requested=False,
+        ),
         "throughput": _protocol_phase(
             [THROUGHPUT_PROMPT],
             throughput_max_tokens,
             throughput_min_tokens,
+            request_mode="streaming",
+            stream_usage_requested=True,
         ),
     }
-

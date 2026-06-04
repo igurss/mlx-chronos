@@ -84,6 +84,9 @@ the community leaderboard.
 New result JSON also records the benchmark protocol metadata, including exact
 prompt text and requested token bounds, so runs can be reproduced without
 digging through source code.
+Current protocol v2 throughput uses streaming requests with usage metadata.
+Older protocol v1 results used non-streaming throughput, so compare those rows
+with that workload difference in mind.
 
 ---
 
@@ -190,7 +193,7 @@ is measured, how, and why.
 - [x] Warnings for battery mode, Low Power Mode, non-nominal thermal state, and unavailable thermal state
 - [x] Integration tests against mock OpenAI-compatible servers
 - [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
-- [x] Request-throughput timing metadata and optional engine-reported decode throughput
+- [x] Request-throughput timing metadata and client-observed streaming decode throughput
 - [x] Phase timing metadata and lightweight continuous thermal monitoring
 
 ### Next

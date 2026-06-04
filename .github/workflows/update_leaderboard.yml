@@ -57,6 +57,7 @@ jobs:
                   met = data["metrics"]
                   tri = data["trials"]
                   meta = data["meta"]
+                  protocol = meta.get("benchmark_protocol") or {}
                   completion_tokens_raw = tri.get("completion_tokens_raw")
                   completion_tokens_mean = (
                       round(sum(completion_tokens_raw) / len(completion_tokens_raw), 1)
@@ -84,6 +85,7 @@ jobs:
                       "system_ram_peak_gb": met["system_ram_peak_gb"],
                       "system_ram_peak_percent": met["system_ram_peak_percent"],
                       "token_count_source": met["token_count_source"],
+                      "protocol_version": protocol.get("version", "1"),
                       "thermal_state": hw.get("thermal_state", "unavailable_permission"),
                       "architecture": hw.get("architecture", "unknown"),
                       "trials": tri["count"],
