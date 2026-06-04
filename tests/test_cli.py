@@ -9,7 +9,7 @@ from argparse import Namespace
 from mlx_chronos.cli import cmd_run, cmd_submit, cmd_validate, main
 from mlx_chronos.constants import MAX_TRIALS
 from mlx_chronos.detect import BenchmarkConditionWarning
-from mlx_chronos.schema import EXAMPLE_RESULT
+from mlx_chronos.examples import EXAMPLE_RESULT
 
 def test_cmd_run_invalid_trials(capsys):
     args = Namespace(trials=0, ram_sample_interval=0.1, format="json")

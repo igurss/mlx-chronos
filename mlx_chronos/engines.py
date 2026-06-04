@@ -20,7 +20,7 @@ from mlx_chronos.constants import (
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
 )
 from mlx_chronos.measurements import (
-    DECODE_TIMING_ENGINE_RESPONSE,
+    DECODE_TIMING_CLIENT_STREAM,
     DECODE_TIMING_UNAVAILABLE,
     ThroughputMeasurement,
 )
@@ -41,8 +41,6 @@ class BaseEngine(ABC):
 
     def __init__(self, port: int | None = None):
         self.port = port if port is not None else self._configured_port()
-        self.last_token_count_source: str | None = None
-        self.last_completion_tokens: int | None = None
 
     def port_env_var(self) -> str:
         normalized_name = self.name.upper().replace("-", "_")
@@ -121,6 +119,10 @@ class BaseEngine(ABC):
         if response is None:
             return None
         try:
+            try:
+                response.read()
+            except Exception:
+                pass
             body = response.text.strip()
         except Exception:
             return None
@@ -392,6 +394,46 @@ class BaseEngine(ABC):
 
         return False
 
+    def _extract_stream_text(self, chunk: dict) -> str:
+        choices = chunk.get("choices")
+        if not choices:
+            return ""
+
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            return ""
+        delta = choice.get("delta", {})
+        if not isinstance(delta, dict):
+            delta = {}
+
+        parts = []
+        for key in ("content", "reasoning", "reasoning_content"):
+            value = delta.get(key)
+            if isinstance(value, str) and value:
+                parts.append(value)
+
+        text = choice.get("text")
+        if isinstance(text, str) and text:
+            parts.append(text)
+        return "".join(parts)
+
+    def _extract_stream_usage_tokens(self, chunk: dict) -> int | None:
+        usage = chunk.get("usage")
+        if not isinstance(usage, dict):
+            return None
+        tokens = usage.get("completion_tokens")
+        if isinstance(tokens, (int, float)) and tokens > 0:
+            return int(tokens)
+        return None
+
+    def _should_retry_without_stream_usage(self, exc: httpx.HTTPError) -> bool:
+        response = getattr(exc, "response", None)
+        if response is None or response.status_code not in {400, 422}:
+            return False
+        body = self._response_body_excerpt(response) or ""
+        body = body.lower()
+        return "stream_options" in body or "include_usage" in body
+
     def measure_ttft(self, prompt: str, model: str = "default") -> float:
         """Measure Time To First Token."""
         payload = self.build_payload(prompt=prompt, model=model, max_tokens=1, stream=True)
@@ -444,31 +486,6 @@ class BaseEngine(ABC):
             )
         )
 
-    def _extract_completion_text(self, data: dict) -> str:
-        choices = data.get("choices")
-        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-            choice = choices[0]
-            message = choice.get("message", {})
-            if not isinstance(message, dict):
-                message = {}
-            text = choice.get("text") or message.get("content", "")
-            return text if isinstance(text, str) else ""
-        return ""
-
-    def _extract_decode_timing(self, data: dict) -> tuple[float | None, str]:
-        eval_count = data.get("eval_count")
-        eval_duration = data.get("eval_duration")
-        if (
-            isinstance(eval_count, (int, float))
-            and eval_count > 0
-            and isinstance(eval_duration, (int, float))
-            and eval_duration > 0
-        ):
-            return round(eval_count / (eval_duration / 1_000_000_000), 2), (
-                DECODE_TIMING_ENGINE_RESPONSE
-            )
-        return None, DECODE_TIMING_UNAVAILABLE
-
     def measure_throughput(
         self,
         prompt: str,
@@ -476,74 +493,110 @@ class BaseEngine(ABC):
         max_tokens: int = 100,
         min_tokens: int | None = None,
     ) -> ThroughputMeasurement:
-        """Measure total request throughput and decode throughput when exposed."""
-        self.last_token_count_source = None
-        self.last_completion_tokens = None
-        payload = self.build_payload(
+        """Measure request throughput and client-observed decode throughput."""
+        base_payload = self.build_payload(
             prompt=prompt,
             model=model,
             max_tokens=max_tokens,
             min_tokens=min_tokens,
-            stream=False,
+            stream=True,
         )
-        start = time.perf_counter()
 
         url = f"{self.base_url()}{self.endpoint()}"
-        request_model = str(payload["model"])
+        request_model = str(base_payload["model"])
         action = "measure throughput"
-        try:
-            r = httpx.post(url, json=payload, timeout=60.0)
-            r.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise RuntimeError(
-                self._request_error_message(
-                    action,
-                    url,
-                    exc,
-                    model=model,
-                    request_model=request_model,
-                )
-            ) from exc
+        for include_usage in (True, False):
+            payload = dict(base_payload)
+            if include_usage:
+                payload["stream_options"] = {"include_usage": True}
+            start = time.perf_counter()
+            first_token_at = None
+            completion_text_parts = []
+            completion_tokens = None
+
+            try:
+                with httpx.stream("POST", url, json=payload, timeout=60.0) as r:
+                    if r.status_code >= 400:
+                        try:
+                            r.read()
+                        except Exception:
+                            pass
+                    r.raise_for_status()
+
+                    for line in r.iter_lines():
+                        if not line:
+                            continue
+                        if isinstance(line, bytes):
+                            line = line.decode("utf-8", errors="ignore")
+                        if not line.startswith("data:"):
+                            continue
+
+                        raw_chunk = line.removeprefix("data:").strip()
+                        if not raw_chunk or raw_chunk == "[DONE]":
+                            continue
+
+                        try:
+                            chunk = json.loads(raw_chunk)
+                        except json.JSONDecodeError:
+                            continue
+                        if not isinstance(chunk, dict):
+                            continue
+
+                        usage_tokens = self._extract_stream_usage_tokens(chunk)
+                        if usage_tokens is not None:
+                            completion_tokens = usage_tokens
+
+                        if self._stream_chunk_has_content(chunk):
+                            if first_token_at is None:
+                                first_token_at = time.perf_counter()
+                            text = self._extract_stream_text(chunk)
+                            if text:
+                                completion_text_parts.append(text)
+                break
+            except httpx.HTTPError as exc:
+                if include_usage and self._should_retry_without_stream_usage(exc):
+                    continue
+                raise RuntimeError(
+                    self._request_error_message(
+                        action,
+                        url,
+                        exc,
+                        model=model,
+                        request_model=request_model,
+                    )
+                ) from exc
 
         elapsed = time.perf_counter() - start
 
-        try:
-            data = r.json()
-        except (json.JSONDecodeError, ValueError) as exc:
-            raise RuntimeError(
-                self._invalid_json_message(
-                    action,
-                    url,
-                    model=model,
-                    request_model=request_model,
-                )
-            ) from exc
-
-        if not isinstance(data, dict):
+        if first_token_at is None:
             raise RuntimeError(
                 self._invalid_response_message(
                     action,
                     url,
-                    "invalid completion response: completion response must be a JSON object",
+                    "stream ended before a valid content token was received",
                     model=model,
                     request_model=request_model,
                 )
             )
 
-        usage = data.get("usage", {})
-        tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
-
-        if isinstance(tokens, (int, float)) and tokens > 0:
-            completion_tokens = int(tokens)
+        if completion_tokens is not None:
             token_count_source = TOKEN_COUNT_SOURCE_USAGE
         else:
-            completion_tokens = max(1, len(self._extract_completion_text(data).split()))
+            completion_text = "".join(completion_text_parts)
+            completion_tokens = max(1, len(completion_text.split()))
             token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
-        self.last_completion_tokens = completion_tokens
-        self.last_token_count_source = token_count_source
         request_tps = 0.0 if elapsed <= 0 else round(completion_tokens / elapsed, 2)
-        decode_tps, decode_source = self._extract_decode_timing(data)
+        decode_tps = None
+        decode_source = DECODE_TIMING_UNAVAILABLE
+        decode_elapsed = elapsed - (first_token_at - start)
+        if (
+            token_count_source == TOKEN_COUNT_SOURCE_USAGE
+            and completion_tokens > 1
+            and decode_elapsed > 0
+        ):
+            decode_tps = round((completion_tokens - 1) / decode_elapsed, 2)
+            decode_source = DECODE_TIMING_CLIENT_STREAM
         return ThroughputMeasurement(
             request_tokens_per_second=request_tps,
             completion_tokens=completion_tokens,

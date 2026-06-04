@@ -84,7 +84,7 @@ jobs:
                       "system_ram_peak_gb": met["system_ram_peak_gb"],
                       "system_ram_peak_percent": met["system_ram_peak_percent"],
                       "token_count_source": met["token_count_source"],
-                      "thermal_state": hw.get("thermal_state", "unavailable_no_sudo"),
+                      "thermal_state": hw.get("thermal_state", "unavailable_permission"),
                       "architecture": hw.get("architecture", "unknown"),
                       "trials": tri["count"],
                       "chronos_version": meta["chronos_version"],

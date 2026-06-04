@@ -1,22 +1,20 @@
 import pytest
 import logging
 from unittest.mock import MagicMock, patch
-from mlx_chronos.benchmark import (
+from mlx_chronos.benchmark import run_benchmark
+from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
-    RAMTracker,
-    SystemRAMTracker,
     THROUGHPUT_PROMPT,
-    ThermalStateTracker,
     TTFT_MAX_TOKENS,
     WARMUP_MAX_TOKENS,
-    compute_stats,
-    run_benchmark,
 )
 from mlx_chronos.constants import MAX_TRIALS
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.measurements import ThroughputMeasurement
+from mlx_chronos.stats import compute_stats
+from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
 
 
 def throughput_measurement(
@@ -32,7 +30,7 @@ def throughput_measurement(
         token_count_source=source,
         elapsed_seconds=elapsed,
         decode_tokens_per_second=decode_tps,
-        decode_timing_source="engine_response" if decode_tps is not None else "unavailable",
+        decode_timing_source="client_stream" if decode_tps is not None else "unavailable",
     )
 
 
@@ -481,7 +479,7 @@ def test_run_benchmark_records_decode_throughput_when_available(
         )
 
     assert result["metrics"]["decode_tokens_per_second"]["mean"] == 21.0
-    assert result["metrics"]["decode_timing_source"] == "engine_response"
+    assert result["metrics"]["decode_timing_source"] == "client_stream"
     assert result["trials"]["decode_tokens_per_second_raw"] == [21.0, 21.0]
 
 

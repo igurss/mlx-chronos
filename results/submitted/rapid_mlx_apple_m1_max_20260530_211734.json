@@ -6,7 +6,7 @@
     "macos_version": "26.5",
     "python_version": "3.13.13",
     "architecture": "arm64",
-    "thermal_state": "unavailable_no_sudo"
+    "thermal_state": "unavailable_permission"
   },
   "engine": {
     "name": "rapid-mlx",

@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import json
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -16,6 +17,66 @@ def http_error_response(method: str, url: str, status_code: int, text: str) -> h
         text=text,
         request=httpx.Request(method, url),
     )
+
+class MockStreamResponse:
+    def __init__(
+        self,
+        lines: list[str] | None = None,
+        status_code: int = 200,
+        text: str = "",
+    ):
+        self.lines = lines or []
+        self.status_code = status_code
+        self.response = http_error_response(
+            "POST",
+            "http://localhost:8000/v1/chat/completions",
+            status_code,
+            text,
+        )
+
+    def raise_for_status(self):
+        self.response.raise_for_status()
+
+    def iter_lines(self):
+        yield from self.lines
+
+
+class MockStreamContext:
+    def __init__(self, response: MockStreamResponse):
+        self.response = response
+
+    def __enter__(self):
+        return self.response
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+def stream_response(lines: list[str], status_code: int = 200, text: str = ""):
+    return MockStreamContext(MockStreamResponse(lines, status_code, text))
+
+
+def completion_stream(
+    content: str = "hello",
+    completion_tokens: int | None = 100,
+) -> list[str]:
+    lines = [
+        'data: {"choices": [{"delta": {"role": "assistant"}}]}',
+        f'data: {json.dumps({"choices": [{"delta": {"content": content}}]})}',
+    ]
+    if completion_tokens is not None:
+        lines.append(
+            "data: "
+            + json.dumps(
+                {
+                    "choices": [],
+                    "usage": {"completion_tokens": completion_tokens},
+                }
+            )
+        )
+    lines.append("data: [DONE]")
+    return lines
+
 
 def test_stream_chunk_role_is_not_counted_as_content():
     engine = OMLXEngine()
@@ -54,27 +115,23 @@ def test_get_engine():
 def test_engine_registry_matches_schema_constants():
     assert set(ENGINES) == VALID_ENGINE_NAMES
 
-@patch("httpx.post")
-def test_measure_tokens_per_second(mock_post):
-    mock_response = MagicMock()
-    mock_response.json.return_value = {"usage": {"completion_tokens": 150}}
-    mock_post.return_value = mock_response
-
+@patch("httpx.stream")
+def test_measure_tokens_per_second(mock_stream):
+    mock_stream.return_value = stream_response(
+        completion_stream(content="hello", completion_tokens=150)
+    )
     engine = OMLXEngine()
-    with patch("time.perf_counter", side_effect=[0.0, 1.5]):
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
         tps = engine.measure_tokens_per_second("test prompt", "default", 100)
         assert tps == 100.0  # 150 tokens / 1.5s = 100.0
-        assert engine.last_token_count_source == "usage.completion_tokens"
-        assert engine.last_completion_tokens == 150
 
-@patch("httpx.post")
-def test_measure_throughput_returns_structured_measurement(mock_post):
-    mock_response = MagicMock()
-    mock_response.json.return_value = {"usage": {"completion_tokens": 150}}
-    mock_post.return_value = mock_response
-
+@patch("httpx.stream")
+def test_measure_throughput_returns_structured_measurement(mock_stream):
+    mock_stream.return_value = stream_response(
+        completion_stream(content="hello", completion_tokens=150)
+    )
     engine = OMLXEngine()
-    with patch("time.perf_counter", side_effect=[0.0, 1.5]):
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
         measurement = engine.measure_throughput("test prompt", "default", 100)
 
     assert isinstance(measurement, ThroughputMeasurement)
@@ -82,50 +139,37 @@ def test_measure_throughput_returns_structured_measurement(mock_post):
     assert measurement.completion_tokens == 150
     assert measurement.token_count_source == "usage.completion_tokens"
     assert measurement.elapsed_seconds == 1.5
-    assert measurement.decode_tokens_per_second is None
-    assert measurement.decode_timing_source == "unavailable"
+    assert measurement.decode_tokens_per_second == 149.0
+    assert measurement.decode_timing_source == "client_stream"
 
-@patch("httpx.post")
-def test_measure_throughput_uses_engine_decode_timing_when_available(mock_post):
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "usage": {"completion_tokens": 100},
-        "eval_count": 100,
-        "eval_duration": 5_000_000_000,
-    }
-    mock_post.return_value = mock_response
-
+@patch("httpx.stream")
+def test_measure_throughput_uses_client_stream_decode_timing(mock_stream):
+    mock_stream.return_value = stream_response(
+        completion_stream(content="hello", completion_tokens=100)
+    )
     engine = OMLXEngine()
-    with patch("time.perf_counter", side_effect=[0.0, 6.0]):
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 5.5]):
         measurement = engine.measure_throughput("test prompt", "default", 100)
 
-    assert measurement.request_tokens_per_second == pytest.approx(16.67, abs=0.001)
-    assert measurement.decode_tokens_per_second == 20.0
-    assert measurement.decode_timing_source == "engine_response"
+    assert measurement.request_tokens_per_second == pytest.approx(18.18, abs=0.001)
+    assert measurement.decode_tokens_per_second == pytest.approx(19.8, abs=0.001)
+    assert measurement.decode_timing_source == "client_stream"
 
-@patch("httpx.post")
-def test_measure_tokens_per_second_marks_word_fallback(mock_post):
-    mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "choices": [{"message": {"content": "one two three four"}}]
-    }
-    mock_post.return_value = mock_response
-
+@patch("httpx.stream")
+def test_measure_tokens_per_second_marks_word_fallback(mock_stream):
+    mock_stream.return_value = stream_response(
+        completion_stream(content="one two three four", completion_tokens=None)
+    )
     engine = OMLXEngine()
-    with patch("time.perf_counter", side_effect=[0.0, 2.0]):
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 2.0]):
         tps = engine.measure_tokens_per_second("test prompt", "default", 100)
         assert tps == 2.0
-        assert engine.last_token_count_source == "word_fallback"
-        assert engine.last_completion_tokens == 4
 
-@patch("httpx.post")
-def test_measure_tokens_per_second_includes_optional_min_tokens(mock_post):
-    mock_response = MagicMock()
-    mock_response.json.return_value = {"usage": {"completion_tokens": 100}}
-    mock_post.return_value = mock_response
-
+@patch("httpx.stream")
+def test_measure_tokens_per_second_includes_optional_min_tokens(mock_stream):
+    mock_stream.return_value = stream_response(completion_stream())
     engine = OMLXEngine()
-    with patch("time.perf_counter", side_effect=[0.0, 1.0]):
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.0]):
         engine.measure_tokens_per_second(
             "test prompt",
             "default",
@@ -133,23 +177,49 @@ def test_measure_tokens_per_second_includes_optional_min_tokens(mock_post):
             min_tokens=80,
         )
 
-    payload = mock_post.call_args.kwargs["json"]
+    payload = mock_stream.call_args.kwargs["json"]
     assert payload["max_tokens"] == 100
     assert payload["min_tokens"] == 80
+    assert payload["stream"] is True
+    assert payload["stream_options"] == {"include_usage": True}
 
-@patch("httpx.post", side_effect=httpx.TimeoutException("timed out"))
-def test_measure_tokens_per_second_wraps_http_errors(mock_post):
+@patch("httpx.stream")
+def test_measure_throughput_retries_without_stream_usage_when_unsupported(mock_stream):
+    mock_stream.side_effect = [
+        stream_response(
+            [],
+            status_code=400,
+            text='{"error":"stream_options include_usage is not supported"}',
+        ),
+        stream_response(
+            completion_stream(content="one two", completion_tokens=None),
+        ),
+    ]
+
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 1.0, 1.5, 2.0]):
+        measurement = engine.measure_throughput("test prompt", "default", 100)
+
+    first_payload = mock_stream.call_args_list[0].kwargs["json"]
+    retry_payload = mock_stream.call_args_list[1].kwargs["json"]
+    assert first_payload["stream_options"] == {"include_usage": True}
+    assert "stream_options" not in retry_payload
+    assert measurement.token_count_source == "word_fallback"
+    assert measurement.decode_tokens_per_second is None
+    assert measurement.decode_timing_source == "unavailable"
+
+@patch("httpx.stream", side_effect=httpx.TimeoutException("timed out"))
+def test_measure_tokens_per_second_wraps_http_errors(mock_stream):
     engine = OMLXEngine()
     with pytest.raises(RuntimeError, match="engine=omlx; action=measure throughput"):
         engine.measure_tokens_per_second("test prompt", "default", 100)
 
-@patch("httpx.post")
-def test_measure_tokens_per_second_reports_status_model_and_body(mock_post):
-    mock_post.return_value = http_error_response(
-        "POST",
-        "http://localhost:8000/v1/chat/completions",
-        404,
-        '{"error":"model not found"}',
+@patch("httpx.stream")
+def test_measure_tokens_per_second_reports_status_model_and_body(mock_stream):
+    mock_stream.return_value = stream_response(
+        [],
+        status_code=404,
+        text='{"error":"model not found"}',
     )
 
     engine = OMLXEngine()
@@ -165,15 +235,12 @@ def test_measure_tokens_per_second_reports_status_model_and_body(mock_post):
     assert "status=404" in message
     assert "model not found" in message
 
-@patch("httpx.post")
-def test_measure_tokens_per_second_rejects_invalid_json_shape(mock_post):
-    mock_response = MagicMock()
-    mock_response.json.return_value = []
-    mock_post.return_value = mock_response
-
+@patch("httpx.stream")
+def test_measure_tokens_per_second_rejects_empty_stream(mock_stream):
+    mock_stream.return_value = stream_response(["data: []", "data: [DONE]"])
     engine = OMLXEngine()
     with patch("time.perf_counter", side_effect=[0.0, 1.0]):
-        with pytest.raises(RuntimeError, match="completion response must be a JSON object"):
+        with pytest.raises(RuntimeError, match="stream ended before"):
             engine.measure_tokens_per_second("test prompt", "default", 100)
 
 @patch("httpx.get")

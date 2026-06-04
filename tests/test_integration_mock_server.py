@@ -53,6 +53,7 @@ def openai_mock_server(
             body = (
                 'data: {"choices": [{"delta": {"role": "assistant"}}]}\n\n'
                 'data: {"choices": [{"delta": {"content": "hello"}}]}\n\n'
+                'data: {"choices": [], "usage": {"completion_tokens": 7}}\n\n'
                 "data: [DONE]\n\n"
             ).encode("utf-8")
             self.send_response(200)
@@ -116,8 +117,6 @@ def test_mock_openai_server_model_listing_and_completion_flow():
 
     assert tps > 0
     assert ttft >= 0
-    assert engine.last_token_count_source == "usage.completion_tokens"
-    assert engine.last_completion_tokens == 7
     assert any(request["path"] == "/v1/models" for request in requests)
     assert any(
         request["path"] == "/v1/chat/completions"

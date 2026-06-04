@@ -59,19 +59,25 @@ field remains `metrics.tokens_per_second` for compatibility; new results also
 mirror it as `metrics.request_tokens_per_second` and record per-trial elapsed
 request times in `trials.throughput_elapsed_seconds_raw`.
 
-Non-streaming mode is used (`stream: false`) so the total token count can come
-from the API response's `usage.completion_tokens` field. The result records
+Streaming mode is used (`stream: true`) with
+`stream_options.include_usage=true` so the same request can expose both
+time-to-first-content and final `usage.completion_tokens`. The result records
 `metrics.token_count_source`. Leaderboard submissions must use
 `usage.completion_tokens`; local runs that fall back to a word-based estimate
 are marked as `word_fallback` or `mixed` and are not considered comparable.
 New benchmark results also record `trials.completion_tokens_raw`, the generated
 completion-token count for each throughput trial.
+If an engine rejects `stream_options.include_usage`, mlx-Chronos retries the
+same streaming request without that option and records the result as a local
+fallback instead of failing the whole run.
 
-When an engine response exposes reliable decode timing, mlx-Chronos records
+When the streaming response provides reliable completion-token usage,
+mlx-Chronos records client-observed decode throughput in
 `metrics.decode_tokens_per_second`, `metrics.decode_timing_source`, and
-`trials.decode_tokens_per_second_raw`. If no such timing exists, decode
-throughput is left unavailable rather than estimated from unrelated TTFT
-measurements.
+`trials.decode_tokens_per_second_raw`. This is computed from the interval
+between first streamed content and the end of the stream. If token usage is not
+available, decode throughput is left unavailable rather than estimated from
+word counts.
 
 Throughput trials request a fixed `max_tokens` value, 100 by default. Users can
 override this with `--max-tokens`. An optional `--min-tokens` request can be

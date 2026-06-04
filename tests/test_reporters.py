@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter, BaseReporter
-from mlx_chronos.schema import EXAMPLE_RESULT
+from mlx_chronos.examples import EXAMPLE_RESULT
 
 class DummyReporter(BaseReporter):
     def save(self, result: dict, results_dir: Path) -> Path:

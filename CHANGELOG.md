@@ -8,7 +8,8 @@
 - Add throughput `--max-tokens` and opt-in `--min-tokens` requests for more
   explicit token-bound comparability.
 - Clarify throughput as client-observed request throughput and add optional
-  engine-reported decode throughput when reliable timing is available.
+  client-observed decode throughput when reliable streaming token usage is
+  available.
 - Expand the fixed cold-prompt pool to 30 prompts and add p95 reporting only
   for runs with at least 20 trials.
 - Add phase timing metadata and lightweight continuous thermal monitoring to
@@ -27,6 +28,10 @@
   or observes known non-nominal thermal state.
 - Use `omlx --version` for current oMLX releases, with a legacy help fallback,
   so engine version reporting works while the server is already running.
+- Measure throughput trials over streaming completions with usage metadata so
+  request throughput and decode throughput come from the same request.
+- Retry throughput streams without usage metadata when an engine rejects
+  `stream_options.include_usage`, while keeping the result marked as fallback.
 
 ## [0.1.1] — 2026-06-01
 

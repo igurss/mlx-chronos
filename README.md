@@ -50,8 +50,11 @@ cached measurements.
 **Request throughput (tok/s)** — measures completion tokens divided by the full
 client-observed request time for a standard fixed prompt. This includes request
 overhead, prefill, and decode, so it is an end-to-end throughput metric rather
-than pure decode speed. When an engine exposes reliable decode timing,
-mlx-Chronos also records `decode_tokens_per_second`. Throughput uses a fixed
+than pure decode speed. New runs also record client-observed
+`decode_tokens_per_second` from the streaming throughput trial when reliable
+completion-token usage is available. If an engine cannot provide usage in the
+streaming response, the run falls back to a local estimate and is marked as not
+leaderboard-comparable. Throughput uses a fixed
 requested `max_tokens` value by default, and optional output token bounds can be
 requested with `--max-tokens` / `--min-tokens`.
 

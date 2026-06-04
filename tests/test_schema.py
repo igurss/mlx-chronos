@@ -3,7 +3,8 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 from mlx_chronos.constants import MAX_TRIALS, P95_MIN_TRIALS
-from mlx_chronos.schema import BenchmarkResult, EXAMPLE_RESULT, TrialStats
+from mlx_chronos.examples import EXAMPLE_RESULT
+from mlx_chronos.schema import BenchmarkResult, TrialStats
 
 def test_valid_schema():
     """Test that the example result is fully valid."""
@@ -38,6 +39,15 @@ def test_valid_schema():
         result.meta.benchmark_protocol.throughput.input_token_count_source
         == "unavailable"
     )
+
+def test_legacy_thermal_state_is_normalized():
+    data = EXAMPLE_RESULT.copy()
+    data["hardware"] = data["hardware"].copy()
+    data["hardware"]["thermal_state"] = "unavailable_no_sudo"
+
+    result = BenchmarkResult(**data)
+
+    assert result.hardware.thermal_state == "unavailable_permission"
 
 def test_invalid_engine_name():
     """Test that an unknown engine name raises a validation error."""
@@ -96,6 +106,29 @@ def test_new_throughput_raw_fields_are_optional_for_older_results():
     assert result.trials.throughput_elapsed_seconds_raw is None
     assert result.metrics.request_tokens_per_second is None
     assert result.metrics.decode_timing_source == "unavailable"
+
+def test_decode_timing_source_accepts_client_stream():
+    data = EXAMPLE_RESULT.copy()
+    data["metrics"] = data["metrics"].copy()
+    data["trials"] = data["trials"].copy()
+    data["metrics"]["decode_tokens_per_second"] = {
+        "mean": 20.0,
+        "stddev": 0.354,
+        "min": 19.5,
+        "max": 20.5,
+    }
+    data["metrics"]["decode_timing_source"] = "client_stream"
+    data["trials"]["decode_tokens_per_second_raw"] = [
+        19.5,
+        20.0,
+        20.5,
+        20.0,
+        20.0,
+    ]
+
+    result = BenchmarkResult(**data)
+
+    assert result.metrics.decode_timing_source == "client_stream"
 
 def test_benchmark_protocol_is_optional_for_older_results():
     data = EXAMPLE_RESULT.copy()

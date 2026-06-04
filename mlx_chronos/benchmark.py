@@ -18,6 +18,7 @@ from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import get_engine
 from mlx_chronos.measurements import (
+    DECODE_TIMING_CLIENT_STREAM,
     DECODE_TIMING_ENGINE_RESPONSE,
     DECODE_TIMING_UNAVAILABLE,
     ThroughputMeasurement,
@@ -111,9 +112,7 @@ def _validate_throughput_measurement(value: object) -> ThroughputMeasurement:
 def _record_phase_duration(
     phase_timings: dict[str, float],
     name: str,
-    thermal_tracker: ThermalStateTracker,
 ):
-    thermal_tracker.set_phase(name)
     start = time.perf_counter()
     try:
         yield
@@ -255,7 +254,8 @@ def run_benchmark(
 
     try:
         # Warmup phase — 2 calls with the throughput prompt, not recorded
-        with _record_phase_duration(phase_timings, "warmup", thermal_tracker):
+        thermal_tracker.set_phase("warmup")
+        with _record_phase_duration(phase_timings, "warmup"):
             logger.info("Warming up (2 calls, not recorded)...")
             for _ in range(2):
                 try:
@@ -293,7 +293,8 @@ def run_benchmark(
                 )
                 ram_tracker = None
 
-        with _record_phase_duration(phase_timings, "ttft_cold", thermal_tracker):
+        thermal_tracker.set_phase("ttft_cold")
+        with _record_phase_duration(phase_timings, "ttft_cold"):
             logger.info("Running cold TTFT trials...")
             for i in range(trials):
                 cold_prompt = COLD_PROMPTS[i]
@@ -302,7 +303,8 @@ def run_benchmark(
                     engine.measure_ttft(cold_prompt, model=model_name)
                 )
 
-        with _record_phase_duration(phase_timings, "cache_priming", thermal_tracker):
+        thermal_tracker.set_phase("cache_priming")
+        with _record_phase_duration(phase_timings, "cache_priming"):
             logger.info("\nPriming cache for cached TTFT measurement...")
             try:
                 engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
@@ -310,7 +312,8 @@ def run_benchmark(
                 logger.warning(f"  Cache priming failed; cached TTFT may be cold: {exc}")
             logger.info("  Done.\n")
 
-        with _record_phase_duration(phase_timings, "ttft_cached", thermal_tracker):
+        thermal_tracker.set_phase("ttft_cached")
+        with _record_phase_duration(phase_timings, "ttft_cached"):
             logger.info("Running cached TTFT trials...")
             for i in range(trials):
                 logger.info(f"  Cached trial {i + 1}/{trials} (fixed prompt)...")
@@ -318,7 +321,8 @@ def run_benchmark(
                     engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
                 )
 
-        with _record_phase_duration(phase_timings, "throughput", thermal_tracker):
+        thermal_tracker.set_phase("throughput")
+        with _record_phase_duration(phase_timings, "throughput"):
             logger.info("\nRunning throughput trials...")
             for i in range(trials):
                 logger.info(f"  Throughput trial {i + 1}/{trials}...")
@@ -390,9 +394,18 @@ def run_benchmark(
     decode_tps_stats = None
     decode_timing_source = DECODE_TIMING_UNAVAILABLE
     if decode_tps_trials and len(decode_tps_trials) == len(tps_trials):
-        decode_tps_stats = compute_stats(decode_tps_trials)
-        if set(decode_timing_sources) == {DECODE_TIMING_ENGINE_RESPONSE}:
-            decode_timing_source = DECODE_TIMING_ENGINE_RESPONSE
+        unique_decode_sources = set(decode_timing_sources)
+        if len(unique_decode_sources) == 1 and unique_decode_sources <= {
+            DECODE_TIMING_CLIENT_STREAM,
+            DECODE_TIMING_ENGINE_RESPONSE,
+        }:
+            decode_tps_stats = compute_stats(decode_tps_trials)
+            decode_timing_source = unique_decode_sources.pop()
+        else:
+            logger.warning(
+                "Decode throughput sources were mixed or unavailable; "
+                "decode_tokens_per_second will be omitted."
+            )
     elif decode_tps_trials:
         logger.warning(
             "Decode throughput was available for only some throughput trials; "
