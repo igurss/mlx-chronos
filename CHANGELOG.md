@@ -25,6 +25,8 @@
   elapsed request seconds when all three values are present.
 - Warn when continuous thermal monitoring is unavailable, changes during a run,
   or observes known non-nominal thermal state.
+- Use `omlx --version` for current oMLX releases, with a legacy help fallback,
+  so engine version reporting works while the server is already running.
 
 ## [0.1.1] — 2026-06-01
 

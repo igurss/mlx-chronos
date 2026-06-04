@@ -126,10 +126,10 @@ class SystemRAMTracker:
 
 class ThermalStateTracker:
     """
-    Continuously samples macOS thermal state using the non-sudo Foundation path.
+    Continuously samples macOS thermal state using the Foundation path.
 
     The tracker intentionally does not loop over powermetrics because that would
-    add avoidable subprocess and sudo overhead during the benchmark itself.
+    add avoidable subprocess overhead during the benchmark itself.
     """
 
     def __init__(self, interval: float = 1.0, sampler=None):

@@ -4,6 +4,7 @@ import shutil
 import json
 import logging
 import os
+import re
 import importlib.metadata
 import importlib.util
 import httpx
@@ -586,16 +587,39 @@ class OMLXEngine(BaseEngine):
     def is_installed(self) -> bool:
         return shutil.which("omlx") is not None
 
+    def _parse_version_output(self, output: str) -> str | None:
+        match = re.search(r"\bv?(\d+(?:\.\d+)+(?:[-+._a-zA-Z0-9]*)?)\b", output)
+        return match.group(1) if match else None
+
     def get_version(self) -> str:
-        try:
-            result = subprocess.run(
-                ["omlx", "serve", "--help"], capture_output=True, text=True, timeout=3
-            )
-            for line in (result.stdout + result.stderr).splitlines():
+        version_commands = [
+            ["omlx", "--version"],
+            ["omlx", "serve", "--help"],
+        ]
+        for command in version_commands:
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+            except Exception:
+                continue
+
+            if result.returncode != 0:
+                continue
+
+            output = f"{result.stdout}\n{result.stderr}"
+            parsed = self._parse_version_output(output)
+            if parsed:
+                return parsed
+
+            for line in output.splitlines():
                 if "Version:" in line:
-                    return line.split("Version:")[-1].strip()
-        except Exception:
-            pass
+                    version = line.split("Version:")[-1].strip()
+                    if version:
+                        return version
         return "unknown"
 
 

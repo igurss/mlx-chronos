@@ -121,10 +121,10 @@ JSON can distinguish direct process measurements from system-memory fallbacks.
 The public leaderboard does not use process RSS as a main comparison metric.
 
 ### Thermal State
-Thermal state is detected without sudo through macOS `NSProcessInfo` when the
-Foundation bridge is available. If that path is unavailable, mlx-Chronos falls
-back to `powermetrics`, which requires sudo; otherwise the result records an
-`unavailable_*` status.
+Thermal state is detected through macOS `NSProcessInfo` when the Foundation
+bridge is available. If that path is unavailable, mlx-Chronos falls back to a
+single `powermetrics` sample when the current process can run it; otherwise the
+result records an `unavailable_*` status.
 
 `mlx-chronos validate` and `mlx-chronos run` warn when thermal state is
 unavailable, when macOS reports a non-nominal thermal state, or when battery
@@ -132,16 +132,27 @@ power / Low Power Mode are detected. These warnings are informational: the run
 continues and the JSON thermal value remains unchanged.
 
 New benchmark results also include a lightweight continuous thermal monitor in
-`meta.thermal_monitor`. It samples only the non-sudo Foundation path during the
-run and records start/end/worst thermal state, sample count, whether the state
-changed, and which benchmark phases observed a known non-nominal state.
+`meta.thermal_monitor`. It samples only the Foundation path during the run and
+records start/end/worst thermal state, sample count, whether the state changed,
+and which benchmark phases observed a known non-nominal state.
 mlx-Chronos intentionally does not run `powermetrics` repeatedly during the
-benchmark because that would add subprocess and sudo overhead to the measurement.
+benchmark because that would add subprocess overhead to the measurement.
 
 The result also records `meta.phase_timings_seconds` with elapsed time for
 warmup, cold TTFT, cache priming, cached TTFT, throughput, and total runtime.
 These fields make run order and heat buildup easier to interpret, but they do
 not magically remove thermal throttling.
+
+### Engine Version Detection
+Engine versions are recorded in `engine.version` when local detection succeeds:
+
+- oMLX: `omlx --version` on current releases, with a legacy
+  `omlx serve --help` fallback for older installs.
+- Rapid-MLX: `rapid-mlx version`.
+- mlx-lm: installed Python package metadata for `mlx-lm`.
+- Ollama: `ollama --version`.
+
+If detection fails, the result records `unknown` instead of blocking the run.
 
 Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB
 causes swapping and slows down inference, whereas 7GB used out of 16GB does

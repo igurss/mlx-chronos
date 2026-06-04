@@ -140,13 +140,13 @@ def test_cmd_validate_emits_condition_warnings(
         "chip": "Apple M2",
         "memory_gb": 8.0,
         "macos_version": "14.0",
-        "thermal_state": "unavailable_no_sudo",
+        "thermal_state": "unavailable_permission",
     }
     mock_detect.return_value = hardware
     mock_warnings.return_value = [
         BenchmarkConditionWarning(
             "thermal state unavailable",
-            "thermal_state=unavailable_no_sudo",
+            "thermal_state=unavailable_permission",
         )
     ]
 
@@ -162,7 +162,7 @@ def test_cmd_validate_emits_condition_warnings(
     cmd_validate(Namespace(engine="omlx", model=None))
 
     mock_warnings.assert_called_once_with(hardware)
-    assert "[warn] thermal state unavailable: thermal_state=unavailable_no_sudo" in caplog.text
+    assert "[warn] thermal state unavailable: thermal_state=unavailable_permission" in caplog.text
 
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")

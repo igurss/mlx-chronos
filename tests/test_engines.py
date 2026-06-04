@@ -293,6 +293,36 @@ def test_get_server_pid_filters_listening_process(mock_process_cls, mock_run):
     assert "-sTCP:LISTEN" in mock_run.call_args.args[0]
 
 @patch("subprocess.run")
+def test_omlx_get_version_uses_cli_version_flag(mock_run):
+    mock_result = MagicMock()
+    mock_result.stdout = "omlx 0.4.1\n"
+    mock_result.stderr = ""
+    mock_result.returncode = 0
+    mock_run.return_value = mock_result
+
+    assert OMLXEngine().get_version() == "0.4.1"
+    assert mock_run.call_args.args[0] == ["omlx", "--version"]
+    assert mock_run.call_args.kwargs["timeout"] == 3
+
+@patch("subprocess.run")
+def test_omlx_get_version_falls_back_to_serve_help(mock_run):
+    empty_result = MagicMock()
+    empty_result.stdout = ""
+    empty_result.stderr = ""
+    empty_result.returncode = 2
+    help_result = MagicMock()
+    help_result.stdout = "Usage: omlx serve\nVersion: 0.3.9\n"
+    help_result.stderr = ""
+    help_result.returncode = 0
+    mock_run.side_effect = [empty_result, help_result]
+
+    assert OMLXEngine().get_version() == "0.3.9"
+    assert [call.args[0] for call in mock_run.call_args_list] == [
+        ["omlx", "--version"],
+        ["omlx", "serve", "--help"],
+    ]
+
+@patch("subprocess.run")
 def test_ollama_get_version(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "ollama version is 0.24.0\n"

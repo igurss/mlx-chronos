@@ -113,14 +113,14 @@ def get_thermal_state_from_foundation() -> str | None:
 def get_thermal_state() -> str:
     """
     Return macOS thermal pressure level.
-    Uses NSProcessInfo without sudo when available, then falls back to powermetrics.
+    Uses NSProcessInfo when available, then falls back to powermetrics.
     """
     foundation_state = get_thermal_state_from_foundation()
     if foundation_state is not None:
         return foundation_state
 
     if getattr(os, "geteuid", lambda: -1)() != 0:
-        return "unavailable_no_sudo"
+        return "unavailable_permission"
     try:
         result = subprocess.run(
             ["powermetrics", "-n", "1", "-i", "100", "-s", "thermal"],
@@ -206,9 +206,8 @@ def get_benchmark_condition_warnings(
                 "thermal state unavailable",
                 (
                     f"thermal_state={thermal_state}; mlx-chronos could not read "
-                    "macOS thermal pressure without Foundation/PyObjC or sudo "
-                    "powermetrics. The run can continue, but thermal context is "
-                    "missing."
+                    "macOS thermal pressure through the available local probes. "
+                    "The run can continue, but thermal context is missing."
                 ),
             )
         )

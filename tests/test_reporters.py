@@ -61,7 +61,7 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Total runtime:** 38.1 s" in content
     assert "**Request throughput:** 18.44 tokens/s" in content
     assert "**Decode timing source:** unavailable" in content
-    assert "**Thermal state:** unavailable_no_sudo" in content
+    assert "**Thermal state:** unavailable_permission" in content
     assert "## Thermal Monitor" in content
     assert "**Source:** unavailable" in content
     assert "**Sample interval:** 1.0 s" in content

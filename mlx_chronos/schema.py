@@ -60,7 +60,7 @@ class Hardware(ChronosBaseModel):
     python_version: str = Field(..., description="Python version (e.g. '3.11.4')")
     architecture: str = Field(..., min_length=1, description="CPU architecture (e.g. 'arm64')")
     thermal_state: Optional[str] = Field(
-        "unavailable_no_sudo",
+        "unavailable_permission",
         description="Thermal pressure level (nominal/fair/serious/critical or unavailable_*)",
     )
 
@@ -381,7 +381,7 @@ class Meta(ChronosBaseModel):
     )
     thermal_monitor: Optional[ThermalMonitor] = Field(
         None,
-        description="Continuous non-sudo thermal sampling summary for this run",
+        description="Continuous thermal sampling summary for this run",
     )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 
@@ -517,7 +517,7 @@ EXAMPLE_RESULT = {
         "macos_version": "15.3.1",
         "python_version": "3.11.4",
         "architecture": "arm64",
-        "thermal_state": "unavailable_no_sudo"
+        "thermal_state": "unavailable_permission"
     },
     "engine": {
         "name": "omlx",

@@ -24,11 +24,11 @@ def test_thermal_state_uses_foundation_when_available(monkeypatch):
     assert get_thermal_state() == "fair"
 
 
-def test_thermal_state_falls_back_without_sudo(monkeypatch):
+def test_thermal_state_reports_unavailable_when_foundation_is_missing(monkeypatch):
     monkeypatch.setitem(sys.modules, "Foundation", None)
     monkeypatch.setattr("os.geteuid", lambda: 501)
 
-    assert get_thermal_state() == "unavailable_no_sudo"
+    assert get_thermal_state() == "unavailable_permission"
 
 
 def test_get_architecture(monkeypatch):
@@ -77,14 +77,14 @@ def test_benchmark_condition_warnings_for_non_nominal_conditions():
 
 def test_benchmark_condition_warnings_for_unavailable_thermal_state():
     warnings = get_benchmark_condition_warnings(
-        {"thermal_state": "unavailable_no_sudo"},
+        {"thermal_state": "unavailable_permission"},
         power_source="ac_power",
         low_power_mode="off",
     )
 
     assert len(warnings) == 1
     assert warnings[0].label == "thermal state unavailable"
-    assert "unavailable_no_sudo" in warnings[0].detail
+    assert "unavailable_permission" in warnings[0].detail
 
 
 def test_benchmark_condition_warning_detection_failures_are_ignored():
