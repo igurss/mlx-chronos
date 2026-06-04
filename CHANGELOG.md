@@ -11,6 +11,8 @@
   engine-reported decode throughput when reliable timing is available.
 - Expand the fixed cold-prompt pool to 30 prompts and add p95 reporting only
   for runs with at least 20 trials.
+- Add phase timing metadata and lightweight continuous thermal monitoring to
+  new benchmark results.
 
 ### Reliability
 - Validate usage-based throughput completion counts against requested token
@@ -21,6 +23,8 @@
   trackers into focused modules.
 - Validate request throughput raw trials against completion-token counts and
   elapsed request seconds when all three values are present.
+- Warn when continuous thermal monitoring is unavailable, changes during a run,
+  or observes known non-nominal thermal state.
 
 ## [0.1.1] — 2026-06-01
 

@@ -8,6 +8,7 @@ from mlx_chronos.benchmark import (
     RAMTracker,
     SystemRAMTracker,
     THROUGHPUT_PROMPT,
+    ThermalStateTracker,
     TTFT_MAX_TOKENS,
     WARMUP_MAX_TOKENS,
     compute_stats,
@@ -33,6 +34,36 @@ def throughput_measurement(
         decode_tokens_per_second=decode_tps,
         decode_timing_source="engine_response" if decode_tps is not None else "unavailable",
     )
+
+
+class FakeThermalStateTracker:
+    instances = []
+
+    def __init__(self, interval=1.0):
+        self.interval = interval
+        self.phases = []
+        self.started = False
+        FakeThermalStateTracker.instances.append(self)
+
+    def start(self):
+        self.started = True
+
+    def set_phase(self, phase):
+        self.phases.append(phase)
+
+    def stop(self):
+        return {
+            "sample_interval_seconds": self.interval,
+            "source": "foundation",
+            "start_state": "nominal",
+            "end_state": "nominal",
+            "worst_state": "nominal",
+            "samples": 2,
+            "changed_during_run": False,
+            "non_nominal_observed": False,
+            "non_nominal_phases": [],
+        }
+
 
 def test_compute_stats_normal():
     values = [10.0, 12.0, 14.0, 16.0, 18.0]
@@ -104,9 +135,30 @@ def test_system_ram_tracker():
     assert used_bytes == 6 * (1024 ** 3)
     assert percent == 75.0
 
+def test_thermal_state_tracker_summarizes_non_nominal_phases():
+    states = iter(["nominal", "fair", "serious"])
+    tracker = ThermalStateTracker(
+        interval=999,
+        sampler=lambda: next(states, "serious"),
+    )
+
+    tracker.start()
+    tracker.set_phase("throughput")
+    tracker._record_sample()
+    summary = tracker.stop()
+
+    assert summary["source"] == "foundation"
+    assert summary["start_state"] == "nominal"
+    assert summary["end_state"] == "serious"
+    assert summary["worst_state"] == "serious"
+    assert summary["changed_during_run"] is True
+    assert summary["non_nominal_observed"] is True
+    assert "throughput" in summary["non_nominal_phases"]
+
 @patch("mlx_chronos.benchmark.get_engine")
 @patch("mlx_chronos.benchmark.detect_hardware")
 def test_run_benchmark(mock_detect, mock_get_engine):
+    FakeThermalStateTracker.instances = []
     mock_detect.return_value = {
         "chip": "Apple M2",
         "machine_model": "Mac14,2",
@@ -131,7 +183,8 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     mock_get_engine.return_value = mock_engine
     
     with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls, \
-         patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
+         patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory, \
+         patch("mlx_chronos.benchmark.ThermalStateTracker", FakeThermalStateTracker):
         mock_process = MagicMock()
         mem_info = MagicMock()
         mem_info.rss = int(1.5 * (1024 ** 3))
@@ -167,6 +220,27 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["metrics"]["system_ram_peak_percent"] == 75.0
     assert result["trials"]["completion_tokens_raw"] == [100, 100]
     assert result["trials"]["throughput_elapsed_seconds_raw"] == [5.0, 5.0]
+    assert result["meta"]["phase_timings_seconds"]["total_runtime"] >= 0
+    assert set(result["meta"]["phase_timings_seconds"]) == {
+        "warmup",
+        "ttft_cold",
+        "cache_priming",
+        "ttft_cached",
+        "throughput",
+        "total_runtime",
+    }
+    assert result["meta"]["thermal_monitor"]["source"] == "foundation"
+    assert result["meta"]["thermal_monitor"]["worst_state"] == "nominal"
+    thermal_tracker = FakeThermalStateTracker.instances[0]
+    assert thermal_tracker.started is True
+    assert thermal_tracker.phases == [
+        "warmup",
+        "ttft_cold",
+        "cache_priming",
+        "ttft_cached",
+        "throughput",
+        "teardown",
+    ]
     protocol = result["meta"]["benchmark_protocol"]
     assert protocol["name"] == "baseline"
     assert protocol["ttft_cold"]["prompts"] == COLD_PROMPTS[:2]

@@ -42,6 +42,10 @@ DecodeTimingSource = Literal[
     "unavailable",
     "engine_response",
 ]
+ThermalMonitorSource = Literal[
+    "foundation",
+    "unavailable",
+]
 
 
 class ChronosBaseModel(BaseModel):
@@ -303,6 +307,62 @@ class BenchmarkProtocol(ChronosBaseModel):
     throughput: BenchmarkProtocolPhase
 
 
+class PhaseTimings(ChronosBaseModel):
+    warmup: NonNegativeFloat = Field(..., description="Warmup phase duration in seconds")
+    ttft_cold: NonNegativeFloat = Field(..., description="Cold TTFT phase duration in seconds")
+    cache_priming: NonNegativeFloat = Field(..., description="Cached TTFT priming duration in seconds")
+    ttft_cached: NonNegativeFloat = Field(..., description="Cached TTFT phase duration in seconds")
+    throughput: NonNegativeFloat = Field(..., description="Throughput phase duration in seconds")
+    total_runtime: NonNegativeFloat = Field(..., description="Total measured benchmark runtime in seconds")
+
+    @model_validator(mode="after")
+    def validate_total_runtime(self):
+        phase_sum = (
+            self.warmup
+            + self.ttft_cold
+            + self.cache_priming
+            + self.ttft_cached
+            + self.throughput
+        )
+        # Individual phase timings and total runtime are rounded independently.
+        if self.total_runtime + 0.05 < phase_sum:
+            raise ValueError("total_runtime must cover the sum of benchmark phases")
+        return self
+
+
+class ThermalMonitor(ChronosBaseModel):
+    sample_interval_seconds: PositiveFloat = Field(
+        ...,
+        description="Seconds between thermal monitor samples",
+    )
+    source: ThermalMonitorSource = Field(
+        ...,
+        description="Source used for continuous thermal monitoring",
+    )
+    start_state: str = Field(..., min_length=1, description="First observed thermal state")
+    end_state: str = Field(..., min_length=1, description="Last observed thermal state")
+    worst_state: str = Field(..., min_length=1, description="Worst observed thermal state")
+    samples: PositiveInt = Field(..., description="Number of thermal samples collected")
+    changed_during_run: bool = Field(..., description="Whether thermal state changed during the run")
+    non_nominal_observed: bool = Field(..., description="Whether a known non-nominal state was observed")
+    non_nominal_phases: list[str] = Field(
+        default_factory=list,
+        description="Benchmark phases where a known non-nominal state was observed",
+    )
+
+    @model_validator(mode="after")
+    def validate_thermal_monitor(self):
+        if self.start_state != self.end_state and not self.changed_during_run:
+            raise ValueError("changed_during_run must be true when start and end differ")
+        if self.non_nominal_phases and not self.non_nominal_observed:
+            raise ValueError(
+                "non_nominal_observed must be true when non_nominal_phases is non-empty"
+            )
+        if any(not phase.strip() for phase in self.non_nominal_phases):
+            raise ValueError("non_nominal_phases must not contain blank phase names")
+        return self
+
+
 class Meta(ChronosBaseModel):
     chronos_version: str = Field(..., min_length=1, description="mlx-chronos version used")
     timestamp: datetime = Field(..., description="Timestamp of the benchmark run")
@@ -314,6 +374,14 @@ class Meta(ChronosBaseModel):
     benchmark_protocol: Optional[BenchmarkProtocol] = Field(
         None,
         description="Prompt and token-bound metadata for reproducing the benchmark",
+    )
+    phase_timings_seconds: Optional[PhaseTimings] = Field(
+        None,
+        description="Elapsed time for each benchmark phase and the total run",
+    )
+    thermal_monitor: Optional[ThermalMonitor] = Field(
+        None,
+        description="Continuous non-sudo thermal sampling summary for this run",
     )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 
@@ -486,6 +554,25 @@ EXAMPLE_RESULT = {
         "chronos_version": "0.1.1",
         "timestamp": "2026-05-23T15:08:36Z",
         "ram_sample_interval_seconds": 0.05,
+        "phase_timings_seconds": {
+            "warmup": 10.512,
+            "ttft_cold": 0.208,
+            "cache_priming": 0.010,
+            "ttft_cached": 0.050,
+            "throughput": 27.104,
+            "total_runtime": 38.100,
+        },
+        "thermal_monitor": {
+            "sample_interval_seconds": 1.0,
+            "source": "unavailable",
+            "start_state": "unavailable_foundation",
+            "end_state": "unavailable_foundation",
+            "worst_state": "unavailable_foundation",
+            "samples": 2,
+            "changed_during_run": False,
+            "non_nominal_observed": False,
+            "non_nominal_phases": [],
+        },
         "benchmark_protocol": {
             "name": "baseline",
             "version": "1",

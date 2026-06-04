@@ -4,6 +4,20 @@ import time
 
 import psutil
 
+from mlx_chronos.detect import get_thermal_state_from_foundation
+
+
+THERMAL_STATE_ORDER = {
+    "nominal": 0,
+    "fair": 1,
+    "serious": 2,
+    "critical": 3,
+}
+
+
+def _is_non_nominal_thermal_state(state: str) -> bool:
+    return not state.startswith("unavailable") and state != "nominal"
+
 
 class RAMTracker:
     """
@@ -109,3 +123,92 @@ class SystemRAMTracker:
             peak_pct = self.peak_percent
         return peak_used / (1024 ** 3), peak_pct
 
+
+class ThermalStateTracker:
+    """
+    Continuously samples macOS thermal state using the non-sudo Foundation path.
+
+    The tracker intentionally does not loop over powermetrics because that would
+    add avoidable subprocess and sudo overhead during the benchmark itself.
+    """
+
+    def __init__(self, interval: float = 1.0, sampler=None):
+        self.interval = interval
+        self.sampler = sampler or get_thermal_state_from_foundation
+        self._phase = "setup"
+        self._samples: list[tuple[str, str]] = []
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread = None
+
+    def _sample_thermal_state(self) -> str:
+        state = self.sampler()
+        if isinstance(state, str) and state.strip():
+            return state.strip()
+        return "unavailable_foundation"
+
+    def _record_sample(self):
+        state = self._sample_thermal_state()
+        with self._lock:
+            self._samples.append((self._phase, state))
+
+    def _monitor(self):
+        while not self._stop_event.wait(self.interval):
+            self._record_sample()
+
+    def set_phase(self, phase: str) -> None:
+        with self._lock:
+            self._phase = phase
+
+    def start(self):
+        self._samples = []
+        self._stop_event.clear()
+        self._record_sample()
+        self._thread = threading.Thread(target=self._monitor, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> dict:
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join()
+        self._record_sample()
+
+        with self._lock:
+            samples = list(self._samples)
+
+        states = [state for _phase, state in samples]
+        start_state = states[0] if states else "unavailable_foundation"
+        end_state = states[-1] if states else "unavailable_foundation"
+        observed_known_states = [
+            state for state in states if state in THERMAL_STATE_ORDER
+        ]
+        if observed_known_states:
+            worst_state = max(
+                observed_known_states,
+                key=lambda state: THERMAL_STATE_ORDER[state],
+            )
+            source = "foundation"
+        else:
+            worst_state = start_state
+            source = "unavailable"
+
+        non_nominal_phases = sorted(
+            {
+                phase
+                for phase, state in samples
+                if _is_non_nominal_thermal_state(state)
+            }
+        )
+        return {
+            "sample_interval_seconds": self.interval,
+            "source": source,
+            "start_state": start_state,
+            "end_state": end_state,
+            "worst_state": worst_state,
+            "samples": len(samples),
+            "changed_during_run": len(set(states)) > 1,
+            "non_nominal_observed": any(
+                _is_non_nominal_thermal_state(state) for state in states
+            ),
+            "non_nominal_phases": non_nominal_phases,
+        }

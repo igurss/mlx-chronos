@@ -15,6 +15,9 @@ def test_valid_schema():
     assert result.metrics.decode_timing_source == "unavailable"
     assert isinstance(result.meta.timestamp, datetime)
     assert result.meta.ram_sample_interval_seconds == 0.05
+    assert result.meta.phase_timings_seconds.total_runtime == 38.1
+    assert result.meta.thermal_monitor.source == "unavailable"
+    assert result.meta.thermal_monitor.start_state == "unavailable_foundation"
     assert result.hardware.architecture == "arm64"
     assert result.metrics.token_count_source == "usage.completion_tokens"
     assert result.metrics.ram_measurement_method == "system_fallback"
@@ -101,6 +104,64 @@ def test_benchmark_protocol_is_optional_for_older_results():
 
     result = BenchmarkResult(**data)
     assert result.meta.benchmark_protocol is None
+
+def test_phase_timings_and_thermal_monitor_are_optional_for_older_results():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    del data["meta"]["phase_timings_seconds"]
+    del data["meta"]["thermal_monitor"]
+
+    result = BenchmarkResult(**data)
+    assert result.meta.phase_timings_seconds is None
+    assert result.meta.thermal_monitor is None
+
+def test_phase_timings_reject_total_shorter_than_phase_sum():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["phase_timings_seconds"] = {
+        **invalid_data["meta"]["phase_timings_seconds"],
+        "warmup": 1.0,
+        "ttft_cold": 1.0,
+        "cache_priming": 1.0,
+        "ttft_cached": 1.0,
+        "throughput": 1.0,
+        "total_runtime": 4.0,
+    }
+
+    with pytest.raises(ValidationError, match="total_runtime"):
+        BenchmarkResult(**invalid_data)
+
+def test_thermal_monitor_rejects_unmarked_state_change():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["thermal_monitor"] = {
+        **invalid_data["meta"]["thermal_monitor"],
+        "source": "foundation",
+        "start_state": "nominal",
+        "end_state": "fair",
+        "worst_state": "fair",
+        "changed_during_run": False,
+    }
+
+    with pytest.raises(ValidationError, match="changed_during_run"):
+        BenchmarkResult(**invalid_data)
+
+def test_thermal_monitor_rejects_phases_without_non_nominal_flag():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["thermal_monitor"] = {
+        **invalid_data["meta"]["thermal_monitor"],
+        "source": "foundation",
+        "start_state": "nominal",
+        "end_state": "fair",
+        "worst_state": "fair",
+        "changed_during_run": True,
+        "non_nominal_observed": False,
+        "non_nominal_phases": ["throughput"],
+    }
+
+    with pytest.raises(ValidationError, match="non_nominal_observed"):
+        BenchmarkResult(**invalid_data)
 
 def test_benchmark_protocol_rejects_invalid_token_bounds():
     invalid_data = EXAMPLE_RESULT.copy()

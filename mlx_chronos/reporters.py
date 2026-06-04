@@ -85,7 +85,11 @@ class MarkdownReporter(BaseReporter):
         md += f"- **Timestamp:** {self._format_timestamp(meta.get('timestamp'))}\n"
         md += f"- **Chronos version:** {self._format_optional(meta.get('chronos_version'))}\n"
         md += f"- **Trials:** {trials.get('count', 'unknown')}\n"
-        md += f"- **Token count source:** {self._format_optional(metrics.get('token_count_source'))}\n\n"
+        md += f"- **Token count source:** {self._format_optional(metrics.get('token_count_source'))}\n"
+        phase_timings = meta.get("phase_timings_seconds")
+        if phase_timings:
+            md += f"- **Total runtime:** {phase_timings['total_runtime']} s\n"
+        md += "\n"
         
         md += f"## Hardware\n"
         md += f"- **Chip:** {hw['chip']}\n"
@@ -133,6 +137,43 @@ class MarkdownReporter(BaseReporter):
             f"- **Peak system RAM:** {system_ram_peak_gb} GB "
             f"({system_ram_peak_percent}%)\n"
         )
+
+        thermal_monitor = meta.get("thermal_monitor")
+        if thermal_monitor:
+            md += "\n## Thermal Monitor\n"
+            md += (
+                f"- **Source:** "
+                f"{self._format_optional(thermal_monitor.get('source'))}\n"
+            )
+            md += (
+                f"- **Sample interval:** "
+                f"{thermal_monitor['sample_interval_seconds']} s\n"
+            )
+            md += (
+                f"- **State:** {thermal_monitor['start_state']} -> "
+                f"{thermal_monitor['end_state']} "
+                f"(worst: {thermal_monitor['worst_state']})\n"
+            )
+            md += f"- **Samples:** {thermal_monitor['samples']}\n"
+            md += (
+                f"- **Changed during run:** "
+                f"{thermal_monitor['changed_during_run']}\n"
+            )
+            phases = thermal_monitor.get("non_nominal_phases") or []
+            if phases:
+                md += f"- **Non-nominal phases:** {', '.join(phases)}\n"
+
+        if phase_timings:
+            md += "\n## Phase Timings\n"
+            for label, key in [
+                ("Warmup", "warmup"),
+                ("Cold TTFT", "ttft_cold"),
+                ("Cache priming", "cache_priming"),
+                ("Cached TTFT", "ttft_cached"),
+                ("Throughput", "throughput"),
+                ("Total runtime", "total_runtime"),
+            ]:
+                md += f"- **{label}:** {phase_timings[key]} s\n"
 
         raw_sections = [
             (label, values)

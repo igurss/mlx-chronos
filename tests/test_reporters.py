@@ -58,9 +58,16 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Chronos version:** 0.1.1" in content
     assert "**Trials:** 5" in content
     assert "**Token count source:** usage.completion_tokens" in content
+    assert "**Total runtime:** 38.1 s" in content
     assert "**Request throughput:** 18.44 tokens/s" in content
     assert "**Decode timing source:** unavailable" in content
     assert "**Thermal state:** unavailable_no_sudo" in content
+    assert "## Thermal Monitor" in content
+    assert "**Source:** unavailable" in content
+    assert "**Sample interval:** 1.0 s" in content
+    assert "**State:** unavailable_foundation -> unavailable_foundation" in content
+    assert "## Phase Timings" in content
+    assert "**Throughput:** 27.104 s" in content
     assert "**RAM measurement method:** system_fallback" in content
     assert "Apple M2" in content
     assert "## Raw Trials" in content

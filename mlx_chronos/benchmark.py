@@ -1,8 +1,10 @@
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import logging
 import psutil
+import time
 
 from mlx_chronos.constants import (
     MAX_TRIALS,
@@ -32,7 +34,7 @@ from mlx_chronos.protocol import (
 )
 from mlx_chronos.schema import BenchmarkResult, dump_benchmark_result
 from mlx_chronos.stats import compute_stats
-from mlx_chronos.trackers import RAMTracker, SystemRAMTracker
+from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
 
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -40,6 +42,7 @@ logger = logging.getLogger("mlx_chronos")
 
 # Default RAM sampling interval in seconds
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
+DEFAULT_THERMAL_SAMPLE_INTERVAL = 1.0
 
 DEFAULT_TRIALS = 5
 
@@ -102,6 +105,42 @@ def _validate_throughput_measurement(value: object) -> ThroughputMeasurement:
         "engine returned an invalid throughput measurement; expected "
         f"ThroughputMeasurement, got {type(value).__name__}"
     )
+
+
+@contextmanager
+def _record_phase_duration(
+    phase_timings: dict[str, float],
+    name: str,
+    thermal_tracker: ThermalStateTracker,
+):
+    thermal_tracker.set_phase(name)
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        phase_timings[name] = round(time.perf_counter() - start, 3)
+
+
+def _log_thermal_monitor_warnings(summary: dict) -> None:
+    source = summary.get("source")
+    if source == "unavailable":
+        logger.warning(
+            "  Warning: thermal monitoring unavailable during run; "
+            "continuous thermal context is missing."
+        )
+        return
+
+    if summary.get("changed_during_run"):
+        logger.warning(
+            "  Warning: thermal state changed during run "
+            f"({summary.get('start_state')} -> {summary.get('end_state')})."
+        )
+    if summary.get("non_nominal_observed"):
+        phases = ", ".join(summary.get("non_nominal_phases") or ["unknown"])
+        logger.warning(
+            "  Warning: non-nominal thermal state observed during benchmark "
+            f"(worst={summary.get('worst_state')}; phases={phases})."
+        )
 
 
 def run_benchmark(
@@ -180,7 +219,16 @@ def run_benchmark(
     engine_version = engine.get_version()
     logger.info(f"Engine version: {engine_version}\n")
 
-    # 4. Start system memory sampling before warmup so load/cache pressure is captured.
+    # 4. Start background sampling before warmup so load/cache pressure is captured.
+    phase_timings = {}
+    total_runtime_start = time.perf_counter()
+    logger.info(
+        f"Starting continuous background thermal sampling "
+        f"({DEFAULT_THERMAL_SAMPLE_INTERVAL:.3f}s interval)..."
+    )
+    thermal_tracker = ThermalStateTracker(interval=DEFAULT_THERMAL_SAMPLE_INTERVAL)
+    thermal_tracker.start()
+
     logger.info(
         f"Starting continuous background system RAM sampling "
         f"({ram_sample_interval:.3f}s interval)..."
@@ -201,22 +249,24 @@ def run_benchmark(
     peak_ram_gb = None
     system_ram_peak_gb = None
     system_ram_peak_percent = None
+    thermal_summary = None
     ram_tracker = None
     ram_is_process_rss = False
 
     try:
         # Warmup phase — 2 calls with the throughput prompt, not recorded
-        logger.info("Warming up (2 calls, not recorded)...")
-        for _ in range(2):
-            try:
-                engine.measure_tokens_per_second(
-                    THROUGHPUT_PROMPT,
-                    model=model_name,
-                    max_tokens=WARMUP_MAX_TOKENS,
-                )
-            except Exception as exc:
-                logger.warning(f"  Warmup call failed and was skipped: {exc}")
-        logger.info("  Done.\n")
+        with _record_phase_duration(phase_timings, "warmup", thermal_tracker):
+            logger.info("Warming up (2 calls, not recorded)...")
+            for _ in range(2):
+                try:
+                    engine.measure_tokens_per_second(
+                        THROUGHPUT_PROMPT,
+                        model=model_name,
+                        max_tokens=WARMUP_MAX_TOKENS,
+                    )
+                except Exception as exc:
+                    logger.warning(f"  Warmup call failed and was skipped: {exc}")
+            logger.info("  Done.\n")
 
         logger.info(
             f"Starting continuous background engine RSS sampling "
@@ -243,55 +293,64 @@ def run_benchmark(
                 )
                 ram_tracker = None
 
-        logger.info("Running cold TTFT trials...")
-        for i in range(trials):
-            cold_prompt = COLD_PROMPTS[i]
-            logger.info(f"  Cold trial {i + 1}/{trials} (unique prompt)...")
-            ttft_cold_trials.append(engine.measure_ttft(cold_prompt, model=model_name))
-
-        logger.info("\nPriming cache for cached TTFT measurement...")
-        try:
-            engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
-        except Exception as exc:
-            logger.warning(f"  Cache priming failed; cached TTFT may be cold: {exc}")
-        logger.info("  Done.\n")
-
-        logger.info("Running cached TTFT trials...")
-        for i in range(trials):
-            logger.info(f"  Cached trial {i + 1}/{trials} (fixed prompt)...")
-            ttft_cached_trials.append(
-                engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
-            )
-
-        logger.info("\nRunning throughput trials...")
-        for i in range(trials):
-            logger.info(f"  Throughput trial {i + 1}/{trials}...")
-            measurement = _validate_throughput_measurement(
-                engine.measure_throughput(
-                    THROUGHPUT_PROMPT,
-                    model=model_name,
-                    max_tokens=throughput_max_tokens,
-                    min_tokens=throughput_min_tokens,
+        with _record_phase_duration(phase_timings, "ttft_cold", thermal_tracker):
+            logger.info("Running cold TTFT trials...")
+            for i in range(trials):
+                cold_prompt = COLD_PROMPTS[i]
+                logger.info(f"  Cold trial {i + 1}/{trials} (unique prompt)...")
+                ttft_cold_trials.append(
+                    engine.measure_ttft(cold_prompt, model=model_name)
                 )
-            )
-            tps_trials.append(measurement.request_tokens_per_second)
-            throughput_elapsed_trials.append(measurement.elapsed_seconds)
-            token_source = _normalize_token_count_source(measurement.token_count_source)
-            completion_tokens = _normalize_completion_tokens(
-                measurement.completion_tokens
-            )
-            _validate_token_bounds(
-                completion_tokens,
-                token_source,
-                throughput_min_tokens,
-                throughput_max_tokens,
-            )
-            token_count_sources.append(token_source)
-            completion_tokens_trials.append(completion_tokens)
-            if measurement.decode_tokens_per_second is not None:
-                decode_tps_trials.append(measurement.decode_tokens_per_second)
-                decode_timing_sources.append(measurement.decode_timing_source)
+
+        with _record_phase_duration(phase_timings, "cache_priming", thermal_tracker):
+            logger.info("\nPriming cache for cached TTFT measurement...")
+            try:
+                engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
+            except Exception as exc:
+                logger.warning(f"  Cache priming failed; cached TTFT may be cold: {exc}")
+            logger.info("  Done.\n")
+
+        with _record_phase_duration(phase_timings, "ttft_cached", thermal_tracker):
+            logger.info("Running cached TTFT trials...")
+            for i in range(trials):
+                logger.info(f"  Cached trial {i + 1}/{trials} (fixed prompt)...")
+                ttft_cached_trials.append(
+                    engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
+                )
+
+        with _record_phase_duration(phase_timings, "throughput", thermal_tracker):
+            logger.info("\nRunning throughput trials...")
+            for i in range(trials):
+                logger.info(f"  Throughput trial {i + 1}/{trials}...")
+                measurement = _validate_throughput_measurement(
+                    engine.measure_throughput(
+                        THROUGHPUT_PROMPT,
+                        model=model_name,
+                        max_tokens=throughput_max_tokens,
+                        min_tokens=throughput_min_tokens,
+                    )
+                )
+                tps_trials.append(measurement.request_tokens_per_second)
+                throughput_elapsed_trials.append(measurement.elapsed_seconds)
+                token_source = _normalize_token_count_source(
+                    measurement.token_count_source
+                )
+                completion_tokens = _normalize_completion_tokens(
+                    measurement.completion_tokens
+                )
+                _validate_token_bounds(
+                    completion_tokens,
+                    token_source,
+                    throughput_min_tokens,
+                    throughput_max_tokens,
+                )
+                token_count_sources.append(token_source)
+                completion_tokens_trials.append(completion_tokens)
+                if measurement.decode_tokens_per_second is not None:
+                    decode_tps_trials.append(measurement.decode_tokens_per_second)
+                    decode_timing_sources.append(measurement.decode_timing_source)
     finally:
+        thermal_tracker.set_phase("teardown")
         if ram_tracker:
             peak_ram_gb = ram_tracker.stop()
             logger.info(
@@ -305,6 +364,18 @@ def run_benchmark(
             "System RAM sampling finished. Peak detected: "
             f"{system_ram_peak_gb:.2f} GB ({system_ram_peak_percent:.1f}%)\n"
         )
+        thermal_summary = thermal_tracker.stop()
+        phase_timings["total_runtime"] = round(
+            time.perf_counter() - total_runtime_start,
+            3,
+        )
+        logger.info(
+            "Thermal sampling finished. "
+            f"Start: {thermal_summary['start_state']}; "
+            f"end: {thermal_summary['end_state']}; "
+            f"worst: {thermal_summary['worst_state']}\n"
+        )
+        _log_thermal_monitor_warnings(thermal_summary)
 
         if peak_ram_gb is None:
             peak_ram_gb = system_ram_peak_gb
@@ -372,6 +443,8 @@ def run_benchmark(
             "chronos_version": VERSION,
             "timestamp": datetime.now(timezone.utc),
             "ram_sample_interval_seconds": ram_sample_interval,
+            "phase_timings_seconds": phase_timings,
+            "thermal_monitor": thermal_summary,
             "benchmark_protocol": build_benchmark_protocol(
                 trials,
                 throughput_max_tokens,

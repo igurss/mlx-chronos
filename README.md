@@ -60,6 +60,11 @@ warmup through the recorded benchmark phases and reports the observed peak in
 GB and percent. This is the public leaderboard memory metric because it answers
 the practical question of how much memory pressure the run placed on the Mac.
 
+**Thermal monitor** — records phase timings plus a lightweight thermal summary
+during the run when macOS thermal state is available through Foundation/PyObjC.
+New JSON results include start/end/worst thermal state, sample count, and phases
+where non-nominal thermal state was observed.
+
 **Peak engine RSS** — records the resident memory of the engine server process
 after warmup, through the recorded benchmark phases, when the process can be
 identified. This is diagnostic only: it is not total model memory or a public
@@ -183,6 +188,7 @@ is measured, how, and why.
 - [x] Integration tests against mock OpenAI-compatible servers
 - [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
 - [x] Request-throughput timing metadata and optional engine-reported decode throughput
+- [x] Phase timing metadata and lightweight continuous thermal monitoring
 
 ### Next
 - [ ] Add richer benchmark condition metadata without breaking the v0.1 JSON contract

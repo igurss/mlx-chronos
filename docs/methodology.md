@@ -131,6 +131,18 @@ unavailable, when macOS reports a non-nominal thermal state, or when battery
 power / Low Power Mode are detected. These warnings are informational: the run
 continues and the JSON thermal value remains unchanged.
 
+New benchmark results also include a lightweight continuous thermal monitor in
+`meta.thermal_monitor`. It samples only the non-sudo Foundation path during the
+run and records start/end/worst thermal state, sample count, whether the state
+changed, and which benchmark phases observed a known non-nominal state.
+mlx-Chronos intentionally does not run `powermetrics` repeatedly during the
+benchmark because that would add subprocess and sudo overhead to the measurement.
+
+The result also records `meta.phase_timings_seconds` with elapsed time for
+warmup, cold TTFT, cache priming, cached TTFT, throughput, and total runtime.
+These fields make run order and heat buildup easier to interpret, but they do
+not magically remove thermal throttling.
+
 Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB
 causes swapping and slows down inference, whereas 7GB used out of 16GB does
 not). System RAM peak helps explain performance variances between identical
@@ -167,6 +179,10 @@ records the baseline protocol version, exact prompt text for warmup, cold TTFT,
 cached TTFT, and throughput, plus the requested min/max token bounds per phase.
 Input token counts are marked as `unavailable` until mlx-Chronos can obtain
 them from a tokenizer or engine response without adding unreliable estimates.
+
+**Phase timing and thermal metadata:** new results include
+`meta.phase_timings_seconds` and `meta.thermal_monitor` so readers can see how
+long each phase took and whether thermal state changed during the run.
 
 ---
 
