@@ -48,9 +48,16 @@ clearer local result warnings since `0.1.1`.
   explicit warning metadata.
 - Try `/v1/models` metadata as a final oMLX version fallback when local CLI
   version probes fail.
-- Tighten sustained progress sample validation, remove unproduced decode timing
-  source metadata, require paired throughput token/elapsed raw fields, and avoid
-  duplicate total-runtime rows in Markdown output.
+
+### Bug Fixes
+- Compute sustained progress sample throughput from the same rounded elapsed
+  value saved in JSON, avoiding false schema validation failures.
+- Remove the unproduced `engine_response` decode timing source from runtime and
+  schema validation.
+- Require throughput completion-token and elapsed-time raw trial fields to be
+  present together when either one is present.
+- Avoid duplicate total-runtime rows in Markdown reports.
+- Keep example result metadata aligned with the `0.1.2` release version/date.
 
 ### Compatibility
 - Protocol v1 throughput used non-streaming requests; protocol v2 throughput
