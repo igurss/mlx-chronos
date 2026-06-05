@@ -88,6 +88,7 @@ def test_cmd_run_invalid_cooldown(capsys):
         max_tokens=100,
         min_tokens=None,
         cooldown_seconds=-1,
+        profile="baseline",
         model="test",
         format="json",
     )

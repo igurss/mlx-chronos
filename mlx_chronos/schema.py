@@ -231,6 +231,32 @@ class Metrics(ChronosBaseModel):
         return self
 
 
+class ThroughputProgressSample(ChronosBaseModel):
+    completion_tokens: PositiveInt = Field(
+        ...,
+        description="Generated completion tokens or estimated output words at sample time",
+    )
+    elapsed_seconds: PositiveFloat = Field(
+        ...,
+        description="Client-observed elapsed seconds at sample time",
+    )
+    tokens_per_second: NonNegativeFloat = Field(
+        ...,
+        description="Cumulative completion tokens divided by elapsed seconds",
+    )
+    token_count_source: Literal["usage.completion_tokens", "word_fallback"] = Field(
+        ...,
+        description="Token count source used for this progress sample",
+    )
+
+    @model_validator(mode="after")
+    def validate_progress_tps(self):
+        expected_tps = round(self.completion_tokens / self.elapsed_seconds, 2)
+        if abs(self.tokens_per_second - expected_tps) > 0.02:
+            raise ValueError("tokens_per_second must match completion_tokens / elapsed_seconds")
+        return self
+
+
 class Trials(ChronosBaseModel):
     count: int = Field(..., ge=1, le=MAX_TRIALS, description="Number of trials run")
     ttft_cold_raw: list[NonNegativeFloat] = Field(..., description="Raw cold TTFT values per trial")
@@ -251,7 +277,7 @@ class Trials(ChronosBaseModel):
             "For word_fallback results this is an estimated output word count."
         ),
     )
-    throughput_progress_samples_raw: Optional[list[list["ThroughputProgressSample"]]] = Field(
+    throughput_progress_samples_raw: Optional[list[list[ThroughputProgressSample]]] = Field(
         None,
         description=(
             "Per-throughput-trial progress samples for long sustained runs. "
@@ -281,32 +307,6 @@ class Trials(ChronosBaseModel):
         }
         if lengths != {self.count}:
             raise ValueError("trials.count must match all raw metric list lengths")
-        return self
-
-
-class ThroughputProgressSample(ChronosBaseModel):
-    completion_tokens: PositiveInt = Field(
-        ...,
-        description="Generated completion tokens or estimated output words at sample time",
-    )
-    elapsed_seconds: PositiveFloat = Field(
-        ...,
-        description="Client-observed elapsed seconds at sample time",
-    )
-    tokens_per_second: NonNegativeFloat = Field(
-        ...,
-        description="Cumulative completion tokens divided by elapsed seconds",
-    )
-    token_count_source: Literal["usage.completion_tokens", "word_fallback"] = Field(
-        ...,
-        description="Token count source used for this progress sample",
-    )
-
-    @model_validator(mode="after")
-    def validate_progress_tps(self):
-        expected_tps = round(self.completion_tokens / self.elapsed_seconds, 2)
-        if abs(self.tokens_per_second - expected_tps) > 0.02:
-            raise ValueError("tokens_per_second must match completion_tokens / elapsed_seconds")
         return self
 
 

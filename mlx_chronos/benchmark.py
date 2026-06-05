@@ -197,7 +197,7 @@ def run_benchmark(
     model_name: str,
     model_quantization: str,
     trials: int = DEFAULT_TRIALS,
-    notes: str = None,
+    notes: str | None = None,
     ram_sample_interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
     throughput_max_tokens: int = DEFAULT_THROUGHPUT_MAX_TOKENS,
     throughput_min_tokens: int | None = None,
