@@ -187,6 +187,17 @@ def test_measure_throughput_records_progress_samples(mock_stream):
     )
 
 @patch("httpx.stream")
+def test_measure_throughput_scales_timeout_for_long_outputs(mock_stream):
+    mock_stream.return_value = stream_response(
+        completion_stream(content="hello", completion_tokens=1000)
+    )
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 2.0]):
+        engine.measure_throughput("test prompt", "default", 1000)
+
+    assert mock_stream.call_args.kwargs["timeout"] == 500.0
+
+@patch("httpx.stream")
 def test_measure_tokens_per_second_marks_word_fallback(mock_stream):
     mock_stream.return_value = stream_response(
         completion_stream(content="one two three four", completion_tokens=None)

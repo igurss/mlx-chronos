@@ -59,7 +59,7 @@ class JSONReporter(BaseReporter):
         filename = f"{self._generate_base_filename(result)}.json"
         output_path = results_dir / filename
         
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
             f.write("\n")
             
@@ -78,10 +78,10 @@ class MarkdownReporter(BaseReporter):
         meta = result.get("meta", {})
         trials = result.get("trials", {})
         
-        md = f"# mlx-chronos Benchmark Result\n\n"
+        md = "# mlx-chronos Benchmark Result\n\n"
         md += f"**Engine:** {result['engine']['name']} ({result['engine']['version']})\n"
         md += f"**Model:** {result['model']['name']} ({result['model']['quantization']})\n\n"
-        md += f"## Run\n"
+        md += "## Run\n"
         md += f"- **Timestamp:** {self._format_timestamp(meta.get('timestamp'))}\n"
         md += f"- **Chronos version:** {self._format_optional(meta.get('chronos_version'))}\n"
         md += f"- **Profile:** {self._format_optional(meta.get('benchmark_profile'))}\n"
@@ -112,14 +112,14 @@ class MarkdownReporter(BaseReporter):
             md += f"- **Total runtime:** {phase_timings['total_runtime']} s\n"
         md += "\n"
         
-        md += f"## Hardware\n"
+        md += "## Hardware\n"
         md += f"- **Chip:** {hw['chip']}\n"
         md += f"- **Machine:** {self._format_optional(hw.get('machine_model'))}\n"
         md += f"- **Memory:** {hw['memory_gb']} GB\n"
         md += f"- **macOS:** {hw['macos_version']}\n"
         md += f"- **Thermal state:** {self._format_optional(hw.get('thermal_state'))}\n\n"
         
-        md += f"## Metrics\n"
+        md += "## Metrics\n"
         md += (
             f"- **Request throughput:** "
             f"{self._format_stats(metrics['tokens_per_second'], 'tokens/s')}\n"
@@ -235,7 +235,7 @@ class MarkdownReporter(BaseReporter):
         if notes:
             md += f"\n## Notes\n{notes}\n"
         
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(md)
             
         return output_path

@@ -28,7 +28,6 @@ from mlx_chronos.protocol import (
     COLD_PROMPTS,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     THROUGHPUT_PROMPT,
-    TTFT_MAX_TOKENS,
     WARMUP_MAX_TOKENS,
     build_benchmark_protocol,
 )

@@ -28,6 +28,8 @@ from mlx_chronos.measurements import (
 logger = logging.getLogger("mlx_chronos")
 
 ERROR_RESPONSE_BODY_LIMIT = 500
+THROUGHPUT_STREAM_TIMEOUT_SECONDS = 60.0
+THROUGHPUT_TIMEOUT_SECONDS_PER_TOKEN = 0.5
 
 
 # ─── Base class ───────────────────────────────────────────────────────────────
@@ -510,6 +512,12 @@ class BaseEngine(ABC):
         body = body.lower()
         return "stream_options" in body or "include_usage" in body
 
+    def _throughput_timeout(self, max_tokens: int) -> float:
+        return max(
+            THROUGHPUT_STREAM_TIMEOUT_SECONDS,
+            max_tokens * THROUGHPUT_TIMEOUT_SECONDS_PER_TOKEN,
+        )
+
     def measure_ttft(self, prompt: str, model: str = "default") -> float:
         """Measure Time To First Token."""
         payload = self.build_payload(prompt=prompt, model=model, max_tokens=1, stream=True)
@@ -600,7 +608,12 @@ class BaseEngine(ABC):
             next_progress_sample_at = progress_sample_interval_tokens
 
             try:
-                with httpx.stream("POST", url, json=payload, timeout=60.0) as r:
+                with httpx.stream(
+                    "POST",
+                    url,
+                    json=payload,
+                    timeout=self._throughput_timeout(max_tokens),
+                ) as r:
                     if r.status_code >= 400:
                         try:
                             r.read()
