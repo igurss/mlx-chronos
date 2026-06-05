@@ -186,6 +186,43 @@ def test_measure_throughput_records_progress_samples(mock_stream):
         },
     )
 
+
+def test_append_progress_sample_uses_rounded_elapsed_for_tps():
+    engine = OMLXEngine()
+    samples = []
+    elapsed_seconds = 0.4995
+
+    engine._append_progress_sample(
+        samples,
+        completion_tokens=100,
+        elapsed_seconds=elapsed_seconds,
+        token_count_source="usage.completion_tokens",
+    )
+
+    rounded_elapsed_seconds = round(elapsed_seconds, 3)
+    assert samples == [
+        {
+            "completion_tokens": 100,
+            "elapsed_seconds": rounded_elapsed_seconds,
+            "tokens_per_second": round(100 / rounded_elapsed_seconds, 2),
+            "token_count_source": "usage.completion_tokens",
+        }
+    ]
+
+
+def test_append_progress_sample_skips_elapsed_that_rounds_to_zero():
+    engine = OMLXEngine()
+    samples = []
+
+    engine._append_progress_sample(
+        samples,
+        completion_tokens=100,
+        elapsed_seconds=0.0004,
+        token_count_source="usage.completion_tokens",
+    )
+
+    assert samples == []
+
 @patch("httpx.stream")
 def test_measure_throughput_scales_timeout_for_long_outputs(mock_stream):
     mock_stream.return_value = stream_response(

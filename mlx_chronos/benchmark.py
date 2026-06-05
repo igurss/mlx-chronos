@@ -19,7 +19,6 @@ from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import get_engine
 from mlx_chronos.measurements import (
     DECODE_TIMING_CLIENT_STREAM,
-    DECODE_TIMING_ENGINE_RESPONSE,
     DECODE_TIMING_UNAVAILABLE,
     ThroughputMeasurement,
 )
@@ -513,7 +512,6 @@ def run_benchmark(
         unique_decode_sources = set(decode_timing_sources)
         if len(unique_decode_sources) == 1 and unique_decode_sources <= {
             DECODE_TIMING_CLIENT_STREAM,
-            DECODE_TIMING_ENGINE_RESPONSE,
         }:
             decode_tps_stats = compute_stats(decode_tps_trials)
             decode_timing_source = unique_decode_sources.pop()

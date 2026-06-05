@@ -14,7 +14,6 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.measurements import (
     DECODE_TIMING_CLIENT_STREAM,
-    DECODE_TIMING_ENGINE_RESPONSE,
     DECODE_TIMING_UNAVAILABLE,
 )
 
@@ -41,7 +40,6 @@ InputTokenCountSource = Literal[
 ]
 DecodeTimingSource = Literal[
     "unavailable",
-    "engine_response",
     "client_stream",
 ]
 RequestMode = Literal[
@@ -223,7 +221,6 @@ class Metrics(ChronosBaseModel):
                 )
         elif self.decode_timing_source not in {
             DECODE_TIMING_CLIENT_STREAM,
-            DECODE_TIMING_ENGINE_RESPONSE,
         }:
             raise ValueError(
                 "decode_timing_source must describe provided decode throughput"
@@ -538,9 +535,17 @@ class BenchmarkResult(ChronosBaseModel):
                 "metrics.decode_tokens_per_second",
             )
         if (
-            self.trials.completion_tokens_raw is not None
+            self.trials.completion_tokens_raw is None
             and self.trials.throughput_elapsed_seconds_raw is not None
+        ) or (
+            self.trials.completion_tokens_raw is not None
+            and self.trials.throughput_elapsed_seconds_raw is None
         ):
+            raise ValueError(
+                "trials.completion_tokens_raw and "
+                "trials.throughput_elapsed_seconds_raw must be provided together"
+            )
+        if self.trials.completion_tokens_raw is not None:
             self._assert_request_tps_matches_tokens_and_elapsed()
         return self
 

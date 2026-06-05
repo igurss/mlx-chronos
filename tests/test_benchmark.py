@@ -331,6 +331,24 @@ def test_detect_sustained_throttling_requires_thermal_signal():
     ) is False
 
 
+def test_detect_sustained_throttling_handles_empty_samples():
+    assert _detect_sustained_throttling(
+        [],
+        {
+            "changed_during_run": True,
+            "non_nominal_observed": False,
+        },
+    ) is False
+
+    assert _detect_sustained_throttling(
+        [[]],
+        {
+            "changed_during_run": True,
+            "non_nominal_observed": False,
+        },
+    ) is False
+
+
 @patch("mlx_chronos.benchmark.get_benchmark_condition_warnings")
 @patch("mlx_chronos.benchmark.get_engine")
 @patch("mlx_chronos.benchmark.detect_hardware")

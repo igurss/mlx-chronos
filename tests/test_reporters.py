@@ -54,12 +54,13 @@ def test_markdown_reporter_save(tmp_path):
     content = output_path.read_text()
     assert "# mlx-chronos Benchmark Result" in content
     assert "**Engine:** omlx" in content
-    assert "**Timestamp:** 2026-05-23T15:08:36Z" in content
+    assert "**Timestamp:** 2026-06-05T12:00:00Z" in content
     assert "**Chronos version:** 0.1.2" in content
     assert "**Profile:** baseline" in content
     assert "**Trials:** 5" in content
     assert "**Token count source:** usage.completion_tokens" in content
     assert "**Total runtime:** 38.1 s" in content
+    assert content.count("**Total runtime:**") == 1
     assert "**Request throughput:** 18.44 tokens/s" in content
     assert "**Decode throughput:** 18.654 tokens/s" in content
     assert "**Decode timing source:** client_stream" in content

@@ -49,7 +49,7 @@ EXAMPLE_RESULT = {
     },
     "meta": {
         "chronos_version": "0.1.2",
-        "timestamp": "2026-05-23T15:08:36Z",
+        "timestamp": "2026-06-05T12:00:00Z",
         "benchmark_profile": "baseline",
         "ram_sample_interval_seconds": 0.05,
         "elapsed_since_last_benchmark_seconds": None,

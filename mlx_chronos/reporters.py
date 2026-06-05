@@ -192,7 +192,6 @@ class MarkdownReporter(BaseReporter):
                 ("Cache priming", "cache_priming"),
                 ("Cached TTFT", "ttft_cached"),
                 ("Throughput", "throughput"),
-                ("Total runtime", "total_runtime"),
             ]:
                 md += f"- **{label}:** {phase_timings[key]} s\n"
 

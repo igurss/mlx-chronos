@@ -97,15 +97,34 @@ def test_completion_token_raw_is_optional_for_older_results():
     data = EXAMPLE_RESULT.copy()
     data["trials"] = data["trials"].copy()
     del data["trials"]["completion_tokens_raw"]
+    del data["trials"]["throughput_elapsed_seconds_raw"]
 
     result = BenchmarkResult(**data)
     assert result.trials.completion_tokens_raw is None
+    assert result.trials.throughput_elapsed_seconds_raw is None
+
+
+def test_completion_tokens_and_elapsed_seconds_must_be_provided_together():
+    data = EXAMPLE_RESULT.copy()
+    data["trials"] = data["trials"].copy()
+    del data["trials"]["completion_tokens_raw"]
+
+    with pytest.raises(ValidationError, match="must be provided together"):
+        BenchmarkResult(**data)
+
+    data = EXAMPLE_RESULT.copy()
+    data["trials"] = data["trials"].copy()
+    del data["trials"]["throughput_elapsed_seconds_raw"]
+
+    with pytest.raises(ValidationError, match="must be provided together"):
+        BenchmarkResult(**data)
 
 def test_new_throughput_raw_fields_are_optional_for_older_results():
     data = EXAMPLE_RESULT.copy()
     data["trials"] = data["trials"].copy()
     del data["trials"]["throughput_elapsed_seconds_raw"]
     del data["trials"]["decode_tokens_per_second_raw"]
+    del data["trials"]["completion_tokens_raw"]
     data["metrics"] = data["metrics"].copy()
     del data["metrics"]["request_tokens_per_second"]
     del data["metrics"]["decode_tokens_per_second"]
@@ -113,6 +132,7 @@ def test_new_throughput_raw_fields_are_optional_for_older_results():
 
     result = BenchmarkResult(**data)
     assert result.trials.throughput_elapsed_seconds_raw is None
+    assert result.trials.completion_tokens_raw is None
     assert result.metrics.request_tokens_per_second is None
     assert result.metrics.decode_timing_source == "unavailable"
 
@@ -138,6 +158,15 @@ def test_decode_timing_source_accepts_client_stream():
     result = BenchmarkResult(**data)
 
     assert result.metrics.decode_timing_source == "client_stream"
+
+
+def test_decode_timing_source_rejects_unproduced_engine_response():
+    data = EXAMPLE_RESULT.copy()
+    data["metrics"] = data["metrics"].copy()
+    data["metrics"]["decode_timing_source"] = "engine_response"
+
+    with pytest.raises(ValidationError, match="decode_timing_source"):
+        BenchmarkResult(**data)
 
 def test_benchmark_protocol_is_optional_for_older_results():
     data = EXAMPLE_RESULT.copy()

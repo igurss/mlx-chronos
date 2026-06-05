@@ -48,6 +48,9 @@ clearer local result warnings since `0.1.1`.
   explicit warning metadata.
 - Try `/v1/models` metadata as a final oMLX version fallback when local CLI
   version probes fail.
+- Tighten sustained progress sample validation, remove unproduced decode timing
+  source metadata, require paired throughput token/elapsed raw fields, and avoid
+  duplicate total-runtime rows in Markdown output.
 
 ### Compatibility
 - Protocol v1 throughput used non-streaming requests; protocol v2 throughput

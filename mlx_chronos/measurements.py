@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 
 DECODE_TIMING_UNAVAILABLE = "unavailable"
-DECODE_TIMING_ENGINE_RESPONSE = "engine_response"
 DECODE_TIMING_CLIENT_STREAM = "client_stream"
 
 

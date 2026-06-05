@@ -441,11 +441,16 @@ class BaseEngine(ABC):
     ) -> None:
         if completion_tokens <= 0 or elapsed_seconds <= 0:
             return
+        rounded_elapsed_seconds = round(elapsed_seconds, 3)
+        if rounded_elapsed_seconds <= 0:
+            return
         samples.append(
             {
                 "completion_tokens": completion_tokens,
-                "elapsed_seconds": round(elapsed_seconds, 3),
-                "tokens_per_second": round(completion_tokens / elapsed_seconds, 2),
+                "elapsed_seconds": rounded_elapsed_seconds,
+                "tokens_per_second": round(
+                    completion_tokens / rounded_elapsed_seconds, 2
+                ),
                 "token_count_source": token_count_source,
             }
         )
