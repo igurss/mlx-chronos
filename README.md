@@ -117,10 +117,10 @@ model across local inference engines and Apple Silicon hardware.
 
 ## Current Release
 
-`0.1.1` is a compatibility-preserving patch release over `0.1.0`. It adds the
-submission helper, stricter result validation, clearer TTFT and memory
-methodology, completion-token visibility, benchmark-condition warnings, and
-mock OpenAI-compatible integration coverage.
+`0.1.2` is a compatibility-preserving patch release over `0.1.1`. It adds
+sustained benchmark runs, cooldown metadata, throughput token-bound metadata,
+client-observed decode throughput when reliable usage data is available, and
+clearer warnings for fallback token counts and unknown engine versions.
 
 ---
 

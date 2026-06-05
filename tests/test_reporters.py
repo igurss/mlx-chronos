@@ -55,7 +55,7 @@ def test_markdown_reporter_save(tmp_path):
     assert "# mlx-chronos Benchmark Result" in content
     assert "**Engine:** omlx" in content
     assert "**Timestamp:** 2026-05-23T15:08:36Z" in content
-    assert "**Chronos version:** 0.1.1" in content
+    assert "**Chronos version:** 0.1.2" in content
     assert "**Profile:** baseline" in content
     assert "**Trials:** 5" in content
     assert "**Token count source:** usage.completion_tokens" in content

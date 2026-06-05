@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## [0.1.2] — 2026-06-05
+
+Patch release focused on benchmark comparability, sustained-run visibility, and
+clearer local result warnings since `0.1.1`.
+
 ### Features
 - Add benchmark protocol metadata to new result JSON, including exact prompts,
   requested token bounds, and input-token count source.

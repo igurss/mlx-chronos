@@ -252,7 +252,8 @@ long each phase took and whether thermal state changed during the run.
 ## What Is Not Measured (Yet)
 
 - Tool calling success rate — planned for v0.2
-- Thermal throttling attribution — planned for v0.2
+- Full thermal throttling attribution beyond the sustained-run warning —
+  planned for v0.2
 - CPU/GPU load at benchmark time — planned for v0.2
 - Multi-turn conversation latency
 
