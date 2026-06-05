@@ -54,6 +54,12 @@ BenchmarkProfile = Literal[
     "baseline",
     "sustained",
 ]
+EngineName = Literal[
+    "omlx",
+    "rapid-mlx",
+    "mlx-lm",
+    "ollama",
+]
 
 
 class ChronosBaseModel(BaseModel):
@@ -84,13 +90,13 @@ class Hardware(ChronosBaseModel):
 
 
 class Engine(ChronosBaseModel):
-    name: str = Field(..., description="Engine name")
+    name: EngineName = Field(..., description="Engine name")
     version: str = Field(..., min_length=1, description="Engine version string")
 
-    @field_validator("name")
+    @field_validator("name", mode="before")
     @classmethod
-    def validate_engine_name(cls, value: str) -> str:
-        if value not in VALID_ENGINE_NAMES:
+    def validate_engine_name(cls, value: object) -> str:
+        if not isinstance(value, str) or value not in VALID_ENGINE_NAMES:
             raise ValueError(
                 f"Unknown engine: '{value}'. Available: {sorted(VALID_ENGINE_NAMES)}"
             )

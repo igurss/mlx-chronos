@@ -248,6 +248,13 @@ def run_benchmark(
     if not model_name:
         raise ValueError("model name must not be empty")
 
+    if trials < 3:
+        logger.warning(
+            "  Warning: only %s trial(s) requested; stddev is low-confidence "
+            "and will be 0.0 for a single trial.",
+            trials,
+        )
+
     logger.info(f"\n{'='*50}")
     logger.info(f"  mlx-Chronos Benchmark")
     logger.info(f"  Engine : {engine_name}")

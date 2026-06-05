@@ -1,10 +1,11 @@
 from datetime import datetime
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
-from mlx_chronos.constants import MAX_TRIALS, P95_MIN_TRIALS
+from mlx_chronos.constants import MAX_TRIALS, P95_MIN_TRIALS, VALID_ENGINE_NAMES
 from mlx_chronos.examples import EXAMPLE_RESULT
-from mlx_chronos.schema import BenchmarkResult, TrialStats
+from mlx_chronos.schema import BenchmarkResult, Engine, TrialStats
 
 def test_valid_schema():
     """Test that the example result is fully valid."""
@@ -66,6 +67,11 @@ def test_invalid_engine_name():
     
     with pytest.raises(ValidationError):
         BenchmarkResult(**invalid_data)
+
+
+def test_engine_name_is_literal_typed():
+    assert set(get_args(Engine.model_fields["name"].annotation)) == VALID_ENGINE_NAMES
+
 
 def test_missing_required_field():
     """Test that missing required fields raise validation errors."""

@@ -403,6 +403,7 @@ def test_run_benchmark_emits_condition_warnings(
 
     mock_warnings.assert_called_once_with(mock_detect.return_value)
     assert "Warning: thermal state: thermal_state=serious" in caplog.text
+    assert "Warning: only 1 trial(s) requested" in caplog.text
 
 
 @patch("mlx_chronos.benchmark.get_engine")

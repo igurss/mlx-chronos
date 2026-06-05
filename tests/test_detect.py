@@ -11,6 +11,7 @@ from mlx_chronos.detect import (
     get_power_source,
     get_system_profiler_hardware,
     get_thermal_state,
+    get_thermal_state_from_foundation,
 )
 
 
@@ -29,6 +30,18 @@ def test_thermal_state_reports_unavailable_when_foundation_is_missing(monkeypatc
     monkeypatch.setattr("os.geteuid", lambda: 501)
 
     assert get_thermal_state() == "unavailable_permission"
+
+
+def test_foundation_thermal_state_handles_import_error(monkeypatch):
+    def raise_import_error(_name):
+        raise ImportError("Foundation unavailable")
+
+    monkeypatch.setattr(
+        "mlx_chronos.detect.importlib.import_module",
+        raise_import_error,
+    )
+
+    assert get_thermal_state_from_foundation() is None
 
 
 def test_get_architecture(monkeypatch):

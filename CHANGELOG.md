@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Reliability
+- Warn when a benchmark runs with fewer than 3 trials, since single-trial
+  standard deviation is reported as `0.0` but has low statistical value.
+- Type `engine.name` as an explicit schema literal while preserving the existing
+  engine-name validation message.
+- Add direct coverage for the Foundation/PyObjC thermal-state import fallback.
+
 ## [0.1.2] — 2026-06-05
 
 Patch release focused on benchmark comparability, sustained-run visibility, and
