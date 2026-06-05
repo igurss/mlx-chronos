@@ -1,7 +1,13 @@
 import pytest
 import logging
 from unittest.mock import MagicMock, patch
-from mlx_chronos.benchmark import run_benchmark
+from mlx_chronos.benchmark import (
+    BENCHMARK_PROFILE_SUSTAINED,
+    SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
+    SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    _detect_sustained_throttling,
+    run_benchmark,
+)
 from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
@@ -23,6 +29,7 @@ def throughput_measurement(
     source: str = "usage.completion_tokens",
     elapsed: float = 5.0,
     decode_tps: float | None = None,
+    progress_samples: tuple[dict, ...] = (),
 ) -> ThroughputMeasurement:
     return ThroughputMeasurement(
         request_tokens_per_second=tps,
@@ -31,6 +38,7 @@ def throughput_measurement(
         elapsed_seconds=elapsed,
         decode_tokens_per_second=decode_tps,
         decode_timing_source="client_stream" if decode_tps is not None else "unavailable",
+        progress_samples=progress_samples,
     )
 
 
@@ -219,6 +227,11 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["trials"]["completion_tokens_raw"] == [100, 100]
     assert result["trials"]["throughput_elapsed_seconds_raw"] == [5.0, 5.0]
     assert result["meta"]["phase_timings_seconds"]["total_runtime"] >= 0
+    assert result["meta"]["benchmark_profile"] == "baseline"
+    assert result["meta"]["word_fallback_warning"] is False
+    assert result["meta"]["engine_version_warning"] is False
+    assert result["meta"]["sustained_throttling_warning"] is False
+    assert result["trials"]["throughput_progress_samples_raw"] is None
     assert set(result["meta"]["phase_timings_seconds"]) == {
         "warmup",
         "ttft_cold",
@@ -294,6 +307,28 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         assert call.kwargs["model"] == "org/test-model"
     for call in mock_engine.measure_throughput.call_args_list:
         assert call.kwargs["model"] == "org/test-model"
+
+
+def test_detect_sustained_throttling_requires_thermal_signal():
+    samples = [
+        {"completion_tokens": 100, "elapsed_seconds": 2.0},
+        {"completion_tokens": 200, "elapsed_seconds": 8.0},
+    ]
+
+    assert _detect_sustained_throttling(
+        [samples],
+        {
+            "changed_during_run": True,
+            "non_nominal_observed": False,
+        },
+    ) is True
+    assert _detect_sustained_throttling(
+        [samples],
+        {
+            "changed_during_run": False,
+            "non_nominal_observed": False,
+        },
+    ) is False
 
 
 @patch("mlx_chronos.benchmark.get_benchmark_condition_warnings")
@@ -488,6 +523,129 @@ def test_run_benchmark_records_decode_throughput_when_available(
     assert result["metrics"]["decode_tokens_per_second"]["mean"] == 21.0
     assert result["metrics"]["decode_timing_source"] == "client_stream"
     assert result["trials"]["decode_tokens_per_second_raw"] == [21.0, 21.0]
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_records_sustained_progress_samples(
+    mock_detect,
+    mock_get_engine,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    progress_samples = (
+        {
+            "completion_tokens": 100,
+            "elapsed_seconds": 3.0,
+            "tokens_per_second": 33.33,
+            "token_count_source": "word_fallback",
+        },
+        {
+            "completion_tokens": 200,
+            "elapsed_seconds": 6.0,
+            "tokens_per_second": 33.33,
+            "token_count_source": "usage.completion_tokens",
+        },
+    )
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tps=33.33,
+        tokens=200,
+        elapsed=6.0,
+        progress_samples=progress_samples,
+    )
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        result = run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=1,
+            ram_sample_interval=0.01,
+            throughput_max_tokens=SUSTAINED_THROUGHPUT_MAX_TOKENS,
+            benchmark_profile=BENCHMARK_PROFILE_SUSTAINED,
+            progress_sample_interval_tokens=SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
+            elapsed_since_last_benchmark_seconds=120.0,
+            cooldown_seconds=60.0,
+        )
+
+    throughput_call = mock_engine.measure_throughput.call_args
+    assert throughput_call.kwargs["max_tokens"] == SUSTAINED_THROUGHPUT_MAX_TOKENS
+    assert (
+        throughput_call.kwargs["progress_sample_interval_tokens"]
+        == SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS
+    )
+    assert result["meta"]["benchmark_profile"] == "sustained"
+    assert result["meta"]["elapsed_since_last_benchmark_seconds"] == 120.0
+    assert result["meta"]["cooldown_seconds"] == 60.0
+    assert result["trials"]["throughput_progress_samples_raw"] == [
+        list(progress_samples)
+    ]
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_marks_word_fallback_warning(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tps=2.0,
+        tokens=4,
+        source="word_fallback",
+        elapsed=2.0,
+    )
+    mock_engine.get_version.return_value = "unknown"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        result = run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=1,
+            ram_sample_interval=0.01,
+        )
+
+    assert result["metrics"]["token_count_source"] == "word_fallback"
+    assert result["meta"]["word_fallback_warning"] is True
+    assert result["meta"]["engine_version_warning"] is True
 
 
 @patch("mlx_chronos.benchmark.get_engine")

@@ -90,6 +90,32 @@ mlx-Chronos checks that the recorded throughput output respects the requested
 range. If an engine ignores `min_tokens`, the run is not treated as comparable
 under that requested bound.
 
+The default leaderboard workload is `max_tokens=100`. The result metadata
+records the requested throughput token bound in
+`meta.benchmark_protocol.throughput.requested_max_tokens`, and the public
+leaderboard exposes this as a sortable/filterable "Max tokens" field. Rows with
+`max_tokens=100` and no requested `min_tokens` are marked as the standard
+workload.
+
+### Sustained Throughput Profile
+`mlx-chronos run --profile sustained` keeps the same benchmark phases but
+changes the default run shape to one trial and a long throughput request:
+`max_tokens=1000`. Users can still override `--trials` or `--max-tokens`
+explicitly.
+
+During sustained throughput, mlx-Chronos records
+`trials.throughput_progress_samples_raw`. Intermediate progress samples are
+taken every 100 generated output units using the live streamed text available
+to the client. Final throughput still uses `usage.completion_tokens` when the
+engine provides it; intermediate samples may be marked `word_fallback` because
+most OpenAI-compatible streams expose exact usage only at the end of the
+stream.
+
+The sustained profile also records `meta.sustained_throttling_warning` when a
+late-run throughput drop is observed and the thermal monitor saw a state change
+or non-nominal thermal state. This is a conservative signal, not proof of a
+specific hardware mechanism.
+
 ### System RAM Peak
 Total Mac RAM usage is sampled continuously from before warmup through the
 recorded benchmark phases, using the configured RAM sampling interval. The result
@@ -153,16 +179,29 @@ warmup, cold TTFT, cache priming, cached TTFT, throughput, and total runtime.
 These fields make run order and heat buildup easier to interpret, but they do
 not magically remove thermal throttling.
 
+### Cross-Run Cooldown
+When `mlx-chronos run` starts, the CLI checks the newest prior JSON result in
+the selected output directory. If one exists, the result records
+`meta.elapsed_since_last_benchmark_seconds`. This helps identify back-to-back
+runs where the second run starts with already-warm hardware.
+
+Passing `--cooldown-seconds N` makes the CLI wait until at least `N` seconds
+have elapsed since that prior result. Without an explicit cooldown, the CLI
+warns when the prior result is recent, but it does not block the run.
+
 ### Engine Version Detection
 Engine versions are recorded in `engine.version` when local detection succeeds:
 
 - oMLX: `omlx --version` on current releases, with a legacy
-  `omlx serve --help` fallback for older installs.
+  `omlx serve --help` fallback for older installs. If those fail, mlx-Chronos
+  also checks `/v1/models` for explicit engine/server version metadata.
 - Rapid-MLX: `rapid-mlx version`.
 - mlx-lm: installed Python package metadata for `mlx-lm`.
 - Ollama: `ollama --version`.
 
 If detection fails, the result records `unknown` instead of blocking the run.
+New results also set `meta.engine_version_warning=true` so local reports and
+the public leaderboard can call out the comparability risk.
 
 Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB
 causes swapping and slows down inference, whereas 7GB used out of 16GB does

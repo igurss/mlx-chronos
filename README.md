@@ -26,6 +26,7 @@ contribute to the community leaderboard.
 **Metrics measured:**
 - **TTFT** — Time to First Token (cold and cached, with statistics)
 - **tok/s** — Client-observed request throughput (mean, stddev, min, max across trials)
+- **Sustained tok/s** — Optional long throughput profile for heat buildup and late-run degradation checks
 - **Output tokens** — Completion token counts for throughput trials
 - **System RAM peak** — Peak total Mac RAM in use during the benchmark, used as the public memory comparison metric
 - **Engine RSS** — Diagnostic peak RSS of the engine server process when available
@@ -68,6 +69,18 @@ during the run when macOS thermal state is available through Foundation/PyObjC.
 New JSON results include start/end/worst thermal state, sample count, and phases
 where non-nominal thermal state was observed.
 
+**Sustained profile** — `--profile sustained` runs a single long throughput
+trial with `max_tokens=1000` by default and records progress samples every 100
+generated output units. These samples make late-run throughput drops easier to
+spot. When a sustained run also observes a thermal-state change or non-nominal
+thermal state, mlx-Chronos records a sustained throttling warning in result
+metadata.
+
+**Cooldown tracking** — before each run, mlx-Chronos checks the latest prior
+JSON result in the same output directory. The elapsed time is saved as
+`meta.elapsed_since_last_benchmark_seconds`; `--cooldown-seconds` can enforce a
+pause before starting a new run.
+
 **Peak engine RSS** — records the resident memory of the engine server process
 after warmup, through the recorded benchmark phases, when the process can be
 identified. This is diagnostic only: it is not total model memory or a public
@@ -96,9 +109,9 @@ View the full leaderboard with all submitted results:
 
 **[→ igurss.github.io/mlx-chronos](https://igurss.github.io/mlx-chronos)**
 
-The leaderboard supports model search plus engine, chip, machine model, and
-memory filters so contributors can quickly compare a specific model across
-local inference engines and Apple Silicon hardware.
+The leaderboard supports model search plus engine, chip, machine model, memory,
+and throughput max-token filters so contributors can quickly compare a specific
+model across local inference engines and Apple Silicon hardware.
 
 ---
 
@@ -129,6 +142,12 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 # Optional: request throughput output token bounds
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --max-tokens 100 --min-tokens 80
 
+# Optional: sustained profile for a longer heat/throttling-sensitive run
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --profile sustained
+
+# Optional: enforce a pause after a recent run in the same output directory
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
+
 # Optional: write both JSON and Markdown outputs
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all
 
@@ -157,7 +176,8 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Des
 
 Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens`. Local runs can still be saved with a fallback token
-estimate, but those results are not accepted for the public leaderboard.
+estimate, but those results are not accepted for the public leaderboard and are
+marked with `meta.word_fallback_warning`.
 
 Maintainers can override the public inbox endpoint with `--endpoint` or the
 `MLX_CHRONOS_SUBMIT_ENDPOINT` environment variable. The command sends the JSON
@@ -195,6 +215,7 @@ is measured, how, and why.
 - [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
 - [x] Request-throughput timing metadata and client-observed streaming decode throughput
 - [x] Phase timing metadata and lightweight continuous thermal monitoring
+- [x] Sustained benchmark profile, cooldown metadata, and max-token leaderboard filter
 
 ### Next
 - [ ] Add richer benchmark condition metadata without breaking the v0.1 JSON contract

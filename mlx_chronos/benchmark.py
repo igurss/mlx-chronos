@@ -45,6 +45,15 @@ DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
 DEFAULT_THERMAL_SAMPLE_INTERVAL = 1.0
 
 DEFAULT_TRIALS = 5
+BENCHMARK_PROFILE_BASELINE = "baseline"
+BENCHMARK_PROFILE_SUSTAINED = "sustained"
+VALID_BENCHMARK_PROFILES = {
+    BENCHMARK_PROFILE_BASELINE,
+    BENCHMARK_PROFILE_SUSTAINED,
+}
+SUSTAINED_THROUGHPUT_MAX_TOKENS = 1000
+SUSTAINED_TRIALS = 1
+SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS = 100
 
 
 def _normalize_token_count_source(source: object) -> str:
@@ -141,6 +150,49 @@ def _log_thermal_monitor_warnings(summary: dict) -> None:
         )
 
 
+def _throughput_interval_rates(samples: list[dict]) -> list[float]:
+    rates = []
+    previous_tokens = 0
+    previous_elapsed = 0.0
+    for sample in samples:
+        tokens = sample.get("completion_tokens")
+        elapsed = sample.get("elapsed_seconds")
+        if not isinstance(tokens, int) or not isinstance(elapsed, (int, float)):
+            continue
+        token_delta = tokens - previous_tokens
+        elapsed_delta = float(elapsed) - previous_elapsed
+        if token_delta > 0 and elapsed_delta > 0:
+            rates.append(token_delta / elapsed_delta)
+        previous_tokens = tokens
+        previous_elapsed = float(elapsed)
+    return rates
+
+
+def _detect_sustained_throttling(
+    progress_samples_trials: list[list[dict]],
+    thermal_summary: dict | None,
+) -> bool:
+    """Flag clear sustained degradation when it aligns with thermal pressure."""
+    if not thermal_summary:
+        return False
+    thermal_signal = (
+        thermal_summary.get("changed_during_run")
+        or thermal_summary.get("non_nominal_observed")
+    )
+    if not thermal_signal:
+        return False
+
+    for samples in progress_samples_trials:
+        rates = _throughput_interval_rates(samples)
+        if len(rates) < 2:
+            continue
+        first_rate = rates[0]
+        last_rate = rates[-1]
+        if first_rate > 0 and last_rate <= first_rate * 0.85:
+            return True
+    return False
+
+
 def run_benchmark(
     engine_name: str,
     model_name: str,
@@ -150,12 +202,20 @@ def run_benchmark(
     ram_sample_interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
     throughput_max_tokens: int = DEFAULT_THROUGHPUT_MAX_TOKENS,
     throughput_min_tokens: int | None = None,
+    benchmark_profile: str = BENCHMARK_PROFILE_BASELINE,
+    elapsed_since_last_benchmark_seconds: float | None = None,
+    cooldown_seconds: float | None = None,
+    progress_sample_interval_tokens: int | None = None,
 ) -> dict:
     """
     Run a full benchmark session for a given engine and model.
     Returns a structured result dict with trial statistics.
     """
 
+    if benchmark_profile not in VALID_BENCHMARK_PROFILES:
+        raise ValueError(
+            f"benchmark_profile must be one of {sorted(VALID_BENCHMARK_PROFILES)}"
+        )
     if trials > MAX_TRIALS:
         raise ValueError(
             f"Max trials is {MAX_TRIALS} (one unique cold prompt per trial). "
@@ -174,6 +234,18 @@ def run_benchmark(
         and throughput_min_tokens > throughput_max_tokens
     ):
         raise ValueError("throughput_min_tokens must be <= throughput_max_tokens")
+    if (
+        elapsed_since_last_benchmark_seconds is not None
+        and elapsed_since_last_benchmark_seconds < 0
+    ):
+        raise ValueError("elapsed_since_last_benchmark_seconds must be non-negative")
+    if cooldown_seconds is not None and cooldown_seconds < 0:
+        raise ValueError("cooldown_seconds must be non-negative")
+    if (
+        progress_sample_interval_tokens is not None
+        and progress_sample_interval_tokens < 1
+    ):
+        raise ValueError("progress_sample_interval_tokens must be at least 1")
     model_name = model_name.strip()
     if not model_name:
         raise ValueError("model name must not be empty")
@@ -182,6 +254,7 @@ def run_benchmark(
     logger.info(f"  mlx-Chronos Benchmark")
     logger.info(f"  Engine : {engine_name}")
     logger.info(f"  Model  : {model_name} ({model_quantization})")
+    logger.info(f"  Profile: {benchmark_profile}")
     logger.info(f"  Trials : {trials}")
     token_range = (
         f"{throughput_min_tokens}-{throughput_max_tokens}"
@@ -216,6 +289,16 @@ def run_benchmark(
     # 3. Engine version
     engine_version = engine.get_version()
     logger.info(f"Engine version: {engine_version}\n")
+    engine_version_warning = engine_version == "unknown"
+    if engine_version_warning:
+        logger.warning(
+            "  Warning: engine version could not be detected; "
+            "engine.version will be saved as 'unknown'."
+        )
+        logger.warning(
+            "  Engine versions affect comparability. Try restarting the engine "
+            "server or updating the engine CLI if this persists.\n"
+        )
 
     # 4. Start background sampling before warmup so load/cache pressure is captured.
     phase_timings = {}
@@ -243,6 +326,7 @@ def run_benchmark(
     decode_timing_sources = []
     token_count_sources = []
     completion_tokens_trials = []
+    throughput_progress_samples_trials = []
 
     peak_ram_gb = None
     system_ram_peak_gb = None
@@ -331,6 +415,9 @@ def run_benchmark(
                         model=model_name,
                         max_tokens=throughput_max_tokens,
                         min_tokens=throughput_min_tokens,
+                        progress_sample_interval_tokens=(
+                            progress_sample_interval_tokens
+                        ),
                     )
                 )
                 tps_trials.append(measurement.request_tokens_per_second)
@@ -349,6 +436,9 @@ def run_benchmark(
                 )
                 token_count_sources.append(token_source)
                 completion_tokens_trials.append(completion_tokens)
+                throughput_progress_samples_trials.append(
+                    list(measurement.progress_samples)
+                )
                 if measurement.decode_tokens_per_second is not None:
                     decode_tps_trials.append(measurement.decode_tokens_per_second)
                     decode_timing_sources.append(measurement.decode_timing_source)
@@ -390,6 +480,34 @@ def run_benchmark(
     ttft_cached_stats = compute_stats(ttft_cached_trials)
     tps_stats = compute_stats(tps_trials)
     token_count_source = _summarize_token_count_sources(token_count_sources)
+    word_fallback_warning = token_count_source in {
+        TOKEN_COUNT_SOURCE_WORD_FALLBACK,
+        TOKEN_COUNT_SOURCE_MIXED,
+    }
+    if word_fallback_warning:
+        logger.warning(
+            "  Warning: throughput token counts used word_fallback for at least "
+            "one trial. Local tok/s results are estimates and are not "
+            "leaderboard-comparable."
+        )
+        logger.warning(
+            "  Use an engine/server that returns usage.completion_tokens in the "
+            "streaming response for comparable results."
+        )
+
+    sustained_throttling_warning = (
+        benchmark_profile == BENCHMARK_PROFILE_SUSTAINED
+        and _detect_sustained_throttling(
+            throughput_progress_samples_trials,
+            thermal_summary,
+        )
+    )
+    if sustained_throttling_warning:
+        logger.warning(
+            "  Warning: sustained profile observed a late-run throughput drop "
+            "while thermal state changed or became non-nominal."
+        )
+
     decode_tps_stats = None
     decode_timing_source = DECODE_TIMING_UNAVAILABLE
     if decode_tps_trials and len(decode_tps_trials) == len(tps_trials):
@@ -450,13 +568,28 @@ def run_benchmark(
                 decode_tps_trials if len(decode_tps_trials) == len(tps_trials) else None
             ),
             "completion_tokens_raw": completion_tokens_trials,
+            "throughput_progress_samples_raw": (
+                throughput_progress_samples_trials
+                if any(throughput_progress_samples_trials)
+                else None
+            ),
         },
         "meta": {
             "chronos_version": VERSION,
             "timestamp": datetime.now(timezone.utc),
+            "benchmark_profile": benchmark_profile,
             "ram_sample_interval_seconds": ram_sample_interval,
+            "elapsed_since_last_benchmark_seconds": (
+                round(elapsed_since_last_benchmark_seconds, 3)
+                if elapsed_since_last_benchmark_seconds is not None
+                else None
+            ),
+            "cooldown_seconds": cooldown_seconds,
             "phase_timings_seconds": phase_timings,
             "thermal_monitor": thermal_summary,
+            "word_fallback_warning": word_fallback_warning,
+            "engine_version_warning": engine_version_warning,
+            "sustained_throttling_warning": sustained_throttling_warning,
             "benchmark_protocol": build_benchmark_protocol(
                 trials,
                 throughput_max_tokens,

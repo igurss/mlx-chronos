@@ -16,6 +16,11 @@
   new benchmark results.
 - Bump the baseline benchmark protocol to v2 for streaming throughput trials
   with usage metadata.
+- Add a `--profile sustained` benchmark mode for one longer throughput trial
+  with progress samples for late-run degradation checks.
+- Add `--cooldown-seconds` and elapsed-since-prior-result metadata to make
+  back-to-back hot runs easier to spot.
+- Add throughput max-token metadata and a max-token filter to the leaderboard.
 
 ### Reliability
 - Validate usage-based throughput completion counts against requested token
@@ -34,6 +39,10 @@
   request throughput and decode throughput come from the same request.
 - Retry throughput streams without usage metadata when an engine rejects
   `stream_options.include_usage`, while keeping the result marked as fallback.
+- Mark word-fallback throughput results and unknown engine versions with
+  explicit warning metadata.
+- Try `/v1/models` metadata as a final oMLX version fallback when local CLI
+  version probes fail.
 
 ### Compatibility
 - Protocol v1 throughput used non-streaming requests; protocol v2 throughput

@@ -52,6 +52,10 @@ ThermalMonitorSource = Literal[
     "foundation",
     "unavailable",
 ]
+BenchmarkProfile = Literal[
+    "baseline",
+    "sustained",
+]
 
 
 class ChronosBaseModel(BaseModel):
@@ -247,6 +251,14 @@ class Trials(ChronosBaseModel):
             "For word_fallback results this is an estimated output word count."
         ),
     )
+    throughput_progress_samples_raw: Optional[list[list["ThroughputProgressSample"]]] = Field(
+        None,
+        description=(
+            "Per-throughput-trial progress samples for long sustained runs. "
+            "Intermediate samples may use word_fallback estimates when streaming "
+            "responses do not expose incremental usage tokens."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_raw_lengths(self):
@@ -261,12 +273,40 @@ class Trials(ChronosBaseModel):
             raw_lists.append(self.decode_tokens_per_second_raw)
         if self.completion_tokens_raw is not None:
             raw_lists.append(self.completion_tokens_raw)
+        if self.throughput_progress_samples_raw is not None:
+            raw_lists.append(self.throughput_progress_samples_raw)
         lengths = {
             len(raw_values)
             for raw_values in raw_lists
         }
         if lengths != {self.count}:
             raise ValueError("trials.count must match all raw metric list lengths")
+        return self
+
+
+class ThroughputProgressSample(ChronosBaseModel):
+    completion_tokens: PositiveInt = Field(
+        ...,
+        description="Generated completion tokens or estimated output words at sample time",
+    )
+    elapsed_seconds: PositiveFloat = Field(
+        ...,
+        description="Client-observed elapsed seconds at sample time",
+    )
+    tokens_per_second: NonNegativeFloat = Field(
+        ...,
+        description="Cumulative completion tokens divided by elapsed seconds",
+    )
+    token_count_source: Literal["usage.completion_tokens", "word_fallback"] = Field(
+        ...,
+        description="Token count source used for this progress sample",
+    )
+
+    @model_validator(mode="after")
+    def validate_progress_tps(self):
+        expected_tps = round(self.completion_tokens / self.elapsed_seconds, 2)
+        if abs(self.tokens_per_second - expected_tps) > 0.02:
+            raise ValueError("tokens_per_second must match completion_tokens / elapsed_seconds")
         return self
 
 
@@ -397,10 +437,22 @@ class ThermalMonitor(ChronosBaseModel):
 class Meta(ChronosBaseModel):
     chronos_version: str = Field(..., min_length=1, description="mlx-chronos version used")
     timestamp: datetime = Field(..., description="Timestamp of the benchmark run")
+    benchmark_profile: BenchmarkProfile = Field(
+        "baseline",
+        description="Benchmark profile selected for the run",
+    )
     ram_sample_interval_seconds: Optional[float] = Field(
         None,
         gt=0,
         description="Seconds between engine RSS and system RAM samples",
+    )
+    elapsed_since_last_benchmark_seconds: Optional[NonNegativeFloat] = Field(
+        None,
+        description="Seconds since the latest prior result JSON in the same output directory",
+    )
+    cooldown_seconds: Optional[NonNegativeFloat] = Field(
+        None,
+        description="Requested cooldown delay before this run, if any",
     )
     benchmark_protocol: Optional[BenchmarkProtocol] = Field(
         None,
@@ -413,6 +465,21 @@ class Meta(ChronosBaseModel):
     thermal_monitor: Optional[ThermalMonitor] = Field(
         None,
         description="Continuous thermal sampling summary for this run",
+    )
+    word_fallback_warning: bool = Field(
+        False,
+        description="True when throughput token counts include word_fallback estimates",
+    )
+    engine_version_warning: bool = Field(
+        False,
+        description="True when engine.version is unknown",
+    )
+    sustained_throttling_warning: bool = Field(
+        False,
+        description=(
+            "True when a sustained run observes a late throughput drop while "
+            "thermal state changed or became non-nominal"
+        ),
     )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 

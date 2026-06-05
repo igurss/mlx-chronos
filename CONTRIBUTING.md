@@ -89,13 +89,17 @@ mlx-chronos submit --file results/local/your-result.json --email you@example.com
 Public leaderboard submissions must use `usage.completion_tokens` as the
 throughput token-count source. If your JSON says `"token_count_source":
 "word_fallback"` or `"mixed"`, keep it as a local result until the engine can
-return a real completion-token count.
+return a real completion-token count. New local fallback results also set
+`meta.word_fallback_warning` to make that limitation explicit.
 
 New result files include benchmark protocol metadata with the exact prompts and
 requested token bounds. Keep those fields unchanged when submitting results;
 they are used to make runs reproducible and easier to compare. Current
 protocol v2 results use streaming throughput requests; older protocol v1
-results used non-streaming throughput requests.
+results used non-streaming throughput requests. The standard leaderboard
+throughput workload uses `requested_max_tokens=100` without a requested
+`min_tokens`; non-standard token-bound results should be compared through the
+leaderboard max-token filter.
 
 New results also distinguish request throughput from decode throughput. Do not
 edit `tokens_per_second`, `request_tokens_per_second`,

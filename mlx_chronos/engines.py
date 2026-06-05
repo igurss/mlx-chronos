@@ -426,6 +426,82 @@ class BaseEngine(ABC):
             return int(tokens)
         return None
 
+    def _estimated_completion_words(self, text_parts: list[str]) -> int:
+        completion_text = "".join(text_parts)
+        return len(completion_text.split())
+
+    def _append_progress_sample(
+        self,
+        samples: list[dict],
+        completion_tokens: int,
+        elapsed_seconds: float,
+        token_count_source: str,
+    ) -> None:
+        if completion_tokens <= 0 or elapsed_seconds <= 0:
+            return
+        samples.append(
+            {
+                "completion_tokens": completion_tokens,
+                "elapsed_seconds": round(elapsed_seconds, 3),
+                "tokens_per_second": round(completion_tokens / elapsed_seconds, 2),
+                "token_count_source": token_count_source,
+            }
+        )
+
+    def _version_from_mapping(
+        self,
+        mapping: dict,
+        version_keys: tuple[str, ...],
+    ) -> str | None:
+        for key in version_keys:
+            value = mapping.get(key)
+            if isinstance(value, (str, int, float)):
+                version = str(value).strip()
+                if version:
+                    return version
+
+        for nested_key in ("metadata", "meta"):
+            nested = mapping.get(nested_key)
+            if isinstance(nested, dict):
+                version = self._version_from_mapping(nested, version_keys)
+                if version:
+                    return version
+        return None
+
+    def _get_version_from_models_endpoint(
+        self,
+        version_keys: tuple[str, ...] = (
+            "engine_version",
+            "server_version",
+            "omlx_version",
+            "version",
+        ),
+    ) -> str | None:
+        """Try to read an engine/server version from /v1/models metadata."""
+        url = f"{self.base_url()}/models"
+        try:
+            response = httpx.get(url, timeout=2.0)
+            response.raise_for_status()
+            data = response.json()
+        except Exception:
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        version = self._version_from_mapping(data, version_keys)
+        if version:
+            return version
+
+        items = data.get("data")
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict):
+                    version = self._version_from_mapping(item, version_keys)
+                    if version:
+                        return version
+        return None
+
     def _should_retry_without_stream_usage(self, exc: httpx.HTTPError) -> bool:
         response = getattr(exc, "response", None)
         if response is None or response.status_code not in {400, 422}:
@@ -492,8 +568,15 @@ class BaseEngine(ABC):
         model: str = "default",
         max_tokens: int = 100,
         min_tokens: int | None = None,
+        progress_sample_interval_tokens: int | None = None,
     ) -> ThroughputMeasurement:
         """Measure request throughput and client-observed decode throughput."""
+        if (
+            progress_sample_interval_tokens is not None
+            and progress_sample_interval_tokens <= 0
+        ):
+            raise ValueError("progress_sample_interval_tokens must be greater than 0")
+
         base_payload = self.build_payload(
             prompt=prompt,
             model=model,
@@ -513,6 +596,8 @@ class BaseEngine(ABC):
             first_token_at = None
             completion_text_parts = []
             completion_tokens = None
+            progress_samples = []
+            next_progress_sample_at = progress_sample_interval_tokens
 
             try:
                 with httpx.stream("POST", url, json=payload, timeout=60.0) as r:
@@ -552,6 +637,20 @@ class BaseEngine(ABC):
                             text = self._extract_stream_text(chunk)
                             if text:
                                 completion_text_parts.append(text)
+                                if next_progress_sample_at is not None:
+                                    estimated_tokens = self._estimated_completion_words(
+                                        completion_text_parts
+                                    )
+                                    while estimated_tokens >= next_progress_sample_at:
+                                        self._append_progress_sample(
+                                            progress_samples,
+                                            next_progress_sample_at,
+                                            time.perf_counter() - start,
+                                            TOKEN_COUNT_SOURCE_WORD_FALLBACK,
+                                        )
+                                        next_progress_sample_at += (
+                                            progress_sample_interval_tokens
+                                        )
                 break
             except httpx.HTTPError as exc:
                 if include_usage and self._should_retry_without_stream_usage(exc):
@@ -597,6 +696,28 @@ class BaseEngine(ABC):
         ):
             decode_tps = round((completion_tokens - 1) / decode_elapsed, 2)
             decode_source = DECODE_TIMING_CLIENT_STREAM
+        finalized_progress_samples = []
+        if progress_sample_interval_tokens is not None:
+            finalized_progress_samples = list(progress_samples)
+            if token_count_source == TOKEN_COUNT_SOURCE_USAGE:
+                finalized_progress_samples = [
+                    sample
+                    for sample in finalized_progress_samples
+                    if sample["completion_tokens"] < completion_tokens
+                ]
+            if (
+                not finalized_progress_samples
+                or finalized_progress_samples[-1]["completion_tokens"]
+                != completion_tokens
+            ):
+                finalized_progress_samples.append(
+                    {
+                        "completion_tokens": completion_tokens,
+                        "elapsed_seconds": round(max(elapsed, 0.0), 3),
+                        "tokens_per_second": request_tps,
+                        "token_count_source": token_count_source,
+                    }
+                )
         return ThroughputMeasurement(
             request_tokens_per_second=request_tps,
             completion_tokens=completion_tokens,
@@ -604,6 +725,7 @@ class BaseEngine(ABC):
             elapsed_seconds=round(max(elapsed, 0.0), 3),
             decode_tokens_per_second=decode_tps,
             decode_timing_source=decode_source,
+            progress_samples=tuple(finalized_progress_samples),
         )
 
     def measure_tokens_per_second(
@@ -673,6 +795,9 @@ class OMLXEngine(BaseEngine):
                     version = line.split("Version:")[-1].strip()
                     if version:
                         return version
+        http_version = self._get_version_from_models_endpoint()
+        if http_version:
+            return http_version
         return "unknown"
 
 

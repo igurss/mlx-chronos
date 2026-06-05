@@ -16,6 +16,12 @@ def test_valid_schema():
     assert result.metrics.decode_timing_source == "client_stream"
     assert isinstance(result.meta.timestamp, datetime)
     assert result.meta.ram_sample_interval_seconds == 0.05
+    assert result.meta.benchmark_profile == "baseline"
+    assert result.meta.elapsed_since_last_benchmark_seconds is None
+    assert result.meta.cooldown_seconds == 0.0
+    assert result.meta.word_fallback_warning is False
+    assert result.meta.engine_version_warning is False
+    assert result.meta.sustained_throttling_warning is False
     assert result.meta.phase_timings_seconds.total_runtime == 38.1
     assert result.meta.thermal_monitor.source == "unavailable"
     assert result.meta.thermal_monitor.start_state == "unavailable_foundation"
@@ -242,6 +248,41 @@ def test_benchmark_protocol_rejects_stream_usage_for_non_streaming_phase():
     }
 
     with pytest.raises(ValidationError, match="stream_usage_requested"):
+        BenchmarkResult(**invalid_data)
+
+def test_throughput_progress_samples_validate_tps():
+    data = EXAMPLE_RESULT.copy()
+    data["trials"] = data["trials"].copy()
+    data["trials"]["throughput_progress_samples_raw"] = [
+        [
+            {
+                "completion_tokens": 100,
+                "elapsed_seconds": 5.0,
+                "tokens_per_second": 20.0,
+                "token_count_source": "usage.completion_tokens",
+            }
+        ]
+    ] * data["trials"]["count"]
+
+    result = BenchmarkResult(**data)
+
+    assert result.trials.throughput_progress_samples_raw[0][0].tokens_per_second == 20.0
+
+def test_throughput_progress_samples_reject_bad_tps():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["trials"] = invalid_data["trials"].copy()
+    invalid_data["trials"]["throughput_progress_samples_raw"] = [
+        [
+            {
+                "completion_tokens": 100,
+                "elapsed_seconds": 5.0,
+                "tokens_per_second": 99.0,
+                "token_count_source": "usage.completion_tokens",
+            }
+        ]
+    ] * invalid_data["trials"]["count"]
+
+    with pytest.raises(ValidationError, match="tokens_per_second"):
         BenchmarkResult(**invalid_data)
 
 def test_raw_trial_values_must_be_non_negative():

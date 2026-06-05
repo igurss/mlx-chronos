@@ -156,6 +156,37 @@ def test_measure_throughput_uses_client_stream_decode_timing(mock_stream):
     assert measurement.decode_timing_source == "client_stream"
 
 @patch("httpx.stream")
+def test_measure_throughput_records_progress_samples(mock_stream):
+    content = " ".join(["token"] * 120)
+    mock_stream.return_value = stream_response(
+        completion_stream(content=content, completion_tokens=120)
+    )
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.0, 2.0]):
+        measurement = engine.measure_throughput(
+            "test prompt",
+            "default",
+            120,
+            progress_sample_interval_tokens=100,
+        )
+
+    assert measurement.request_tokens_per_second == 60.0
+    assert measurement.progress_samples == (
+        {
+            "completion_tokens": 100,
+            "elapsed_seconds": 1.0,
+            "tokens_per_second": 100.0,
+            "token_count_source": "word_fallback",
+        },
+        {
+            "completion_tokens": 120,
+            "elapsed_seconds": 2.0,
+            "tokens_per_second": 60.0,
+            "token_count_source": "usage.completion_tokens",
+        },
+    )
+
+@patch("httpx.stream")
 def test_measure_tokens_per_second_marks_word_fallback(mock_stream):
     mock_stream.return_value = stream_response(
         completion_stream(content="one two three four", completion_tokens=None)
@@ -388,6 +419,22 @@ def test_omlx_get_version_falls_back_to_serve_help(mock_run):
         ["omlx", "--version"],
         ["omlx", "serve", "--help"],
     ]
+
+@patch("httpx.get")
+@patch("subprocess.run")
+def test_omlx_get_version_falls_back_to_models_metadata(mock_run, mock_get):
+    failed_result = MagicMock()
+    failed_result.stdout = ""
+    failed_result.stderr = ""
+    failed_result.returncode = 2
+    mock_run.return_value = failed_result
+
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"engine_version": "0.5.1"}
+    mock_get.return_value = mock_response
+
+    assert OMLXEngine().get_version() == "0.5.1"
+    assert mock_get.call_args.args[0] == "http://localhost:8000/v1/models"
 
 @patch("subprocess.run")
 def test_ollama_get_version(mock_run):

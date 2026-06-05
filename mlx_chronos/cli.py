@@ -2,11 +2,20 @@ import argparse
 import sys
 import logging
 import os
+import json
+import time
 
 from pathlib import Path
+from datetime import datetime, timezone
 from mlx_chronos.benchmark import (
+    BENCHMARK_PROFILE_BASELINE,
+    BENCHMARK_PROFILE_SUSTAINED,
     DEFAULT_RAM_SAMPLE_INTERVAL,
+    DEFAULT_TRIALS,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
+    SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_TRIALS,
     run_benchmark,
 )
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
@@ -25,21 +34,111 @@ from mlx_chronos.constants import MAX_TRIALS
 
 
 logger = logging.getLogger("mlx_chronos")
+RECENT_BENCHMARK_WARNING_SECONDS = 300.0
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _result_timestamp(path: Path) -> datetime | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        data = None
+    if isinstance(data, dict):
+        timestamp = _parse_timestamp(data.get("meta", {}).get("timestamp"))
+        if timestamp is not None:
+            return timestamp
+
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return None
+
+
+def _latest_result_timestamp(results_dir: Path) -> datetime | None:
+    if not results_dir.exists():
+        return None
+    timestamps = [
+        timestamp
+        for path in results_dir.glob("*.json")
+        if (timestamp := _result_timestamp(path)) is not None
+    ]
+    return max(timestamps) if timestamps else None
+
+
+def _elapsed_since_last_result(results_dir: Path) -> float | None:
+    latest = _latest_result_timestamp(results_dir)
+    if latest is None:
+        return None
+    return max(0.0, (datetime.now(timezone.utc) - latest).total_seconds())
+
+
+def _resolve_profile_defaults(args) -> tuple[str, int, int]:
+    profile = getattr(args, "profile", BENCHMARK_PROFILE_BASELINE)
+    if profile == BENCHMARK_PROFILE_SUSTAINED:
+        default_trials = SUSTAINED_TRIALS
+        default_max_tokens = SUSTAINED_THROUGHPUT_MAX_TOKENS
+    else:
+        default_trials = DEFAULT_TRIALS
+        default_max_tokens = DEFAULT_THROUGHPUT_MAX_TOKENS
+
+    trials = getattr(args, "trials", None)
+    max_tokens = getattr(args, "max_tokens", None)
+    return (
+        profile,
+        default_trials if trials is None else trials,
+        default_max_tokens if max_tokens is None else max_tokens,
+    )
+
+
+def _emit_result_warnings(result: dict) -> None:
+    meta = result.get("meta", {})
+    if meta.get("word_fallback_warning"):
+        print(
+            "Warning: throughput used word_fallback token counts. Local tok/s is "
+            "an estimate and will not be accepted for the public leaderboard; "
+            "use an engine/server that returns usage.completion_tokens.",
+            file=sys.stderr,
+        )
+    if meta.get("engine_version_warning"):
+        print(
+            "Warning: engine.version is 'unknown'. Engine versions affect "
+            "comparability; try restarting the engine server or updating the "
+            "engine CLI if detection keeps failing.",
+            file=sys.stderr,
+        )
+    if meta.get("sustained_throttling_warning"):
+        print(
+            "Warning: sustained profile observed a late throughput drop while "
+            "thermal state changed or became non-nominal.",
+            file=sys.stderr,
+        )
 
 
 def cmd_run(args):
     """Run a benchmark session."""
-    if args.trials < 1:
+    profile, trials, max_tokens = _resolve_profile_defaults(args)
+    cooldown_seconds = getattr(args, "cooldown_seconds", 0.0)
+    min_tokens = getattr(args, "min_tokens", None)
+    if trials < 1:
         print("Error: --trials must be at least 1.", file=sys.stderr)
         raise SystemExit(2)
-    if args.trials > MAX_TRIALS:
+    if trials > MAX_TRIALS:
         print(f"Error: --trials must be <= {MAX_TRIALS}.", file=sys.stderr)
         raise SystemExit(2)
     if args.ram_sample_interval <= 0:
         print("Error: --ram-sample-interval must be greater than 0.", file=sys.stderr)
         raise SystemExit(2)
-    max_tokens = getattr(args, "max_tokens", DEFAULT_THROUGHPUT_MAX_TOKENS)
-    min_tokens = getattr(args, "min_tokens", None)
     if max_tokens < 1:
         print("Error: --max-tokens must be at least 1.", file=sys.stderr)
         raise SystemExit(2)
@@ -49,25 +148,59 @@ def cmd_run(args):
     if min_tokens is not None and min_tokens > max_tokens:
         print("Error: --min-tokens must be <= --max-tokens.", file=sys.stderr)
         raise SystemExit(2)
+    if cooldown_seconds < 0:
+        print("Error: --cooldown-seconds must be non-negative.", file=sys.stderr)
+        raise SystemExit(2)
     if not args.model.strip():
         print("Error: --model must not be empty.", file=sys.stderr)
         raise SystemExit(2)
+
+    results_dir = args.output_dir or Path.cwd() / "results" / "local"
+    elapsed_since_last = _elapsed_since_last_result(results_dir)
+    if elapsed_since_last is not None:
+        if cooldown_seconds > elapsed_since_last:
+            delay = cooldown_seconds - elapsed_since_last
+            logger.info(
+                "Previous benchmark in this output directory was %.1f seconds ago; "
+                "cooling down for %.1f seconds.",
+                elapsed_since_last,
+                delay,
+            )
+            time.sleep(delay)
+            elapsed_since_last = _elapsed_since_last_result(results_dir)
+        elif elapsed_since_last < RECENT_BENCHMARK_WARNING_SECONDS:
+            logger.warning(
+                "Warning: previous benchmark in this output directory was %.1f "
+                "seconds ago. Consecutive hot runs may be slower; use "
+                "--cooldown-seconds to enforce a pause.",
+                elapsed_since_last,
+            )
+
+    progress_sample_interval_tokens = (
+        SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS
+        if profile == BENCHMARK_PROFILE_SUSTAINED
+        else None
+    )
     try:
         result = run_benchmark(
             engine_name=args.engine,
             model_name=args.model,
             model_quantization=args.quantization,
-            trials=args.trials,
+            trials=trials,
             notes=args.notes,
             ram_sample_interval=args.ram_sample_interval,
             throughput_max_tokens=max_tokens,
             throughput_min_tokens=min_tokens,
+            benchmark_profile=profile,
+            elapsed_since_last_benchmark_seconds=elapsed_since_last,
+            cooldown_seconds=cooldown_seconds,
+            progress_sample_interval_tokens=progress_sample_interval_tokens,
         )
     except (RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
-        
-    results_dir = args.output_dir or Path.cwd() / "results" / "local"
+
+    _emit_result_warnings(result)
     reporters = []
     if args.format in ("json", "all"):
         reporters.append(JSONReporter())
@@ -125,11 +258,18 @@ def cmd_validate(args):
 
     engine = get_engine(args.engine)
     if engine.is_installed():
+        engine_version = engine.get_version()
         log_validation_check(
             "ok",
             "engine installed",
-            f"{args.engine} ({engine.get_version()})",
+            f"{args.engine} ({engine_version})",
         )
+        if engine_version == "unknown":
+            log_validation_check(
+                "warn",
+                "engine version",
+                "version detection failed; comparisons against other runs are weaker",
+            )
     else:
         failures += 1
         log_validation_check("fail", "engine installed", args.engine)
@@ -254,8 +394,22 @@ def main():
     run_parser.add_argument(
         "--trials",
         type=int,
-        default=5,
-        help=f"Number of trials per metric (default: 5, min: 1, max: {MAX_TRIALS})",
+        default=None,
+        help=(
+            f"Number of trials per metric (default: {DEFAULT_TRIALS}; "
+            f"sustained profile default: {SUSTAINED_TRIALS}; max: {MAX_TRIALS})"
+        ),
+    )
+    run_parser.add_argument(
+        "--profile",
+        choices=[BENCHMARK_PROFILE_BASELINE, BENCHMARK_PROFILE_SUSTAINED],
+        default=BENCHMARK_PROFILE_BASELINE,
+        help=(
+            "Benchmark profile. 'sustained' defaults to one long throughput "
+            f"trial with max_tokens={SUSTAINED_THROUGHPUT_MAX_TOKENS} "
+            f"and progress samples every {SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS} "
+            "tokens (default: baseline)."
+        ),
     )
     run_parser.add_argument(
         "--notes",
@@ -274,10 +428,11 @@ def main():
     run_parser.add_argument(
         "--max-tokens",
         type=int,
-        default=DEFAULT_THROUGHPUT_MAX_TOKENS,
+        default=None,
         help=(
             "Requested max_tokens for throughput trials "
-            f"(default: {DEFAULT_THROUGHPUT_MAX_TOKENS})"
+            f"(default: {DEFAULT_THROUGHPUT_MAX_TOKENS}; "
+            f"sustained profile default: {SUSTAINED_THROUGHPUT_MAX_TOKENS})"
         ),
     )
     run_parser.add_argument(
@@ -294,6 +449,15 @@ def main():
         choices=["json", "markdown", "all"],
         default="json",
         help="Output format (default: json)",
+    )
+    run_parser.add_argument(
+        "--cooldown-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "Wait until at least this many seconds have elapsed since the latest "
+            "prior JSON result in the output directory (default: 0)."
+        ),
     )
     run_parser.add_argument(
         "--output-dir",

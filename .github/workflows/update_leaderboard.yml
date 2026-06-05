@@ -34,6 +34,7 @@ jobs:
           from pydantic import ValidationError
 
           from mlx_chronos.constants import TOKEN_COUNT_SOURCE_USAGE
+          from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
           from mlx_chronos.schema import BenchmarkResult
 
           results_dir = Path("results/submitted")
@@ -58,6 +59,12 @@ jobs:
                   tri = data["trials"]
                   meta = data["meta"]
                   protocol = meta.get("benchmark_protocol") or {}
+                  throughput_protocol = protocol.get("throughput") or {}
+                  throughput_max_tokens = (
+                      throughput_protocol.get("requested_max_tokens")
+                      or DEFAULT_THROUGHPUT_MAX_TOKENS
+                  )
+                  throughput_min_tokens = throughput_protocol.get("requested_min_tokens")
                   completion_tokens_raw = tri.get("completion_tokens_raw")
                   completion_tokens_mean = (
                       round(sum(completion_tokens_raw) / len(completion_tokens_raw), 1)
@@ -77,6 +84,12 @@ jobs:
                       "tps_stddev": met["tokens_per_second"]["stddev"],
                       "completion_tokens_raw": completion_tokens_raw,
                       "completion_tokens_mean": completion_tokens_mean,
+                      "throughput_max_tokens": throughput_max_tokens,
+                      "throughput_min_tokens": throughput_min_tokens,
+                      "is_standard_throughput_tokens": (
+                          throughput_max_tokens == DEFAULT_THROUGHPUT_MAX_TOKENS
+                          and throughput_min_tokens is None
+                      ),
                       "ttft_cold": met["ttft_cold"]["mean"],
                       "ttft_cached": met["ttft_cached"]["mean"],
                       "ram_peak_gb": met["ram_peak_gb"],

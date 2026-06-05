@@ -81,6 +81,21 @@ def test_cmd_run_min_tokens_must_not_exceed_max_tokens(capsys):
     assert exc.value.code == 2
     assert "Error: --min-tokens must be <= --max-tokens." in capsys.readouterr().err
 
+def test_cmd_run_invalid_cooldown(capsys):
+    args = Namespace(
+        trials=1,
+        ram_sample_interval=0.1,
+        max_tokens=100,
+        min_tokens=None,
+        cooldown_seconds=-1,
+        model="test",
+        format="json",
+    )
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+    assert exc.value.code == 2
+    assert "Error: --cooldown-seconds must be non-negative." in capsys.readouterr().err
+
 def test_cmd_validate_invalid_model(capsys):
     args = Namespace(engine="omlx", model="  ")
     with pytest.raises(SystemExit) as exc:
@@ -166,6 +181,32 @@ def test_cmd_validate_emits_condition_warnings(
 
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_validate_warns_on_unknown_engine_version(
+    mock_detect,
+    mock_get_engine,
+    caplog,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+    }
+
+    mock_engine = mock_get_engine.return_value
+    mock_engine.is_installed.return_value = True
+    mock_engine.get_version.return_value = "unknown"
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+    mock_engine.list_model_ids.return_value = ["org/test-model"]
+
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_validate(Namespace(engine="omlx", model=None))
+
+    assert "[warn] engine version: version detection failed" in caplog.text
+
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
 def test_cmd_validate_with_model(mock_detect, mock_get_engine):
     mock_detect.return_value = {
         "chip": "Apple M2",
@@ -220,12 +261,15 @@ def test_cmd_run_format_all_calls_reporters():
         trials=1,
         notes=None,
         ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
         max_tokens=120,
         min_tokens=80,
         format="all",
         output_dir=None,
     )
     with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT) as mock_run, \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
          patch("mlx_chronos.cli.JSONReporter") as mock_json, \
          patch("mlx_chronos.cli.MarkdownReporter") as mock_md:
         mock_json.return_value.save.return_value = Path("results/submitted/test.json")
@@ -242,6 +286,10 @@ def test_cmd_run_format_all_calls_reporters():
             ram_sample_interval=0.1,
             throughput_max_tokens=120,
             throughput_min_tokens=80,
+            benchmark_profile="baseline",
+            elapsed_since_last_benchmark_seconds=None,
+            cooldown_seconds=0.0,
+            progress_sample_interval_tokens=None,
         )
         mock_json.assert_called_once()
         mock_md.assert_called_once()
@@ -258,16 +306,48 @@ def test_cmd_run_custom_output_dir():
         trials=1,
         notes=None,
         ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
         format="json",
         output_dir=output_dir,
     )
     with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT), \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
          patch("mlx_chronos.cli.JSONReporter") as mock_json:
         mock_json.return_value.save.return_value = output_dir / "test.json"
 
         cmd_run(args)
 
         mock_json.return_value.save.assert_called_once_with(EXAMPLE_RESULT, output_dir)
+
+def test_cmd_run_sustained_profile_defaults():
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=None,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="sustained",
+        cooldown_seconds=0.0,
+        max_tokens=None,
+        min_tokens=None,
+        format="json",
+        output_dir=None,
+    )
+    with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT) as mock_run, \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
+         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+        mock_json.return_value.save.return_value = Path("results/local/test.json")
+
+        cmd_run(args)
+
+    mock_run.assert_called_once()
+    kwargs = mock_run.call_args.kwargs
+    assert kwargs["trials"] == 1
+    assert kwargs["throughput_max_tokens"] == 1000
+    assert kwargs["benchmark_profile"] == "sustained"
+    assert kwargs["progress_sample_interval_tokens"] == 100
 
 def test_submitted_results_are_not_gitignored():
     project_root = Path(__file__).resolve().parent.parent

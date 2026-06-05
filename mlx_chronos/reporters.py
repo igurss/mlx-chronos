@@ -84,8 +84,29 @@ class MarkdownReporter(BaseReporter):
         md += f"## Run\n"
         md += f"- **Timestamp:** {self._format_timestamp(meta.get('timestamp'))}\n"
         md += f"- **Chronos version:** {self._format_optional(meta.get('chronos_version'))}\n"
+        md += f"- **Profile:** {self._format_optional(meta.get('benchmark_profile'))}\n"
         md += f"- **Trials:** {trials.get('count', 'unknown')}\n"
         md += f"- **Token count source:** {self._format_optional(metrics.get('token_count_source'))}\n"
+        if meta.get("word_fallback_warning"):
+            md += (
+                "- **Warning:** throughput token counts used word_fallback; "
+                "local tok/s is an estimate and is not leaderboard-comparable.\n"
+            )
+        if meta.get("engine_version_warning"):
+            md += (
+                "- **Warning:** engine version detection failed; "
+                "`engine.version` is `unknown`.\n"
+            )
+        if meta.get("sustained_throttling_warning"):
+            md += (
+                "- **Warning:** sustained profile observed late throughput "
+                "degradation with a thermal-state signal.\n"
+            )
+        if meta.get("elapsed_since_last_benchmark_seconds") is not None:
+            md += (
+                "- **Elapsed since prior result:** "
+                f"{meta['elapsed_since_last_benchmark_seconds']} s\n"
+            )
         phase_timings = meta.get("phase_timings_seconds")
         if phase_timings:
             md += f"- **Total runtime:** {phase_timings['total_runtime']} s\n"
@@ -192,6 +213,23 @@ class MarkdownReporter(BaseReporter):
             for label, values in raw_sections:
                 rendered_values = ", ".join(f"{value:g}" for value in values)
                 md += f"- **{label}:** {rendered_values}\n"
+
+        progress_samples = trials.get("throughput_progress_samples_raw")
+        if progress_samples:
+            md += "\n## Throughput Progress Samples\n"
+            for index, samples in enumerate(progress_samples, start=1):
+                if not samples:
+                    continue
+                rendered_samples = ", ".join(
+                    (
+                        f"{sample['completion_tokens']} tokens @ "
+                        f"{sample['elapsed_seconds']}s = "
+                        f"{sample['tokens_per_second']} tokens/s "
+                        f"({sample['token_count_source']})"
+                    )
+                    for sample in samples
+                )
+                md += f"- **Trial {index}:** {rendered_samples}\n"
         
         notes = meta.get("notes")
         if notes:

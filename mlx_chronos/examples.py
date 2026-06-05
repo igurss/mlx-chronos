@@ -50,7 +50,10 @@ EXAMPLE_RESULT = {
     "meta": {
         "chronos_version": "0.1.1",
         "timestamp": "2026-05-23T15:08:36Z",
+        "benchmark_profile": "baseline",
         "ram_sample_interval_seconds": 0.05,
+        "elapsed_since_last_benchmark_seconds": None,
+        "cooldown_seconds": 0.0,
         "phase_timings_seconds": {
             "warmup": 10.512,
             "ttft_cold": 0.208,
@@ -70,6 +73,9 @@ EXAMPLE_RESULT = {
             "non_nominal_observed": False,
             "non_nominal_phases": [],
         },
+        "word_fallback_warning": False,
+        "engine_version_warning": False,
+        "sustained_throttling_warning": False,
         "benchmark_protocol": {
             "name": "baseline",
             "version": "2",
