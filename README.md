@@ -130,8 +130,14 @@ clearer warnings for fallback token counts and unknown engine versions.
 # Install
 pip install mlx-chronos
 
+# Confirm installed version
+mlx-chronos --version
+
 # Check available engines
 mlx-chronos engines
+
+# List models exposed by a running engine server
+mlx-chronos models --engine omlx
 
 # Validate setup before a run
 mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
@@ -157,6 +163,11 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Des
 
 > **Note:** the engine server must be running before you launch mlx-chronos.
 > See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for setup instructions.
+
+Optional thermal-state support through macOS Foundation can be installed with
+`pip install "mlx-chronos[thermal]"`. Engine ports can be overridden with
+`MLX_CHRONOS_<ENGINE>_PORT`, for example
+`MLX_CHRONOS_OMLX_PORT=8002` or `MLX_CHRONOS_MLX_LM_PORT=8002`.
 
 ---
 
@@ -218,7 +229,7 @@ is measured, how, and why.
 - [x] Sustained benchmark profile, cooldown metadata, and max-token leaderboard filter
 
 ### Next
-- [ ] Add richer benchmark condition metadata without breaking the v0.1 JSON contract
+- [ ] Expose benchmark condition metadata as leaderboard filters without breaking the v0.1 JSON contract
 
 ### Future
 - [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract

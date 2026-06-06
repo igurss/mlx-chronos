@@ -16,6 +16,7 @@ from mlx_chronos.constants import (
     ENGINE_NAME_OLLAMA,
     ENGINE_NAME_OMLX,
     ENGINE_NAME_RAPID_MLX,
+    ERROR_RESPONSE_BODY_LIMIT,
     TOKEN_COUNT_SOURCE_USAGE,
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
 )
@@ -27,7 +28,6 @@ from mlx_chronos.measurements import (
 
 logger = logging.getLogger("mlx_chronos")
 
-ERROR_RESPONSE_BODY_LIMIT = 500
 THROUGHPUT_STREAM_TIMEOUT_SECONDS = 60.0
 THROUGHPUT_TIMEOUT_SECONDS_PER_TOKEN = 0.5
 
@@ -728,13 +728,11 @@ class BaseEngine(ABC):
                 or finalized_progress_samples[-1]["completion_tokens"]
                 != completion_tokens
             ):
-                finalized_progress_samples.append(
-                    {
-                        "completion_tokens": completion_tokens,
-                        "elapsed_seconds": round(max(elapsed, 0.0), 3),
-                        "tokens_per_second": request_tps,
-                        "token_count_source": token_count_source,
-                    }
+                self._append_progress_sample(
+                    finalized_progress_samples,
+                    completion_tokens,
+                    max(elapsed, 0.0),
+                    token_count_source,
                 )
         return ThroughputMeasurement(
             request_tokens_per_second=request_tps,

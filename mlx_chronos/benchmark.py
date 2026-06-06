@@ -5,8 +5,11 @@ from pathlib import Path
 import logging
 import psutil
 import time
+from typing import get_args
 
 from mlx_chronos.constants import (
+    DEFAULT_RAM_SAMPLE_INTERVAL,
+    DEFAULT_THERMAL_SAMPLE_INTERVAL,
     MAX_TRIALS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
@@ -30,7 +33,7 @@ from mlx_chronos.protocol import (
     WARMUP_MAX_TOKENS,
     build_benchmark_protocol,
 )
-from mlx_chronos.schema import BenchmarkResult, dump_benchmark_result
+from mlx_chronos.schema import BenchmarkProfile, BenchmarkResult, dump_benchmark_result
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
 
@@ -38,17 +41,10 @@ from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTrack
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mlx_chronos")
 
-# Default RAM sampling interval in seconds
-DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
-DEFAULT_THERMAL_SAMPLE_INTERVAL = 1.0
-
 DEFAULT_TRIALS = 5
 BENCHMARK_PROFILE_BASELINE = "baseline"
 BENCHMARK_PROFILE_SUSTAINED = "sustained"
-VALID_BENCHMARK_PROFILES = {
-    BENCHMARK_PROFILE_BASELINE,
-    BENCHMARK_PROFILE_SUSTAINED,
-}
+VALID_BENCHMARK_PROFILES = set(get_args(BenchmarkProfile))
 SUSTAINED_THROUGHPUT_MAX_TOKENS = 1000
 SUSTAINED_TRIALS = 1
 SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS = 100
@@ -152,17 +148,21 @@ def _throughput_interval_rates(samples: list[dict]) -> list[float]:
     rates = []
     previous_tokens = 0
     previous_elapsed = 0.0
+    previous_source = None
     for sample in samples:
         tokens = sample.get("completion_tokens")
         elapsed = sample.get("elapsed_seconds")
+        source = sample.get("token_count_source")
         if not isinstance(tokens, int) or not isinstance(elapsed, (int, float)):
             continue
         token_delta = tokens - previous_tokens
         elapsed_delta = float(elapsed) - previous_elapsed
-        if token_delta > 0 and elapsed_delta > 0:
+        same_source = source == previous_source or previous_source is None
+        if token_delta > 0 and elapsed_delta > 0 and same_source:
             rates.append(token_delta / elapsed_delta)
         previous_tokens = tokens
         previous_elapsed = float(elapsed)
+        previous_source = source
     return rates
 
 

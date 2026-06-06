@@ -27,6 +27,8 @@ def test_valid_schema():
     assert result.meta.thermal_monitor.source == "unavailable"
     assert result.meta.thermal_monitor.start_state == "unavailable_foundation"
     assert result.hardware.architecture == "arm64"
+    assert result.hardware.power_source == "ac_power"
+    assert result.hardware.low_power_mode == "off"
     assert result.metrics.token_count_source == "usage.completion_tokens"
     assert result.metrics.ram_measurement_method == "system_fallback"
     assert result.metrics.system_ram_peak_gb == 7.22

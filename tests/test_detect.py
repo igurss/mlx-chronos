@@ -88,6 +88,31 @@ def test_benchmark_condition_warnings_for_non_nominal_conditions():
     assert "thermal_state=fair" in warnings[0].detail
 
 
+def test_benchmark_condition_warnings_reuse_hardware_power_fields(monkeypatch):
+    def fail_if_called():
+        raise AssertionError("should not call pmset")
+
+    monkeypatch.setattr(
+        "mlx_chronos.detect.get_power_source",
+        fail_if_called,
+    )
+    monkeypatch.setattr(
+        "mlx_chronos.detect.get_low_power_mode",
+        fail_if_called,
+    )
+
+    warnings = get_benchmark_condition_warnings(
+        {
+            "thermal_state": "nominal",
+            "power_source": "battery",
+            "low_power_mode": "on",
+        },
+    )
+
+    labels = [warning.label for warning in warnings]
+    assert labels == ["power source", "low power mode"]
+
+
 def test_benchmark_condition_warnings_for_unavailable_thermal_state():
     warnings = get_benchmark_condition_warnings(
         {"thermal_state": "unavailable_permission"},

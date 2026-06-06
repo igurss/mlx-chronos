@@ -222,6 +222,11 @@ def get_benchmark_condition_warnings(
             )
         )
 
+    power_source = (
+        hardware.get("power_source")
+        if power_source is None
+        else power_source
+    )
     power_source = get_power_source() if power_source is None else power_source
     if power_source == "battery":
         warnings.append(
@@ -232,8 +237,11 @@ def get_benchmark_condition_warnings(
         )
 
     low_power_mode = (
-        get_low_power_mode() if low_power_mode is None else low_power_mode
+        hardware.get("low_power_mode")
+        if low_power_mode is None
+        else low_power_mode
     )
+    low_power_mode = get_low_power_mode() if low_power_mode is None else low_power_mode
     if low_power_mode == "on":
         warnings.append(
             BenchmarkConditionWarning(
@@ -258,6 +266,8 @@ def detect_hardware() -> dict:
         "python_version": get_python_version(),
         "architecture": get_architecture(),
         "thermal_state": get_thermal_state(),
+        "power_source": get_power_source(),
+        "low_power_mode": get_low_power_mode(),
     }
 
 

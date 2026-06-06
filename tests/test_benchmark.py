@@ -105,6 +105,9 @@ def test_compute_stats_adds_p95_for_large_samples():
 def test_cold_prompt_count_matches_max_trials():
     assert len(COLD_PROMPTS) == MAX_TRIALS
 
+def test_cold_prompts_are_unique():
+    assert len(set(COLD_PROMPTS)) == len(COLD_PROMPTS)
+
 def test_run_benchmark_rejects_trials_above_max():
     with pytest.raises(ValueError, match=f"Max trials is {MAX_TRIALS}"):
         run_benchmark(
@@ -342,6 +345,34 @@ def test_detect_sustained_throttling_handles_empty_samples():
 
     assert _detect_sustained_throttling(
         [[]],
+        {
+            "changed_during_run": True,
+            "non_nominal_observed": False,
+        },
+    ) is False
+
+
+def test_detect_sustained_throttling_ignores_mixed_source_interval():
+    samples = [
+        {
+            "completion_tokens": 100,
+            "elapsed_seconds": 2.0,
+            "token_count_source": "word_fallback",
+        },
+        {
+            "completion_tokens": 200,
+            "elapsed_seconds": 4.0,
+            "token_count_source": "word_fallback",
+        },
+        {
+            "completion_tokens": 220,
+            "elapsed_seconds": 8.0,
+            "token_count_source": "usage.completion_tokens",
+        },
+    ]
+
+    assert _detect_sustained_throttling(
+        [samples],
         {
             "changed_during_run": True,
             "non_nominal_observed": False,

@@ -4,6 +4,7 @@ import time
 
 import psutil
 
+from mlx_chronos.constants import DEFAULT_RAM_SAMPLE_INTERVAL
 from mlx_chronos.detect import get_thermal_state_from_foundation
 
 
@@ -25,7 +26,11 @@ class RAMTracker:
     Solves the issue of missing a memory peak between the start and end of inference.
     """
 
-    def __init__(self, interval: float = 0.05, target_pid: int = None):
+    def __init__(
+        self,
+        interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
+        target_pid: int = None,
+    ):
         self.pid = target_pid or os.getpid()
         self.interval = interval
         self._process = psutil.Process(self.pid)
@@ -85,7 +90,7 @@ class RAMTracker:
 class SystemRAMTracker:
     """Continuously samples total system RAM usage during the benchmark."""
 
-    def __init__(self, interval: float = 0.05):
+    def __init__(self, interval: float = DEFAULT_RAM_SAMPLE_INTERVAL):
         self.interval = interval
         self.peak_used_bytes = 0
         self.peak_percent = 0.0

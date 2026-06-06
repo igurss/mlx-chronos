@@ -59,12 +59,17 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Profile:** baseline" in content
     assert "**Trials:** 5" in content
     assert "**Token count source:** usage.completion_tokens" in content
+    assert "**Protocol:** baseline v2" in content
+    assert "**Throughput token bounds:** max 100, min none" in content
     assert "**Total runtime:** 38.1 s" in content
     assert content.count("**Total runtime:**") == 1
     assert "**Request throughput:** 18.44 tokens/s" in content
     assert "**Decode throughput:** 18.654 tokens/s" in content
     assert "**Decode timing source:** client_stream" in content
     assert "**Thermal state:** unavailable_permission" in content
+    assert "**Power source:** ac_power" in content
+    assert "**Low Power Mode:** off" in content
+    assert "min 18.27, max 18.51" in content
     assert "## Thermal Monitor" in content
     assert "**Source:** unavailable" in content
     assert "**Sample interval:** 1.0 s" in content

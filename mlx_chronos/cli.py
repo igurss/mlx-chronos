@@ -7,15 +7,16 @@ import time
 
 from pathlib import Path
 from datetime import datetime, timezone
+from mlx_chronos import __version__ as VERSION
 from mlx_chronos.benchmark import (
     BENCHMARK_PROFILE_BASELINE,
     BENCHMARK_PROFILE_SUSTAINED,
-    DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_TRIALS,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
+    VALID_BENCHMARK_PROFILES,
     run_benchmark,
 )
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
@@ -30,11 +31,14 @@ from mlx_chronos.submit import (
     load_publishable_result,
     submit_result_file,
 )
-from mlx_chronos.constants import MAX_TRIALS
+from mlx_chronos.constants import (
+    DEFAULT_RAM_SAMPLE_INTERVAL,
+    MAX_TRIALS,
+    RECENT_BENCHMARK_WARNING_SECONDS,
+)
 
 
 logger = logging.getLogger("mlx_chronos")
-RECENT_BENCHMARK_WARNING_SECONDS = 300.0
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -226,6 +230,35 @@ def cmd_engines(args):
     logger.info("")
 
 
+def cmd_models(args):
+    """List model ids exposed by an engine's OpenAI-compatible /models endpoint."""
+    engine = get_engine(args.engine)
+    if not engine.is_installed():
+        print(f"Error: engine '{args.engine}' is not installed.", file=sys.stderr)
+        raise SystemExit(1)
+    if not engine.is_server_running():
+        print(
+            f"Error: engine '{args.engine}' server is not running at {engine.base_url()}.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    try:
+        model_ids = engine.list_model_ids()
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    if not model_ids:
+        logger.info("No models listed by %s at %s.", args.engine, engine.base_url())
+        return
+
+    logger.info("\nModels exposed by %s at %s:\n", args.engine, engine.base_url())
+    for model_id in model_ids:
+        logger.info("  %s", model_id)
+    logger.info("")
+
+
 def log_validation_check(status: str, label: str, detail: str) -> None:
     logger.info(f"[{status}] {label}: {detail}")
 
@@ -326,7 +359,7 @@ def cmd_submit(args):
         raise SystemExit(2)
 
     try:
-        _, result = load_publishable_result(args.file)
+        raw, result = load_publishable_result(args.file)
     except SubmissionError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -357,6 +390,8 @@ def cmd_submit(args):
             endpoint,
             timeout=args.timeout,
             submitter_email=submitter_email,
+            raw=raw,
+            result=result,
         )
     except SubmissionError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -370,6 +405,11 @@ def main():
     parser = argparse.ArgumentParser(
         prog="mlx-chronos",
         description="Benchmark suite for MLX inference engines on Apple Silicon.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {VERSION}",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -402,7 +442,7 @@ def main():
     )
     run_parser.add_argument(
         "--profile",
-        choices=[BENCHMARK_PROFILE_BASELINE, BENCHMARK_PROFILE_SUSTAINED],
+        choices=sorted(VALID_BENCHMARK_PROFILES),
         default=BENCHMARK_PROFILE_BASELINE,
         help=(
             "Benchmark profile. 'sustained' defaults to one long throughput "
@@ -473,6 +513,19 @@ def main():
         help="List available engines and their status",
     )
     engines_parser.set_defaults(func=cmd_engines)
+
+    # --- models ---
+    models_parser = subparsers.add_parser(
+        "models",
+        help="List model ids exposed by a running engine server",
+    )
+    models_parser.add_argument(
+        "--engine",
+        choices=list(ENGINES.keys()),
+        default="omlx",
+        help="Engine to query (default: omlx)",
+    )
+    models_parser.set_defaults(func=cmd_models)
 
     # --- validate ---
     validate_parser = subparsers.add_parser(

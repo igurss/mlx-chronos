@@ -46,7 +46,10 @@ class BaseReporter(ABC):
         return "unknown" if value is None else value
 
     def _format_stats(self, stats: dict, unit: str) -> str:
-        text = f"{stats['mean']} {unit} (±{stats['stddev']})"
+        text = (
+            f"{stats['mean']} {unit} "
+            f"(±{stats['stddev']}; min {stats['min']}, max {stats['max']})"
+        )
         if stats.get("p95") is not None:
             text += f", p95 {stats['p95']}"
         return text
@@ -87,6 +90,21 @@ class MarkdownReporter(BaseReporter):
         md += f"- **Profile:** {self._format_optional(meta.get('benchmark_profile'))}\n"
         md += f"- **Trials:** {trials.get('count', 'unknown')}\n"
         md += f"- **Token count source:** {self._format_optional(metrics.get('token_count_source'))}\n"
+        protocol = meta.get("benchmark_protocol") or {}
+        if protocol:
+            md += (
+                f"- **Protocol:** {self._format_optional(protocol.get('name'))} "
+                f"v{self._format_optional(protocol.get('version'))}\n"
+            )
+            throughput_protocol = protocol.get("throughput") or {}
+            if throughput_protocol:
+                min_tokens = throughput_protocol.get("requested_min_tokens")
+                min_tokens_label = "none" if min_tokens is None else min_tokens
+                md += (
+                    "- **Throughput token bounds:** "
+                    f"max {throughput_protocol.get('requested_max_tokens', 'unknown')}, "
+                    f"min {min_tokens_label}\n"
+                )
         if meta.get("word_fallback_warning"):
             md += (
                 "- **Warning:** throughput token counts used word_fallback; "
@@ -117,7 +135,12 @@ class MarkdownReporter(BaseReporter):
         md += f"- **Machine:** {self._format_optional(hw.get('machine_model'))}\n"
         md += f"- **Memory:** {hw['memory_gb']} GB\n"
         md += f"- **macOS:** {hw['macos_version']}\n"
-        md += f"- **Thermal state:** {self._format_optional(hw.get('thermal_state'))}\n\n"
+        md += f"- **Thermal state:** {self._format_optional(hw.get('thermal_state'))}\n"
+        if hw.get("power_source") is not None:
+            md += f"- **Power source:** {self._format_optional(hw.get('power_source'))}\n"
+        if hw.get("low_power_mode") is not None:
+            md += f"- **Low Power Mode:** {self._format_optional(hw.get('low_power_mode'))}\n"
+        md += "\n"
         
         md += "## Metrics\n"
         md += (

@@ -52,6 +52,8 @@ def submit_result_file(
     endpoint: str,
     timeout: float = 30.0,
     submitter_email: str = DEFAULT_SUBMITTER_EMAIL,
+    raw: bytes | None = None,
+    result: BenchmarkResult | None = None,
 ) -> BenchmarkResult:
     """Send a validated result JSON file to a maintainer inbox endpoint."""
     endpoint = endpoint.strip()
@@ -60,7 +62,8 @@ def submit_result_file(
             f"submission endpoint is required; pass --endpoint or set {SUBMIT_ENDPOINT_ENV}"
         )
 
-    raw, result = load_publishable_result(path)
+    if raw is None or result is None:
+        raw, result = load_publishable_result(path)
     data = {
         "email": submitter_email.strip() or DEFAULT_SUBMITTER_EMAIL,
         "name": "mlx-chronos CLI",

@@ -1,5 +1,6 @@
 """Example benchmark payloads used by smoke checks, docs, and tests."""
 
+# Keep EXAMPLE_RESULT aligned with the current schema and release metadata.
 
 EXAMPLE_RESULT = {
     "hardware": {
@@ -10,6 +11,8 @@ EXAMPLE_RESULT = {
         "python_version": "3.11.4",
         "architecture": "arm64",
         "thermal_state": "unavailable_permission",
+        "power_source": "ac_power",
+        "low_power_mode": "off",
     },
     "engine": {
         "name": "omlx",

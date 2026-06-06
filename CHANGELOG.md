@@ -3,11 +3,37 @@
 ## Unreleased
 
 ### Reliability
+- Avoid re-reading and re-validating benchmark JSON during `mlx-chronos submit`
+  after the CLI has already loaded a publishable result.
+- Derive runtime benchmark profile validation from the schema `BenchmarkProfile`
+  literal so CLI/runtime and Pydantic validation cannot drift.
+- Ignore sustained-throughput interval drops that cross from word-fallback
+  progress estimates to final usage-token counts.
+- Record power source and Low Power Mode in new result JSON and reuse those
+  values for benchmark condition warnings.
+- Share sampling, cooldown, phase-timing, and HTTP excerpt constants from one
+  module.
+- Test release tags against the `pyproject.toml` version before publishing and
+  run release tests on the same Python matrix as CI.
 - Warn when a benchmark runs with fewer than 3 trials, since single-trial
   standard deviation is reported as `0.0` but has low statistical value.
 - Type `engine.name` as an explicit schema literal while preserving the existing
   engine-name validation message.
 - Add direct coverage for the Foundation/PyObjC thermal-state import fallback.
+
+### Features
+- Add `mlx-chronos --version` and `mlx-chronos models --engine ...`.
+- Expose decode throughput in the generated leaderboard index and HTML table
+  when results provide it.
+- Add an optional `thermal` install extra for PyObjC/Foundation thermal-state
+  detection.
+
+### Documentation
+- Document benchmark port overrides, optional thermal install support, warmup
+  token bounds, and the RAM sampling start-point asymmetry.
+- Note that legacy `metrics.tokens_per_second` mirrors
+  `metrics.request_tokens_per_second` for compatibility and is expected to be
+  revisited in the v0.2 schema cleanup.
 
 ## [0.1.2] — 2026-06-05
 

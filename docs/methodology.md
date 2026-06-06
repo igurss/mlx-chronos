@@ -16,7 +16,7 @@ means the model has not seen this prompt before — no cache advantage.
 TTFT is measured with Python's monotonic high-resolution performance counter,
 so wall-clock changes during a run do not affect the latency value.
 
-Each trial uses a **unique prompt** from a fixed pool defined in `benchmark.py`.
+Each trial uses a **unique prompt** from a fixed pool defined in `protocol.py`.
 This ensures the engine cannot serve the response from a previous cache hit.
 The JSON field remains `metrics.ttft_cold` for compatibility with existing
 v0.1 submissions.
@@ -137,8 +137,10 @@ metadata as `meta.ram_sample_interval_seconds`.
 
 ### Diagnostic Peak Engine RSS (GB)
 Resident memory used by the engine server process, sampled continuously after
-warmup through the recorded benchmark phases, then reported as the
-observed RSS peak.
+warmup through the recorded benchmark phases, then reported as the observed RSS
+peak. Engine RSS intentionally starts after warmup, while system RAM starts
+before warmup so model loading and cache pressure are included in the public
+memory metric.
 
 **Important:** this metric is best read as process overhead for the server, API
 layer, and runtime. It may not include model weights or Metal allocations that
@@ -165,7 +167,13 @@ result records an `unavailable_*` status.
 `mlx-chronos validate` and `mlx-chronos run` warn when thermal state is
 unavailable, when macOS reports a non-nominal thermal state, or when battery
 power / Low Power Mode are detected. These warnings are informational: the run
-continues and the JSON thermal value remains unchanged.
+continues. New results record power source and Low Power Mode in
+`hardware.power_source` and `hardware.low_power_mode` so benchmark conditions
+can be audited later.
+
+Installing `mlx-chronos[thermal]` adds the optional PyObjC Foundation bridge,
+which lets mlx-Chronos read thermal state through macOS APIs without requiring
+`powermetrics` privileges.
 
 New benchmark results also include a lightweight continuous thermal monitor in
 `meta.thermal_monitor`. It samples only the Foundation path during the run and
@@ -217,6 +225,7 @@ chips and models.
 | Trials per metric | 5 (default), 30 max |
 | Warmup calls | 2 (not recorded, throughput prompt) |
 | Cache priming | 1 call after cold TTFT and before cached TTFT (not recorded) |
+| Max tokens — warmup | 30 |
 | Max tokens — TTFT | 1 |
 | Max tokens — throughput | 100 |
 

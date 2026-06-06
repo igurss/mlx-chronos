@@ -9,6 +9,7 @@ from mlx_chronos.constants import (
     VALID_ENGINE_NAMES,
     MAX_TRIALS,
     P95_MIN_TRIALS,
+    PHASE_TIMING_TOLERANCE_SECONDS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
 )
@@ -76,6 +77,14 @@ class Hardware(ChronosBaseModel):
     thermal_state: Optional[str] = Field(
         "unavailable_permission",
         description="Thermal pressure level (nominal/fair/serious/critical or unavailable_*)",
+    )
+    power_source: Optional[str] = Field(
+        None,
+        description="macOS power source during hardware detection (ac_power/battery/unavailable_*)",
+    )
+    low_power_mode: Optional[str] = Field(
+        None,
+        description="macOS Low Power Mode state during hardware detection (on/off/unavailable_*)",
     )
 
     @field_validator("thermal_state")
@@ -398,8 +407,7 @@ class PhaseTimings(ChronosBaseModel):
             + self.ttft_cached
             + self.throughput
         )
-        # Individual phase timings and total runtime are rounded independently.
-        if self.total_runtime + 0.05 < phase_sum:
+        if self.total_runtime + PHASE_TIMING_TOLERANCE_SECONDS < phase_sum:
             raise ValueError("total_runtime must cover the sum of benchmark phases")
         return self
 
@@ -611,7 +619,16 @@ class BenchmarkResult(ChronosBaseModel):
 
 def dump_benchmark_result(result: BenchmarkResult) -> dict:
     data = result.model_dump(mode="json")
-    for stats in data.get("metrics", {}).values():
+    metric_stats_fields = (
+        "ttft_cold",
+        "ttft_cached",
+        "tokens_per_second",
+        "request_tokens_per_second",
+        "decode_tokens_per_second",
+    )
+    metrics = data.get("metrics", {})
+    for field in metric_stats_fields:
+        stats = metrics.get(field)
         if isinstance(stats, dict) and stats.get("p95") is None:
             stats.pop("p95", None)
     return data
