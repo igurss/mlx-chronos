@@ -23,8 +23,10 @@
 
 ### Features
 - Add `mlx-chronos --version` and `mlx-chronos models --engine ...`.
-- Expose decode throughput in the generated leaderboard index and HTML table
-  when results provide it.
+- Redesign the public leaderboard around a model/chip/RAM compare view, while
+  keeping raw submitted data available behind configurable optional columns.
+- Expose decode throughput, power source, and Low Power Mode in the generated
+  leaderboard index when results provide them.
 - Add an optional `thermal` install extra for PyObjC/Foundation thermal-state
   detection.
 

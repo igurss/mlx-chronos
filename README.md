@@ -105,13 +105,14 @@ with that workload difference in mind.
 
 ## Community Leaderboard
 
-View the full leaderboard with all submitted results:
+Compare submitted results by model, chip, and RAM:
 
 **[→ igurss.github.io/mlx-chronos](https://igurss.github.io/mlx-chronos)**
 
-The leaderboard supports model search plus engine, chip, machine model, memory,
-and throughput max-token filters so contributors can quickly compare a specific
-model across local inference engines and Apple Silicon hardware.
+The default view compares engines for a selected model and Mac configuration.
+The raw-data view keeps the full table available with optional columns for
+secondary metadata such as protocol, token bounds, thermal state, power source,
+Low Power Mode, and engine version.
 
 ---
 

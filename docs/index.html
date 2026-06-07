@@ -7,70 +7,258 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --page: #f5f5f7;
+      --surface: #ffffff;
+      --surface-muted: #fbfbfd;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d2d2d7;
+      --line-soft: #e8e8ed;
+      --blue: #0071e3;
+      --blue-soft: #e8f2ff;
+      --green: #137333;
+      --green-soft: #e8f5ec;
+      --amber: #8a5a00;
+      --amber-soft: #fff3d6;
+      --red: #b3261e;
+      --red-soft: #fdeceb;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.08);
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0d1117;
-      color: #e6edf3;
-      padding: 2rem;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background: var(--page);
+      color: var(--text);
+      padding: 28px;
     }
 
-    header {
-      max-width: 1100px;
-      margin: 0 auto 2rem;
-    }
-
-    header h1 {
-      font-size: 1.8rem;
-      font-weight: 700;
-      margin-bottom: 0.4rem;
-    }
-
-    header h1 span { color: #58a6ff; }
-
-    header p {
-      color: #8b949e;
-      font-size: 0.95rem;
-    }
-
-    header a {
-      color: #58a6ff;
+    a {
+      color: var(--blue);
       text-decoration: none;
     }
 
-    .filters {
-      max-width: 1100px;
-      margin: 0 auto 1.2rem;
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
+    a:hover { text-decoration: underline; }
+
+    button,
+    select,
+    input {
+      font: inherit;
     }
 
-    .filters select,
-    .filters input {
-      background: #161b22;
-      color: #e6edf3;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      padding: 0.4rem 0.8rem;
-      font-size: 0.9rem;
-    }
-
-    .filters select {
+    button {
       cursor: pointer;
     }
 
-    .filters input {
-      min-width: 240px;
-      flex: 1;
-    }
-
-    .filters input::placeholder {
-      color: #8b949e;
-    }
-
-    .table-wrap {
-      max-width: 1100px;
+    .shell {
+      max-width: 1180px;
       margin: 0 auto;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      padding: 12px 0 28px;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 600;
+      letter-spacing: 0;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: clamp(2.1rem, 4vw, 4.4rem);
+      line-height: 1.02;
+      letter-spacing: 0;
+      max-width: 820px;
+    }
+
+    .subhead {
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.5;
+      margin-top: 14px;
+      max-width: 720px;
+    }
+
+    .header-links {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .link-button,
+    .tab-button,
+    .primary-button,
+    .ghost-button {
+      min-height: 38px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+    }
+
+    .link-button,
+    .ghost-button {
+      background: var(--surface);
+      border-color: var(--line);
+      color: var(--text);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .primary-button {
+      background: var(--blue);
+      color: #ffffff;
+      border-color: var(--blue);
+      font-weight: 650;
+    }
+
+    .view-tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      background: #e9e9ee;
+      border-radius: 8px;
+      margin-bottom: 18px;
+    }
+
+    .tab-button {
+      color: var(--muted);
+      background: transparent;
+      border: 0;
+      font-weight: 650;
+    }
+
+    .tab-button.active {
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .compare-panel {
+      overflow: hidden;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.6fr) minmax(180px, 1fr) minmax(150px, 0.8fr) auto;
+      gap: 14px;
+      padding: 18px;
+      border-bottom: 1px solid var(--line-soft);
+      align-items: end;
+    }
+
+    .control {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    label,
+    .control-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    select,
+    input[type="search"] {
+      width: 100%;
+      min-height: 42px;
+      color: var(--text);
+      background: var(--surface-muted);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 12px;
+    }
+
+    select:focus,
+    input[type="search"]:focus,
+    button:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid rgba(0, 113, 227, 0.22);
+      outline-offset: 2px;
+    }
+
+    .compare-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .check-control {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+
+    .check-control input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--blue);
+    }
+
+    .result-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      padding: 18px;
+      align-items: center;
+      background: var(--surface-muted);
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .result-title {
+      font-size: 1.08rem;
+      font-weight: 760;
+      line-height: 1.35;
+    }
+
+    .result-meta {
+      color: var(--muted);
+      font-size: 0.86rem;
+      margin-top: 3px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 0.76rem;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .badge-blue { background: var(--blue-soft); color: #0b57a3; }
+    .badge-green { background: var(--green-soft); color: var(--green); }
+    .badge-amber { background: var(--amber-soft); color: var(--amber); }
+    .badge-red { background: var(--red-soft); color: var(--red); }
+    .badge-gray { background: #eeeeef; color: #4d4d50; }
+
+    .table-scroll {
       overflow-x: auto;
     }
 
@@ -80,395 +268,989 @@
       font-size: 0.9rem;
     }
 
-    thead th {
-      background: #161b22;
-      color: #8b949e;
+    th {
+      color: var(--muted);
+      background: var(--surface);
       text-align: left;
-      padding: 0.7rem 1rem;
-      border-bottom: 1px solid #30363d;
+      font-size: 0.76rem;
+      font-weight: 760;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 14px;
+      border-bottom: 1px solid var(--line-soft);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .engine-cell {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-width: 160px;
+    }
+
+    .engine-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+      background: #8e8e93;
+    }
+
+    .engine-omlx { background: #0071e3; }
+    .engine-rapid-mlx { background: #34c759; }
+    .engine-mlx-lm { background: #ff9f0a; }
+    .engine-ollama { background: #1d1d1f; }
+
+    .metric-strong {
+      font-weight: 780;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .row-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: 260px;
+      white-space: normal;
+    }
+
+    .details-toggle {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      background: var(--surface-muted);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 0 10px;
+      font-weight: 650;
+    }
+
+    .details-row td {
+      background: var(--surface-muted);
+      padding: 0;
+      white-space: normal;
+    }
+
+    .details-panel {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      gap: 1px;
+      background: var(--line-soft);
+    }
+
+    .detail-item {
+      background: var(--surface-muted);
+      padding: 14px;
+      min-height: 68px;
+    }
+
+    .detail-label {
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 760;
+      margin-bottom: 5px;
+    }
+
+    .detail-value {
+      color: var(--text);
+      font-size: 0.9rem;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .empty-state {
+      display: none;
+      color: var(--muted);
+      padding: 42px 18px;
+      text-align: center;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .raw-panel {
+      display: none;
+      overflow: hidden;
+    }
+
+    .raw-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto auto;
+      gap: 12px;
+      padding: 18px;
+      border-bottom: 1px solid var(--line-soft);
+      align-items: center;
+    }
+
+    .columns-menu {
+      position: relative;
+    }
+
+    .columns-menu summary {
+      list-style: none;
+      min-height: 38px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      font-weight: 650;
       cursor: pointer;
       user-select: none;
-      white-space: nowrap;
     }
 
-    thead th:hover { color: #58a6ff; }
-    thead th.sorted { color: #58a6ff; }
-
-    tbody tr {
-      border-bottom: 1px solid #21262d;
-      transition: background 0.15s;
+    .columns-menu summary::-webkit-details-marker {
+      display: none;
     }
 
-    tbody tr:hover { background: #161b22; }
-
-    tbody td {
-      padding: 0.7rem 1rem;
-      white-space: nowrap;
+    .columns-popover {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      z-index: 3;
+      width: 260px;
+      max-height: 380px;
+      overflow: auto;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 8px;
     }
 
-    .badge {
-      display: inline-block;
-      padding: 0.2rem 0.6rem;
-      border-radius: 20px;
-      font-size: 0.78rem;
-      font-weight: 600;
+    .column-option {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 8px;
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.86rem;
     }
 
-    .badge-omlx    { background: #1f4d8f; color: #79c0ff; }
-    .badge-rapid   { background: #1f4d2f; color: #56d364; }
-    .badge-mlxlm   { background: #4d3b1f; color: #f0a742; }
-    .badge-ollama  { background: #e6e6e6; color: #1a1a1a; }
-    .badge-standard { background: #173b29; color: #56d364; margin-left: 0.4rem; }
-    .badge-warning { background: #4d3b1f; color: #f0a742; margin-left: 0.4rem; }
+    .column-option:hover {
+      background: var(--surface-muted);
+    }
 
-    .fallback { color: #8b949e; font-style: italic; font-size: 0.8rem; }
+    .sortable {
+      cursor: pointer;
+      user-select: none;
+    }
 
-    #empty {
-      text-align: center;
-      padding: 3rem;
-      color: #8b949e;
+    .sortable:hover,
+    .sorted {
+      color: var(--blue);
     }
 
     footer {
-      max-width: 1100px;
-      margin: 2rem auto 0;
-      color: #8b949e;
+      color: var(--muted);
       font-size: 0.82rem;
+      line-height: 1.55;
+      padding: 22px 0 6px;
+    }
+
+    @media (max-width: 900px) {
+      body { padding: 18px; }
+
+      header {
+        grid-template-columns: 1fr;
+      }
+
+      .header-links {
+        justify-content: flex-start;
+      }
+
+      .controls,
+      .raw-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .compare-actions {
+        justify-content: space-between;
+      }
+
+      .result-head {
+        grid-template-columns: 1fr;
+      }
+
+      .details-panel {
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
+      }
+
+      .columns-popover {
+        left: 0;
+        right: auto;
+      }
+    }
+
+    @media (max-width: 560px) {
+      body { padding: 12px; }
+
+      h1 { font-size: 2rem; }
+
+      .view-tabs,
+      .header-links,
+      .compare-actions {
+        width: 100%;
+      }
+
+      .tab-button,
+      .link-button,
+      .primary-button,
+      .ghost-button {
+        flex: 1;
+      }
+
+      .details-panel {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">mlx-Chronos</div>
+        <h1>Compare local LLM engines on Apple Silicon.</h1>
+        <p class="subhead">
+          Community benchmark results for oMLX, Rapid-MLX, mlx-lm, and Ollama.
+        </p>
+      </div>
+      <nav class="header-links" aria-label="Project links">
+        <a class="link-button" href="https://github.com/igurss/mlx-chronos">GitHub</a>
+        <a class="link-button" href="https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md">Methodology</a>
+        <a class="link-button" href="https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md">Submit</a>
+      </nav>
+    </header>
 
-<header>
-  <h1>mlx-Chronos <span>⏱</span> Leaderboard</h1>
-  <p>
-    Community benchmark results for local LLM inference on Apple Silicon. —
-    <a href="https://github.com/igurss/mlx-chronos">GitHub</a> ·
-    <a href="https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md">Methodology</a> ·
-    <a href="https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md">Submit your results</a>
-  </p>
-</header>
+    <div class="view-tabs" role="tablist" aria-label="Leaderboard views">
+      <button class="tab-button active" id="tab-compare" type="button" role="tab" aria-selected="true" aria-controls="compare-view">Compare</button>
+      <button class="tab-button" id="tab-raw" type="button" role="tab" aria-selected="false" aria-controls="raw-view">Raw data</button>
+    </div>
 
-<div class="filters">
-  <input id="filter-model" type="search" placeholder="Search models" aria-label="Search models" />
-  <select id="filter-engine">
-    <option value="">All engines</option>
-    <option value="ollama">Ollama</option>
-    <option value="omlx">oMLX</option>
-    <option value="rapid-mlx">Rapid-MLX</option>
-    <option value="mlx-lm">mlx-lm</option>
-  </select>
-  <select id="filter-chip">
-    <option value="">All chips</option>
-  </select>
-  <select id="filter-machine">
-    <option value="">All machine models</option>
-  </select>
-  <select id="filter-memory">
-    <option value="">All RAM sizes</option>
-  </select>
-  <select id="filter-max-tokens">
-    <option value="">All max tokens</option>
-  </select>
-</div>
+    <main>
+      <section class="panel compare-panel" id="compare-view" aria-labelledby="tab-compare">
+        <div class="controls">
+          <div class="control">
+            <label for="compare-model">Model</label>
+            <select id="compare-model"></select>
+          </div>
+          <div class="control">
+            <label for="compare-chip">Chip</label>
+            <select id="compare-chip"></select>
+          </div>
+          <div class="control">
+            <label for="compare-memory">RAM</label>
+            <select id="compare-memory"></select>
+          </div>
+          <div class="compare-actions">
+            <label class="check-control">
+              <input id="compare-standard" type="checkbox" checked />
+              Standard runs
+            </label>
+            <button class="primary-button" id="compare-button" type="button">Compare</button>
+          </div>
+        </div>
 
-<div class="table-wrap">
-  <table id="leaderboard">
-    <thead>
-      <tr>
-        <th data-col="chip" title="Apple Silicon chip reported by the benchmark host.">Chip</th>
-        <th data-col="memory" title="Unified memory installed on the benchmark host.">RAM</th>
-        <th data-col="engine" title="Local inference engine used to serve the model.">Engine</th>
-        <th data-col="model" title="Model identifier submitted with the benchmark result.">Model</th>
-        <th data-col="quant" title="Quantization label submitted for the model.">Quant</th>
-        <th data-col="tps" class="sorted" title="Mean client-observed request throughput: completion tokens divided by full request time. Higher is better.">tok/s</th>
-        <th data-col="decode_tps" title="Mean client-observed decode throughput when available from reliable streaming usage data. Higher is better.">Decode tok/s</th>
-        <th data-col="protocol" title="Benchmark protocol version. v1 used non-streaming throughput; v2 uses streaming throughput with usage metadata.">Protocol</th>
-        <th data-col="completion_tokens" title="Generated completion token counts for each throughput trial.">Output tokens</th>
-        <th data-col="max_tokens" title="Requested max_tokens for throughput trials. Default 100 with no min_tokens is the standard leaderboard workload.">Max tokens</th>
-        <th data-col="ttft_cold" title="Client-observed time to first streamed token for unique cold prompts. Lower is better.">TTFT cold (s)</th>
-        <th data-col="ttft_cached" title="Client-observed time to first streamed token for a fixed prompt after priming. Lower is better.">TTFT cached (s)</th>
-        <th data-col="system_ram_peak" title="Peak total Mac RAM usage during the benchmark. This is the public memory comparison metric.">System RAM Peak</th>
-        <th data-col="thermal" title="macOS thermal pressure state reported during the benchmark.">Thermal</th>
-        <th data-col="trials" title="Number of repeated benchmark trials used for the reported metrics.">Trials</th>
-        <th data-col="date" title="Date the benchmark result was generated.">Date</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
-  <div id="empty" style="display:none">No results yet. <a href="https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md">Be the first to submit!</a></div>
-</div>
+        <div class="result-head">
+          <div>
+            <div class="result-title" id="compare-title">Loading results...</div>
+            <div class="result-meta" id="compare-meta"></div>
+          </div>
+          <span class="badge badge-blue" id="result-count">0 results</span>
+        </div>
 
-<footer>
-  Results are community-submitted and validated automatically via GitHub Actions.<br>
-  <strong>System RAM Peak</strong> is the public memory comparison metric and reports total Mac RAM usage observed during the benchmark.
-  Engine process RSS is retained in result JSON as a diagnostic field, but it is not shown as a main leaderboard metric.<br>
-  Protocol v1 and v2 throughput are not identical workloads: v1 used non-streaming throughput, while v2 uses streaming throughput with usage metadata.
-  Throughput rows with max_tokens=100 and no requested min_tokens are marked as the standard workload.
-  Decode tok/s is shown when the result includes reliable client-observed streaming decode timing.
-</footer>
+        <div class="table-scroll">
+          <table aria-label="Engine comparison">
+            <thead>
+              <tr>
+                <th>Engine</th>
+                <th>Request tok/s</th>
+                <th>Decode tok/s</th>
+                <th>TTFT cold</th>
+                <th>TTFT cached</th>
+                <th>System RAM peak</th>
+                <th>Run</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="compare-body"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="compare-empty">
+          No matching benchmark results yet. Try disabling standard runs or choose a different model/spec.
+        </div>
+      </section>
 
-<script>
-  // ── Config ──────────────────────────────────────────────────────────────────
-  const RESULTS_INDEX = "results_index.json"; // generated by GitHub Actions
-  // Must match mlx_chronos.protocol.DEFAULT_THROUGHPUT_MAX_TOKENS.
-  const STANDARD_THROUGHPUT_MAX_TOKENS = 100;
+      <section class="panel raw-panel" id="raw-view" aria-labelledby="tab-raw" hidden>
+        <div class="raw-toolbar">
+          <input id="raw-search" type="search" placeholder="Search model, engine, chip, notes" aria-label="Search raw benchmark rows" />
+          <label class="check-control">
+            <input id="raw-standard" type="checkbox" />
+            Standard runs
+          </label>
+          <details class="columns-menu">
+            <summary>Columns</summary>
+            <div class="columns-popover" id="columns-popover"></div>
+          </details>
+        </div>
 
-  // ── State ───────────────────────────────────────────────────────────────────
-  let allRows = [];
-  let sortCol = "tps";
-  let sortAsc = false;
+        <div class="table-scroll">
+          <table aria-label="Raw benchmark data">
+            <thead>
+              <tr id="raw-head"></tr>
+            </thead>
+            <tbody id="raw-body"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="raw-empty">
+          No rows match the current filters.
+        </div>
+      </section>
+    </main>
 
-  const SORT_KEYS = {
-    memory: "memory_gb",
-    quant: "quantization",
-    protocol: "protocol_version",
-    completion_tokens: "completion_tokens_mean",
-    max_tokens: "throughput_max_tokens",
-    system_ram_peak: "system_ram_peak_percent",
-    thermal: "thermal_state",
-  };
-  const NUMERIC_COLUMNS = new Set([
-    "memory",
-    "tps",
-    "decode_tps",
-    "completion_tokens",
-    "max_tokens",
-    "ttft_cold",
-    "ttft_cached",
-    "system_ram_peak",
-    "trials",
-  ]);
+    <footer>
+      Results are community-submitted and validated through GitHub Actions. Standard runs use max_tokens=100 with no requested min_tokens.
+      Protocol v1 and v2 throughput are different workloads; row details keep the original protocol metadata visible.
+    </footer>
+  </div>
 
-  // ── Fetch & render ──────────────────────────────────────────────────────────
-  function updateSortIndicators() {
-    const headers = {
-      chip: "Chip",
-      memory: "RAM",
-      engine: "Engine",
-      model: "Model",
-      quant: "Quant",
-      tps: "tok/s",
-      decode_tps: "Decode tok/s",
-      protocol: "Protocol",
-      completion_tokens: "Output tokens",
-      max_tokens: "Max tokens",
-      ttft_cold: "TTFT cold (s)",
-      ttft_cached: "TTFT cached (s)",
-      system_ram_peak: "System RAM Peak",
-      thermal: "Thermal",
-      trials: "Trials",
-      date: "Date"
+  <script>
+    const RESULTS_INDEX = "results_index.json";
+    const STANDARD_THROUGHPUT_MAX_TOKENS = 100;
+
+    const ENGINE_LABELS = {
+      "omlx": "oMLX",
+      "rapid-mlx": "Rapid-MLX",
+      "mlx-lm": "mlx-lm",
+      "ollama": "Ollama",
     };
-    document.querySelectorAll("thead th[data-col]").forEach(th => {
-      const col = th.dataset.col;
-      const baseText = headers[col];
-      if (sortCol === col) {
-        th.textContent = baseText + (sortAsc ? " ↑" : " ↓");
-        th.classList.add("sorted");
-      } else {
-        th.textContent = baseText;
-        th.classList.remove("sorted");
-      }
-    });
-  }
 
-  async function loadResults() {
-    try {
-      const resp = await fetch(RESULTS_INDEX);
-      if (!resp.ok) throw new Error("index not found");
-      const rows = await resp.json();
-      allRows = rows.map(normalizeRow);
-    } catch {
-      allRows = [];
-    }
-    populateHardwareFilters();
-    updateSortIndicators();
-    render();
-  }
-
-  function normalizeRow(row) {
-    const throughputMaxTokens = Number(
-      row.throughput_max_tokens ?? STANDARD_THROUGHPUT_MAX_TOKENS
-    );
-    return {
-      ...row,
-      decode_tps: row.decode_tps ?? null,
-      throughput_max_tokens: throughputMaxTokens,
-      throughput_min_tokens: row.throughput_min_tokens ?? null,
-      is_standard_throughput_tokens: Boolean(
-        row.is_standard_throughput_tokens ?? (
-          throughputMaxTokens === STANDARD_THROUGHPUT_MAX_TOKENS &&
-          row.throughput_min_tokens == null
-        )
-      ),
-    };
-  }
-
-  function engineBadge(name) {
-    const cls = name === "omlx" ? "badge-omlx"
-              : name === "rapid-mlx" ? "badge-rapid"
-              : name === "mlx-lm" ? "badge-mlxlm"
-              : name === "ollama" ? "badge-ollama"
-              : "badge-omlx";
-    return `<span class="badge ${cls}">${escapeHtml(name)}</span>`;
-  }
-
-  function engineVersionBadge(version) {
-    if (String(version ?? "").toLowerCase() !== "unknown") return "";
-    return `<span class="badge badge-warning" title="Engine version could not be detected for this result.">unknown version</span>`;
-  }
-
-  function maxTokensCell(row) {
-    const badge = row.is_standard_throughput_tokens
-      ? `<span class="badge badge-standard">standard</span>`
-      : "";
-    const minTokens = row.throughput_min_tokens == null
-      ? ""
-      : ` / min ${escapeHtml(row.throughput_min_tokens)}`;
-    return `${escapeHtml(row.throughput_max_tokens)}${minTokens}${badge}`;
-  }
-
-  function fmt(val, decimals = 3) {
-    return val != null ? Number(val).toFixed(decimals) : "—";
-  }
-
-  function fmtTokenCounts(values) {
-    if (!Array.isArray(values) || values.length === 0) return "—";
-    if (values.every(value => value === values[0])) return `${values[0]} each`;
-    return values.join(", ");
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>"']/g, ch => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    }[ch]));
-  }
-
-  function getSortValue(row, col) {
-    return row[SORT_KEYS[col] || col];
-  }
-
-  function compareRows(a, b) {
-    const av = getSortValue(a, sortCol);
-    const bv = getSortValue(b, sortCol);
-    if (av == null && bv == null) return 0;
-    if (av == null) return 1;
-    if (bv == null) return -1;
-
-    let cmp;
-    if (NUMERIC_COLUMNS.has(sortCol)) {
-      cmp = Number(av) - Number(bv);
-    } else {
-      cmp = String(av).localeCompare(String(bv), undefined, {
+    const BASE_RAW_COLUMNS = [
+      {
+        key: "chip",
+        label: "Chip",
+        sortKey: "chip",
+        value: row => escapeHtml(row.chip),
+      },
+      {
+        key: "memory",
+        label: "RAM",
+        sortKey: "memory_gb",
         numeric: true,
-        sensitivity: "base",
+        value: row => `${fmt(row.memory_gb, 0)} GB`,
+      },
+      {
+        key: "engine",
+        label: "Engine",
+        sortKey: "engine",
+        value: row => engineCell(row),
+      },
+      {
+        key: "model",
+        label: "Model",
+        sortKey: "model",
+        value: row => escapeHtml(row.model),
+      },
+      {
+        key: "tps",
+        label: "tok/s",
+        sortKey: "tps",
+        numeric: true,
+        value: row => `<strong>${fmt(row.tps, 2)}</strong>`,
+      },
+      {
+        key: "ttft_cold",
+        label: "TTFT cold",
+        sortKey: "ttft_cold",
+        numeric: true,
+        value: row => `${fmt(row.ttft_cold, 3)} s`,
+      },
+      {
+        key: "system_ram_peak",
+        label: "System RAM",
+        sortKey: "system_ram_peak_percent",
+        numeric: true,
+        value: row => systemRamCell(row),
+      },
+      {
+        key: "date",
+        label: "Date",
+        sortKey: "date",
+        value: row => escapeHtml(row.date),
+      },
+    ];
+
+    const OPTIONAL_RAW_COLUMNS = [
+      {
+        key: "decode_tps",
+        label: "Decode tok/s",
+        sortKey: "decode_tps",
+        numeric: true,
+        value: row => fmt(row.decode_tps, 2),
+      },
+      {
+        key: "ttft_cached",
+        label: "TTFT cached",
+        sortKey: "ttft_cached",
+        numeric: true,
+        value: row => `${fmt(row.ttft_cached, 3)} s`,
+      },
+      {
+        key: "protocol",
+        label: "Protocol",
+        sortKey: "protocol_version",
+        value: row => `v${escapeHtml(row.protocol_version || "1")}`,
+      },
+      {
+        key: "max_tokens",
+        label: "Max tokens",
+        sortKey: "throughput_max_tokens",
+        numeric: true,
+        value: row => maxTokensCell(row),
+      },
+      {
+        key: "output_tokens",
+        label: "Output tokens",
+        sortKey: "completion_tokens_mean",
+        numeric: true,
+        value: row => fmtTokenCounts(row.completion_tokens_raw),
+      },
+      {
+        key: "thermal",
+        label: "Thermal",
+        sortKey: "thermal_state",
+        value: row => conditionValue(row.thermal_state),
+      },
+      {
+        key: "power",
+        label: "Power",
+        sortKey: "power_source",
+        value: row => conditionValue(row.power_source),
+      },
+      {
+        key: "low_power_mode",
+        label: "Low Power",
+        sortKey: "low_power_mode",
+        value: row => conditionValue(row.low_power_mode),
+      },
+      {
+        key: "engine_version",
+        label: "Engine version",
+        sortKey: "engine_version",
+        value: row => escapeHtml(row.engine_version),
+      },
+      {
+        key: "trials",
+        label: "Trials",
+        sortKey: "trials",
+        numeric: true,
+        value: row => escapeHtml(row.trials),
+      },
+      {
+        key: "quantization",
+        label: "Quant",
+        sortKey: "quantization",
+        value: row => escapeHtml(row.quantization),
+      },
+      {
+        key: "notes",
+        label: "Notes",
+        sortKey: "notes",
+        value: row => escapeHtml(row.notes || "-"),
+      },
+    ];
+
+    let allRows = [];
+    let rawSortKey = "tps";
+    let rawSortAsc = false;
+    let visibleOptionalColumns = new Set(["decode_tps", "ttft_cached"]);
+
+    const compareModel = document.getElementById("compare-model");
+    const compareChip = document.getElementById("compare-chip");
+    const compareMemory = document.getElementById("compare-memory");
+    const compareStandard = document.getElementById("compare-standard");
+    const compareBody = document.getElementById("compare-body");
+    const compareTitle = document.getElementById("compare-title");
+    const compareMeta = document.getElementById("compare-meta");
+    const compareEmpty = document.getElementById("compare-empty");
+    const resultCount = document.getElementById("result-count");
+
+    const rawSearch = document.getElementById("raw-search");
+    const rawStandard = document.getElementById("raw-standard");
+    const rawHead = document.getElementById("raw-head");
+    const rawBody = document.getElementById("raw-body");
+    const rawEmpty = document.getElementById("raw-empty");
+    const columnsPopover = document.getElementById("columns-popover");
+
+    async function loadResults() {
+      try {
+        const response = await fetch(RESULTS_INDEX);
+        if (!response.ok) throw new Error("results index unavailable");
+        const rows = await response.json();
+        allRows = rows.map(normalizeRow);
+      } catch {
+        allRows = [];
+      }
+
+      initializeCompareControls();
+      renderColumnMenu();
+      renderCompare();
+      renderRaw();
+    }
+
+    function normalizeRow(row, index) {
+      const throughputMaxTokens = Number(
+        row.throughput_max_tokens ?? STANDARD_THROUGHPUT_MAX_TOKENS
+      );
+      const throughputMinTokens = row.throughput_min_tokens ?? null;
+      return {
+        ...row,
+        _id: `row-${index}`,
+        decode_tps: row.decode_tps ?? null,
+        power_source: row.power_source ?? null,
+        low_power_mode: row.low_power_mode ?? null,
+        throughput_max_tokens: throughputMaxTokens,
+        throughput_min_tokens: throughputMinTokens,
+        is_standard_throughput_tokens: Boolean(
+          row.is_standard_throughput_tokens ?? (
+            throughputMaxTokens === STANDARD_THROUGHPUT_MAX_TOKENS &&
+            throughputMinTokens == null
+          )
+        ),
+      };
+    }
+
+    function initializeCompareControls() {
+      const rows = allRows.filter(row => row.is_standard_throughput_tokens);
+      const defaultRows = rows.length ? rows : allRows;
+      const defaultModel = mostCommonByEngine(defaultRows, "model");
+      const preferredModel = compareModel.value || defaultModel;
+
+      setSelectOptions(
+        compareModel,
+        uniqueSorted(defaultRows.map(row => row.model)),
+        value => value,
+        preferredModel,
+      );
+      updateHardwareOptions();
+    }
+
+    function updateHardwareOptions() {
+      const rows = rowsForCompareOptions();
+      const chips = uniqueSorted(rows.map(row => row.chip));
+      setSelectOptions(compareChip, chips, value => value, compareChip.value);
+
+      const memoryRows = rows.filter(row => row.chip === compareChip.value);
+      const memories = uniqueSorted(
+        memoryRows.map(row => row.memory_gb),
+        (a, b) => Number(a) - Number(b),
+      );
+      setSelectOptions(
+        compareMemory,
+        memories,
+        value => `${fmt(value, 0)} GB`,
+        compareMemory.value,
+      );
+    }
+
+    function rowsForCompareOptions() {
+      return allRows.filter(row =>
+        (!compareStandard.checked || row.is_standard_throughput_tokens) &&
+        (!compareModel.value || row.model === compareModel.value)
+      );
+    }
+
+    function currentCompareRows() {
+      return allRows.filter(row =>
+        (!compareStandard.checked || row.is_standard_throughput_tokens) &&
+        row.model === compareModel.value &&
+        row.chip === compareChip.value &&
+        String(row.memory_gb) === String(compareMemory.value)
+      );
+    }
+
+    function renderCompare() {
+      const rows = currentCompareRows();
+      const selected = [
+        compareModel.value || "No model selected",
+        compareChip.value || "No chip selected",
+        compareMemory.value ? `${fmt(compareMemory.value, 0)} GB` : "No RAM selected",
+      ];
+      compareTitle.textContent = selected.join(" / ");
+
+      const representatives = representativeRowsByEngine(rows);
+      const runTotal = rows.length;
+      compareMeta.textContent = runTotal
+        ? `${representatives.length} engine${representatives.length === 1 ? "" : "s"} across ${runTotal} run${runTotal === 1 ? "" : "s"}`
+        : "No submitted run matches this selection.";
+      resultCount.textContent = `${runTotal} result${runTotal === 1 ? "" : "s"}`;
+
+      compareBody.innerHTML = representatives.map(row => `
+        <tr>
+          <td>${engineCell(row)}</td>
+          <td><span class="metric-strong">${fmt(row.tps, 2)}</span></td>
+          <td>${fmt(row.decode_tps, 2)}</td>
+          <td>${fmt(row.ttft_cold, 3)} s</td>
+          <td>${fmt(row.ttft_cached, 3)} s</td>
+          <td>${systemRamCell(row)}</td>
+          <td>${runSummaryCell(row, rows)}</td>
+          <td><button class="details-toggle" type="button" data-detail="${row._id}">Details</button></td>
+        </tr>
+        <tr class="details-row" id="detail-${row._id}" hidden>
+          <td colspan="8">${detailsPanel(row)}</td>
+        </tr>
+      `).join("");
+
+      compareEmpty.style.display = representatives.length ? "none" : "block";
+    }
+
+    function representativeRowsByEngine(rows) {
+      const groups = new Map();
+      rows.forEach(row => {
+        if (!groups.has(row.engine)) groups.set(row.engine, []);
+        groups.get(row.engine).push(row);
+      });
+
+      return [...groups.values()]
+        .map(group => group.slice().sort(compareRunRecency)[0])
+        .sort((a, b) => numericSortValue(b.tps) - numericSortValue(a.tps));
+    }
+
+    function compareRunRecency(a, b) {
+      const dateDiff = Date.parse(b.date || 0) - Date.parse(a.date || 0);
+      if (dateDiff !== 0) return dateDiff;
+      return numericSortValue(b.tps) - numericSortValue(a.tps);
+    }
+
+    function runSummaryCell(row, allMatchingRows) {
+      const engineRuns = allMatchingRows.filter(other => other.engine === row.engine).length;
+      const badges = conditionBadges(row);
+      return `
+        <div class="row-badges">
+          ${engineRuns > 1 ? `<span class="badge badge-gray">${engineRuns} runs</span>` : ""}
+          ${badges}
+        </div>
+      `;
+    }
+
+    function conditionBadges(row) {
+      const badges = [];
+      if (String(row.engine_version || "").toLowerCase() === "unknown") {
+        badges.push(`<span class="badge badge-amber">unknown version</span>`);
+      }
+      if (!row.is_standard_throughput_tokens) {
+        badges.push(`<span class="badge badge-amber">custom tokens</span>`);
+      }
+      if (String(row.thermal_state || "").startsWith("unavailable")) {
+        badges.push(`<span class="badge badge-gray">thermal unknown</span>`);
+      } else if (row.thermal_state && row.thermal_state !== "nominal") {
+        badges.push(`<span class="badge badge-amber">thermal ${escapeHtml(row.thermal_state)}</span>`);
+      }
+      if (row.power_source === "battery") {
+        badges.push(`<span class="badge badge-red">battery</span>`);
+      }
+      if (row.low_power_mode === "on") {
+        badges.push(`<span class="badge badge-red">low power</span>`);
+      }
+      if (!badges.length) {
+        badges.push(`<span class="badge badge-green">clean</span>`);
+      }
+      return badges.join("");
+    }
+
+    function detailsPanel(row) {
+      const details = [
+        ["Engine version", row.engine_version],
+        ["Protocol", `v${row.protocol_version || "1"}`],
+        ["Chronos version", row.chronos_version],
+        ["Quantization", row.quantization],
+        ["Max tokens", row.throughput_max_tokens],
+        ["Min tokens", row.throughput_min_tokens == null ? "none" : row.throughput_min_tokens],
+        ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
+        ["Token source", row.token_count_source],
+        ["Decode timing", row.decode_timing_source],
+        ["Thermal", conditionValue(row.thermal_state)],
+        ["Power source", conditionValue(row.power_source)],
+        ["Low Power Mode", conditionValue(row.low_power_mode)],
+        ["Machine", row.machine_model],
+        ["Engine RSS", row.ram_is_process_rss ? `${fmt(row.ram_peak_gb, 3)} GB` : "system fallback"],
+        ["RAM method", row.ram_measurement_method],
+        ["Trials", row.trials],
+        ["Stddev tok/s", row.tps_stddev == null ? "-" : fmt(row.tps_stddev, 3)],
+        ["Date", row.date],
+        ["Notes", row.notes || "-"],
+      ];
+
+      return `
+        <div class="details-panel">
+          ${details.map(([label, value]) => `
+            <div class="detail-item">
+              <div class="detail-label">${escapeHtml(label)}</div>
+              <div class="detail-value">${escapeHtml(value)}</div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderColumnMenu() {
+      columnsPopover.innerHTML = OPTIONAL_RAW_COLUMNS.map(column => `
+        <label class="column-option">
+          <input type="checkbox" value="${escapeHtml(column.key)}" ${visibleOptionalColumns.has(column.key) ? "checked" : ""} />
+          ${escapeHtml(column.label)}
+        </label>
+      `).join("");
+    }
+
+    function visibleRawColumns() {
+      return [
+        ...BASE_RAW_COLUMNS,
+        ...OPTIONAL_RAW_COLUMNS.filter(column => visibleOptionalColumns.has(column.key)),
+      ];
+    }
+
+    function rawRows() {
+      const query = rawSearch.value.trim().toLowerCase();
+      return allRows.filter(row => {
+        const searchable = [
+          row.model,
+          row.engine,
+          row.chip,
+          row.machine_model,
+          row.quantization,
+          row.notes,
+        ].join(" ").toLowerCase();
+        return (!query || searchable.includes(query)) &&
+          (!rawStandard.checked || row.is_standard_throughput_tokens);
       });
     }
-    return sortAsc ? cmp : -cmp;
-  }
 
-  function populateSelect(id, label, values, formatter = value => value) {
-    const sel = document.getElementById(id);
-    sel.replaceChildren(new Option(label, ""));
-    values.forEach(value => {
-      const opt = document.createElement("option");
-      opt.value = String(value);
-      opt.textContent = formatter(value);
-      sel.appendChild(opt);
-    });
-  }
+    function renderRaw() {
+      const columns = visibleRawColumns();
+      const rows = rawRows().slice().sort(compareRawRows);
 
-  function populateHardwareFilters() {
-    const chips = [...new Set(allRows.map(r => r.chip))].sort();
-    const machineModels = [...new Set(allRows.map(r => r.machine_model).filter(Boolean))].sort();
-    const memorySizes = [...new Set(allRows.map(r => r.memory_gb).filter(v => v != null))]
-      .sort((a, b) => Number(a) - Number(b));
-    const maxTokens = [...new Set(allRows.map(r => r.throughput_max_tokens).filter(v => v != null))]
-      .sort((a, b) => Number(a) - Number(b));
+      rawHead.innerHTML = columns.map(column => `
+        <th class="sortable ${rawSortKey === column.sortKey ? "sorted" : ""}" data-sort="${escapeHtml(column.sortKey)}">
+          ${escapeHtml(column.label)}${rawSortKey === column.sortKey ? (rawSortAsc ? " up" : " down") : ""}
+        </th>
+      `).join("");
 
-    populateSelect("filter-chip", "All chips", chips);
-    populateSelect("filter-machine", "All machine models", machineModels);
-    populateSelect("filter-memory", "All RAM sizes", memorySizes, value => `${value} GB`);
-    populateSelect("filter-max-tokens", "All max tokens", maxTokens, value => `${value}`);
-  }
+      rawBody.innerHTML = rows.map(row => `
+        <tr>
+          ${columns.map(column => `<td>${column.value(row)}</td>`).join("")}
+        </tr>
+      `).join("");
 
-  function render() {
-    const modelFilter = document.getElementById("filter-model").value.trim().toLowerCase();
-    const engineFilter = document.getElementById("filter-engine").value;
-    const chipFilter   = document.getElementById("filter-chip").value;
-    const machineFilter = document.getElementById("filter-machine").value;
-    const memoryFilter = document.getElementById("filter-memory").value;
-    const maxTokensFilter = document.getElementById("filter-max-tokens").value;
-
-    let rows = allRows.filter(r =>
-      (!modelFilter || String(r.model ?? "").toLowerCase().includes(modelFilter)) &&
-      (!engineFilter || r.engine === engineFilter) &&
-      (!chipFilter   || r.chip   === chipFilter) &&
-      (!machineFilter || r.machine_model === machineFilter) &&
-      (!memoryFilter || String(r.memory_gb) === memoryFilter) &&
-      (!maxTokensFilter || String(r.throughput_max_tokens) === maxTokensFilter)
-    );
-
-    rows.sort(compareRows);
-
-    const tbody = document.getElementById("tbody");
-    const empty = document.getElementById("empty");
-
-    if (rows.length === 0) {
-      tbody.innerHTML = "";
-      empty.style.display = "block";
-      return;
+      rawEmpty.style.display = rows.length ? "none" : "block";
     }
-    empty.style.display = "none";
 
-    tbody.innerHTML = rows.map(r => `
-      <tr>
-        <td>${escapeHtml(r.chip)}</td>
-        <td>${r.memory_gb} GB</td>
-        <td>${engineBadge(r.engine)}${engineVersionBadge(r.engine_version)}</td>
-        <td>${escapeHtml(r.model)}</td>
-        <td>${escapeHtml(r.quantization)}</td>
-        <td><strong>${fmt(r.tps, 2)}</strong></td>
-        <td>${fmt(r.decode_tps, 2)}</td>
-        <td>v${escapeHtml(r.protocol_version || "1")}</td>
-        <td>${fmtTokenCounts(r.completion_tokens_raw)}</td>
-        <td>${maxTokensCell(r)}</td>
-        <td>${fmt(r.ttft_cold)}</td>
-        <td>${fmt(r.ttft_cached)}</td>
-        <td>${r.system_ram_peak_percent != null ? fmt(r.system_ram_peak_gb, 2) + " GB / " + fmt(r.system_ram_peak_percent, 0) + "%" : "—"}</td>
-        <td>${r.thermal_state && !r.thermal_state.startsWith("unavailable") ? "🌡 " + escapeHtml(r.thermal_state) : "—"}</td>
-        <td>${r.trials}</td>
-        <td>${escapeHtml(r.date)}</td>
-      </tr>
-    `).join("");
-  }
+    function compareRawRows(a, b) {
+      const column = [...BASE_RAW_COLUMNS, ...OPTIONAL_RAW_COLUMNS]
+        .find(item => item.sortKey === rawSortKey);
+      const av = valueForSort(a, rawSortKey);
+      const bv = valueForSort(b, rawSortKey);
+      let cmp;
+      if (column?.numeric) {
+        cmp = numericSortValue(av) - numericSortValue(bv);
+      } else {
+        cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      }
+      return rawSortAsc ? cmp : -cmp;
+    }
 
-  // ── Sort ────────────────────────────────────────────────────────────────────
-  document.querySelectorAll("thead th[data-col]").forEach(th => {
-    th.addEventListener("click", () => {
-      const col = th.dataset.col;
-      if (sortCol === col) { sortAsc = !sortAsc; }
-      else { sortCol = col; sortAsc = false; }
-      updateSortIndicators();
-      render();
+    function valueForSort(row, key) {
+      return row[key];
+    }
+
+    function setSelectOptions(select, values, formatter, preferredValue = "") {
+      const normalizedPreferred = String(preferredValue ?? "");
+      select.replaceChildren();
+      values.forEach(value => {
+        const option = new Option(formatter(value), String(value));
+        select.appendChild(option);
+      });
+
+      if (values.some(value => String(value) === normalizedPreferred)) {
+        select.value = normalizedPreferred;
+      } else if (values.length) {
+        select.value = String(values[0]);
+      } else {
+        select.appendChild(new Option("No results", ""));
+        select.value = "";
+      }
+    }
+
+    function mostCommonByEngine(rows, field) {
+      const counts = new Map();
+      rows.forEach(row => {
+        const value = row[field];
+        if (!value) return;
+        const current = counts.get(value) || { rows: 0, engines: new Set() };
+        current.rows += 1;
+        current.engines.add(row.engine);
+        counts.set(value, current);
+      });
+      return [...counts.entries()]
+        .sort((a, b) => {
+          const engineDiff = b[1].engines.size - a[1].engines.size;
+          if (engineDiff !== 0) return engineDiff;
+          const rowDiff = b[1].rows - a[1].rows;
+          if (rowDiff !== 0) return rowDiff;
+          return String(a[0]).localeCompare(String(b[0]));
+        })[0]?.[0] || "";
+    }
+
+    function uniqueSorted(values, sorter) {
+      const unique = [...new Set(values.filter(value => value != null && value !== ""))];
+      return unique.sort(sorter || ((a, b) => String(a).localeCompare(String(b), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })));
+    }
+
+    function engineCell(row) {
+      const label = ENGINE_LABELS[row.engine] || row.engine;
+      return `
+        <div class="engine-cell">
+          <span class="engine-dot engine-${escapeHtml(row.engine)}"></span>
+          <span>${escapeHtml(label)}</span>
+        </div>
+      `;
+    }
+
+    function systemRamCell(row) {
+      if (row.system_ram_peak_percent == null) return "-";
+      return `${fmt(row.system_ram_peak_gb, 2)} GB / ${fmt(row.system_ram_peak_percent, 0)}%`;
+    }
+
+    function maxTokensCell(row) {
+      const minTokens = row.throughput_min_tokens == null
+        ? ""
+        : ` / min ${escapeHtml(row.throughput_min_tokens)}`;
+      const badge = row.is_standard_throughput_tokens
+        ? ` <span class="badge badge-green">standard</span>`
+        : "";
+      return `${escapeHtml(row.throughput_max_tokens)}${minTokens}${badge}`;
+    }
+
+    function fmtTokenCounts(values) {
+      if (!Array.isArray(values) || values.length === 0) return "-";
+      if (values.every(value => value === values[0])) return `${escapeHtml(values[0])} each`;
+      return values.map(value => escapeHtml(value)).join(", ");
+    }
+
+    function conditionValue(value) {
+      return value == null || value === "" ? "unknown" : String(value);
+    }
+
+    function fmt(value, decimals = 3) {
+      if (value == null || Number.isNaN(Number(value))) return "-";
+      return Number(value).toFixed(decimals);
+    }
+
+    function numericSortValue(value) {
+      return value == null || Number.isNaN(Number(value)) ? -Infinity : Number(value);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[character]));
+    }
+
+    document.getElementById("tab-compare").addEventListener("click", () => {
+      document.getElementById("tab-compare").classList.add("active");
+      document.getElementById("tab-compare").setAttribute("aria-selected", "true");
+      document.getElementById("tab-raw").classList.remove("active");
+      document.getElementById("tab-raw").setAttribute("aria-selected", "false");
+      document.getElementById("compare-view").hidden = false;
+      document.getElementById("raw-view").hidden = true;
+      document.getElementById("raw-view").style.display = "none";
     });
-  });
 
-  // ── Filters ─────────────────────────────────────────────────────────────────
-  document.getElementById("filter-model").addEventListener("input", render);
-  document.getElementById("filter-engine").addEventListener("change", render);
-  document.getElementById("filter-chip").addEventListener("change", render);
-  document.getElementById("filter-machine").addEventListener("change", render);
-  document.getElementById("filter-memory").addEventListener("change", render);
-  document.getElementById("filter-max-tokens").addEventListener("change", render);
+    document.getElementById("tab-raw").addEventListener("click", () => {
+      document.getElementById("tab-raw").classList.add("active");
+      document.getElementById("tab-raw").setAttribute("aria-selected", "true");
+      document.getElementById("tab-compare").classList.remove("active");
+      document.getElementById("tab-compare").setAttribute("aria-selected", "false");
+      document.getElementById("compare-view").hidden = true;
+      document.getElementById("raw-view").hidden = false;
+      document.getElementById("raw-view").style.display = "block";
+      renderRaw();
+    });
 
-  // ── Init ────────────────────────────────────────────────────────────────────
-  loadResults();
-</script>
+    compareModel.addEventListener("change", () => {
+      updateHardwareOptions();
+      renderCompare();
+    });
+    compareChip.addEventListener("change", () => {
+      updateHardwareOptions();
+      renderCompare();
+    });
+    compareMemory.addEventListener("change", renderCompare);
+    compareStandard.addEventListener("change", () => {
+      initializeCompareControls();
+      renderCompare();
+    });
+    document.getElementById("compare-button").addEventListener("click", renderCompare);
+
+    compareBody.addEventListener("click", event => {
+      const button = event.target.closest("[data-detail]");
+      if (!button) return;
+      const detail = document.getElementById(`detail-${button.dataset.detail}`);
+      if (!detail) return;
+      detail.hidden = !detail.hidden;
+      button.textContent = detail.hidden ? "Details" : "Hide";
+    });
+
+    rawSearch.addEventListener("input", renderRaw);
+    rawStandard.addEventListener("change", renderRaw);
+    rawHead.addEventListener("click", event => {
+      const header = event.target.closest("[data-sort]");
+      if (!header) return;
+      const key = header.dataset.sort;
+      if (rawSortKey === key) {
+        rawSortAsc = !rawSortAsc;
+      } else {
+        rawSortKey = key;
+        rawSortAsc = false;
+      }
+      renderRaw();
+    });
+    columnsPopover.addEventListener("change", event => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement)) return;
+      if (input.checked) {
+        visibleOptionalColumns.add(input.value);
+      } else {
+        visibleOptionalColumns.delete(input.value);
+      }
+      renderRaw();
+    });
+
+    loadResults();
+  </script>
 </body>
 </html>

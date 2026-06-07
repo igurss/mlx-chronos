@@ -107,6 +107,8 @@ jobs:
                       "token_count_source": met["token_count_source"],
                       "protocol_version": protocol.get("version", "1"),
                       "thermal_state": hw.get("thermal_state", "unavailable_permission"),
+                      "power_source": hw.get("power_source"),
+                      "low_power_mode": hw.get("low_power_mode"),
                       "architecture": hw.get("architecture", "unknown"),
                       "trials": tri["count"],
                       "chronos_version": meta["chronos_version"],
