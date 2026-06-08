@@ -51,8 +51,8 @@ EXAMPLE_RESULT = {
         "completion_tokens_raw": [100, 100, 100, 100, 100],
     },
     "meta": {
-        "chronos_version": "0.1.2",
-        "timestamp": "2026-06-05T12:00:00Z",
+        "chronos_version": "0.1.3",
+        "timestamp": "2026-06-08T12:00:00Z",
         "benchmark_profile": "baseline",
         "ram_sample_interval_seconds": 0.05,
         "elapsed_since_last_benchmark_seconds": None,

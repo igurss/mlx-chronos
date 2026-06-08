@@ -125,10 +125,10 @@ Low Power Mode, and engine version.
 
 ## Current Release
 
-`0.1.2` is a compatibility-preserving patch release over `0.1.1`. It adds
-sustained benchmark runs, cooldown metadata, throughput token-bound metadata,
-client-observed decode throughput when reliable usage data is available, and
-clearer warnings for fallback token counts and unknown engine versions.
+`0.1.3` is a compatibility-preserving patch release over `0.1.2`. It tightens
+throughput timing, sustained-run warnings, release checks, and submission
+validation, clarifies System RAM Peak as the comparable memory metric, and
+keeps Engine RSS as a legacy diagnostic field in the raw result details.
 
 ---
 

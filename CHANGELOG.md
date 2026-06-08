@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## [0.1.3] — 2026-06-08
+
+Patch release focused on benchmark measurement reliability, leaderboard
+clarity, and release hardening since `0.1.2`.
+
 ### Reliability
 - Calculate request throughput from the same rounded elapsed time saved in raw
   trial metadata so valid runs cannot fail schema validation because of
