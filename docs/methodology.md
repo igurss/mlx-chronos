@@ -92,10 +92,11 @@ under that requested bound.
 
 The default leaderboard workload is `max_tokens=100`. The result metadata
 records the requested throughput token bound in
-`meta.benchmark_protocol.throughput.requested_max_tokens`, and the public
-leaderboard exposes this as a sortable/filterable "Max tokens" field. Rows with
+`meta.benchmark_protocol.throughput.requested_max_tokens`. The public
+leaderboard's compare view defaults to standard runs, while the raw-data view
+keeps token-bound metadata available as optional columns. Rows with
 `max_tokens=100` and no requested `min_tokens` are marked as the standard
-workload.
+workload; other rows are treated as custom-token runs.
 
 ### Sustained Throughput Profile
 `mlx-chronos run --profile sustained` keeps the same benchmark phases but

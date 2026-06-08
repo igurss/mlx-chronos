@@ -218,7 +218,7 @@ is measured, how, and why.
 - [x] Continuous engine RSS and system RAM peak sampling
 - [x] Preflight validation for engine, server, and model access
 - [x] GitHub Actions validation for submitted results
-- [x] GitHub Pages leaderboard with model search and engine/chip/machine/memory filters
+- [x] GitHub Pages leaderboard with model/chip/RAM engine comparison and configurable raw-data columns
 - [x] JSON and Markdown result export
 - [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
 - [x] Published Apple M2 sample results refreshed with the current benchmark protocol
@@ -227,10 +227,7 @@ is measured, how, and why.
 - [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
 - [x] Request-throughput timing metadata and client-observed streaming decode throughput
 - [x] Phase timing metadata and lightweight continuous thermal monitoring
-- [x] Sustained benchmark profile, cooldown metadata, and max-token leaderboard filter
-
-### Next
-- [ ] Expose benchmark condition metadata as leaderboard filters without breaking the v0.1 JSON contract
+- [x] Sustained benchmark profile, cooldown metadata, and standard/custom token-bound visibility in the leaderboard
 
 ### Future
 - [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract

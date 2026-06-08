@@ -98,8 +98,8 @@ they are used to make runs reproducible and easier to compare. Current
 protocol v2 results use streaming throughput requests; older protocol v1
 results used non-streaming throughput requests. The standard leaderboard
 throughput workload uses `requested_max_tokens=100` without a requested
-`min_tokens`; non-standard token-bound results should be compared through the
-leaderboard max-token filter.
+`min_tokens`; non-standard token-bound results remain visible in the raw-data
+view and are called out as custom-token runs.
 
 New results also distinguish request throughput from decode throughput. Do not
 edit `tokens_per_second`, `request_tokens_per_second`,
