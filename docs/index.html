@@ -1006,7 +1006,7 @@
         ["Power source", conditionValue(row.power_source)],
         ["Low Power Mode", conditionValue(row.low_power_mode)],
         ["Machine", row.machine_model],
-        ["Engine RSS", row.ram_is_process_rss ? `${fmt(row.ram_peak_gb, 3)} GB` : "system fallback"],
+        ["Post-warmup engine RSS diagnostic", row.ram_is_process_rss ? `${fmt(row.ram_peak_gb, 3)} GB` : "system fallback"],
         ["RAM method", row.ram_measurement_method],
         ["Trials", row.trials],
         ["Warmup failures", row.warmup_failures ?? 0],

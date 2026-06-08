@@ -376,15 +376,16 @@ def run_benchmark(
             logger.info("  Done.\n")
 
         logger.info(
-            f"Starting continuous background engine RSS sampling "
+            f"Starting diagnostic post-warmup engine RSS sampling "
             f"({ram_sample_interval:.3f}s interval)..."
         )
-        # Engine RSS intentionally starts after warmup, while system RAM started
-        # before warmup to include model loading and cache pressure.
+        # Diagnostic engine RSS intentionally starts after warmup, while system
+        # RAM started before warmup to include model loading and cache pressure.
         target_pid = engine.get_server_pid()
         if target_pid is None:
             logger.warning(
-                "Engine PID not found; engine RSS will use system RAM peak fallback."
+                "Engine PID not found; diagnostic engine RSS will use system "
+                "RAM peak fallback."
             )
         else:
             try:
@@ -396,7 +397,8 @@ def run_benchmark(
                 ram_is_process_rss = True
             except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
                 logger.warning(
-                    f"Could not start engine RSS sampling for PID {target_pid}: {exc}"
+                    "Could not start diagnostic engine RSS sampling for PID "
+                    f"{target_pid}: {exc}"
                 )
                 ram_tracker = None
 
@@ -471,7 +473,8 @@ def run_benchmark(
         if ram_tracker:
             peak_ram_gb = ram_tracker.stop()
             logger.info(
-                f"Engine RSS sampling finished. Peak detected: {peak_ram_gb:.2f} GB"
+                "Diagnostic engine RSS sampling finished. Peak detected: "
+                f"{peak_ram_gb:.2f} GB"
             )
         else:
             ram_is_process_rss = False

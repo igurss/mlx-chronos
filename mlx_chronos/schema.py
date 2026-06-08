@@ -195,17 +195,21 @@ class Metrics(ChronosBaseModel):
     ram_peak_gb: NonNegativeFloat = Field(
         ...,
         description=(
-            "Peak RSS of the engine server process after warmup during the benchmark, or "
-            "fallback system memory usage when the process cannot be located (GB)"
+            "Legacy diagnostic peak RSS of the engine server process after "
+            "warmup, or fallback system memory usage when the process cannot "
+            "be located (GB)"
         ),
     )
     ram_is_process_rss: bool = Field(
         ..., 
-        description="True if RAM was measured from process RSS, False if system fallback was used"
+        description=(
+            "True if diagnostic RAM was measured from process RSS, False if "
+            "system fallback was used"
+        )
     )
     ram_measurement_method: RAMMeasurementMethod = Field(
         ...,
-        description="Measurement method used for ram_peak_gb",
+        description="Measurement method used for diagnostic ram_peak_gb",
     )
     system_ram_peak_gb: NonNegativeFloat = Field(
         ...,
@@ -455,7 +459,7 @@ class Meta(ChronosBaseModel):
     ram_sample_interval_seconds: Optional[float] = Field(
         None,
         gt=0,
-        description="Seconds between engine RSS and system RAM samples",
+        description="Seconds between diagnostic engine RSS and system RAM samples",
     )
     elapsed_since_last_benchmark_seconds: Optional[NonNegativeFloat] = Field(
         None,

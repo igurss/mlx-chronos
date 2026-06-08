@@ -155,21 +155,22 @@ values can catch shorter spikes but add more measurement overhead; higher values
 reduce overhead but may miss brief peaks. The interval is recorded in result
 metadata as `meta.ram_sample_interval_seconds`.
 
-### Diagnostic Peak Engine RSS (GB)
+### Diagnostic Post-Warmup Engine RSS (GB)
 Resident memory used by the engine server process, sampled continuously after
 warmup through the recorded benchmark phases, then reported as the observed RSS
-peak. Engine RSS intentionally starts after warmup, while system RAM starts
-before warmup so model loading and cache pressure are included in the public
-memory metric.
+peak. This diagnostic RSS sampler intentionally starts after warmup, while
+system RAM starts before warmup so model loading and cache pressure are
+included in the public memory metric.
 Child processes are resolved when RSS sampling starts and then reused during
 sampling to avoid repeatedly scanning the process tree during latency-sensitive
 phases.
 
-**Important:** this metric is best read as process overhead for the server, API
-layer, and runtime. It may not include model weights or Metal allocations that
-are mapped outside ordinary process RSS. Model sizes should still be read from
-their model cards. This metric helps you understand how "heavy" the engine
-process itself is when serving the same model.
+**Important:** this metric is diagnostic and retained for legacy JSON
+compatibility. It is not a public comparison metric. It is best read as process
+overhead for the server, API layer, and runtime. It may not include model
+weights or Metal allocations that are mapped outside ordinary process RSS. Model
+sizes should still be read from their model cards. Use System RAM Peak for
+memory comparison.
 
 When the engine process cannot be identified by port, system-used memory is
 reported as a fallback (marked in the results). Fallback values are not the same
@@ -179,7 +180,8 @@ RSS values.
 The result records both `metrics.ram_is_process_rss` and
 `metrics.ram_measurement_method` (`process_rss` or `system_fallback`) so the
 JSON can distinguish direct process measurements from system-memory fallbacks.
-The public leaderboard does not use process RSS as a main comparison metric.
+The public leaderboard keeps this field in row details only and does not use
+process RSS as a main comparison metric.
 
 ### Thermal State
 Thermal state is detected through macOS `NSProcessInfo` when the Foundation

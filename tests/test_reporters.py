@@ -93,5 +93,8 @@ def test_markdown_reporter_handles_missing_ram_fields(tmp_path):
     output_path = MarkdownReporter().save(result, tmp_path)
 
     content = output_path.read_text()
-    assert "**Post-warmup engine RSS fallback (system RAM):** unknown GB" in content
+    assert (
+        "**Post-warmup engine RSS diagnostic fallback "
+        "(system RAM):** unknown GB"
+    ) in content
     assert "**Peak system RAM:** unknown GB (unknown%)" in content

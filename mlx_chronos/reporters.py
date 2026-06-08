@@ -177,10 +177,14 @@ class MarkdownReporter(BaseReporter):
         )
 
         if metrics.get("ram_is_process_rss", False):
-            md += f"- **Post-warmup peak engine RSS:** {ram_peak_gb} GB\n"
+            md += (
+                "- **Post-warmup engine RSS diagnostic:** "
+                f"{ram_peak_gb} GB\n"
+            )
         else:
             md += (
-                "- **Post-warmup engine RSS fallback (system RAM):** "
+                "- **Post-warmup engine RSS diagnostic fallback "
+                "(system RAM):** "
                 f"{ram_peak_gb} GB\n"
             )
         md += (

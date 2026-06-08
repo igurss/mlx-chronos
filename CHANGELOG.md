@@ -27,6 +27,8 @@
   rescan the process tree on every RAM sample.
 - Require Ollama's `/api/version` endpoint when checking whether an Ollama
   server is actually listening on the configured port.
+- Clarify System RAM Peak as the comparable memory metric and present Engine
+  RSS as a legacy post-warmup diagnostic field only.
 - Avoid re-reading and re-validating benchmark JSON during `mlx-chronos submit`
   after the CLI has already loaded a publishable result.
 - Derive runtime benchmark profile validation from the schema `BenchmarkProfile`

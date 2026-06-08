@@ -29,7 +29,7 @@ contribute to the community leaderboard.
 - **Sustained tok/s** — Optional long throughput profile for heat buildup and late-run degradation checks
 - **Output tokens** — Completion token counts for throughput trials
 - **System RAM peak** — Peak total Mac RAM in use during the benchmark, used as the public memory comparison metric
-- **Engine RSS** — Diagnostic peak RSS of the engine server process when available
+- **Post-warmup engine RSS** — Legacy diagnostic peak RSS of the engine server process when available, not a comparison metric
 - **Tool calling** — Success rate *(coming in v0.2)*
 
 ---
@@ -87,12 +87,13 @@ JSON result in the same output directory. The elapsed time is saved as
 pause before starting a new run. The default recent-run warning threshold is a
 300-second heuristic.
 
-**Post-warmup peak engine RSS** — records the resident memory of the engine
-server process after warmup, through the recorded benchmark phases, when the
-process can be identified. This is diagnostic only: it is not total model memory
-or a public efficiency ranking metric, because macOS/Metal unified-memory
-accounting can vary across environments. The default RAM sampling interval is
-50ms and can be changed with `--ram-sample-interval`.
+**Post-warmup engine RSS diagnostic** — records the resident memory of the
+engine server process after warmup, through the recorded benchmark phases, when
+the process can be identified. This is retained for debugging and legacy JSON
+compatibility only: it is not total model memory and not a public comparison
+metric, because macOS/Metal unified-memory accounting can vary across
+environments. The default RAM sampling interval is 50ms and can be changed with
+`--ram-sample-interval`.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. p95 is added only when at least 20 trials are available. The default is
@@ -219,7 +220,7 @@ is measured, how, and why.
 - [x] Engine support for oMLX, Rapid-MLX, mlx-lm, and Ollama
 - [x] Hardware detection for chip, machine model, memory, macOS, Python, architecture, and thermal state
 - [x] Strict JSON schema validation with raw-trial consistency checks
-- [x] Continuous engine RSS and system RAM peak sampling
+- [x] Continuous system RAM peak sampling, with post-warmup engine RSS kept as a diagnostic field
 - [x] Preflight validation for engine, server, and model access
 - [x] GitHub Actions validation for submitted results
 - [x] PR-based result submissions with automatic `result-submission`, `code`, and `documentation` labels
