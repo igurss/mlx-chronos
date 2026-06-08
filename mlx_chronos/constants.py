@@ -15,6 +15,8 @@ ENGINE_NAME_OMLX = "omlx"
 ENGINE_NAME_RAPID_MLX = "rapid-mlx"
 ENGINE_NAME_MLX_LM = "mlx-lm"
 ENGINE_NAME_OLLAMA = "ollama"
+# Keep in sync with engines.ENGINES and schema.EngineName. constants.py is kept
+# dependency-light, so tests enforce the registry/schema match instead.
 VALID_ENGINE_NAMES = {
     ENGINE_NAME_OMLX,
     ENGINE_NAME_RAPID_MLX,

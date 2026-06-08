@@ -55,6 +55,9 @@
   keeping raw submitted data available behind configurable optional columns.
 - Expose decode throughput, power source, and Low Power Mode in the generated
   leaderboard index when results provide them.
+- Change the generated `docs/results_index.json` shape from a flat array to
+  `{ "metadata": ..., "results": [...] }` so leaderboard metadata can travel
+  with the rows. The bundled HTML still accepts the old flat-array shape.
 - Add an optional `thermal` install extra for PyObjC/Foundation thermal-state
   detection.
 

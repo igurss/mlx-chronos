@@ -2,9 +2,11 @@ import pytest
 import logging
 from unittest.mock import MagicMock, patch
 from mlx_chronos.benchmark import (
+    BENCHMARK_PROFILE_BASELINE,
     BENCHMARK_PROFILE_SUSTAINED,
     SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    VALID_BENCHMARK_PROFILES,
     _detect_sustained_throttling,
     run_benchmark,
 )
@@ -40,6 +42,15 @@ def throughput_measurement(
         decode_timing_source="client_stream" if decode_tps is not None else "unavailable",
         progress_samples=progress_samples,
     )
+
+
+def test_benchmark_profile_constants_are_schema_values():
+    assert BENCHMARK_PROFILE_BASELINE == "baseline"
+    assert BENCHMARK_PROFILE_SUSTAINED == "sustained"
+    assert {
+        BENCHMARK_PROFILE_BASELINE,
+        BENCHMARK_PROFILE_SUSTAINED,
+    } <= VALID_BENCHMARK_PROFILES
 
 
 class FakeThermalStateTracker:
