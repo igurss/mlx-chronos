@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Reliability
+- Calculate request throughput from the same rounded elapsed time saved in raw
+  trial metadata so valid runs cannot fail schema validation because of
+  rounding drift.
+- Abort a run when every warmup request fails, and record partial warmup
+  failures in new result metadata.
+- Record the selected profile name in benchmark protocol metadata so sustained
+  runs are not labeled as baseline protocols.
+- Reject mixed-content or deletion PRs in the submitted-result validation
+  workflow.
+- Extend CI coverage to Python 3.14 and leaderboard JavaScript syntax checks.
 - Avoid re-reading and re-validating benchmark JSON during `mlx-chronos submit`
   after the CLI has already loaded a publishable result.
 - Derive runtime benchmark profile validation from the schema `BenchmarkProfile`
@@ -33,6 +43,10 @@
   detection.
 
 ### Documentation
+- Clarify that cold TTFT prompts avoid same-run cache hits but cannot prove a
+  server had no matching cache state from an earlier process.
+- Clarify that sustained progress samples are estimated unless the stream
+  provides exact usage before the final chunk.
 - Document the PR-first benchmark submission flow while keeping the maintainer
   inbox as a fallback path.
 - Document benchmark port overrides, optional thermal install support, warmup

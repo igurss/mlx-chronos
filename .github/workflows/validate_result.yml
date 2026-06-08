@@ -41,7 +41,7 @@ jobs:
           from mlx_chronos.constants import TOKEN_COUNT_SOURCE_USAGE
           from mlx_chronos.schema import BenchmarkResult
 
-          def get_changed_json_files() -> list[Path]:
+          def get_changed_files() -> list[str]:
               target_branch = os.environ.get("TARGET_BRANCH", "origin/main")
               try:
                   result = subprocess.run(
@@ -58,17 +58,55 @@ jobs:
                       text=True,
                       check=True,
                   )
-                  files = [
-                      Path(line.strip())
+                  return [
+                      line.strip()
                       for line in result.stdout.splitlines()
-                      if line.strip().endswith(".json")
+                      if line.strip()
                   ]
-                  return [path for path in files if path.exists()]
               except Exception as e:
                   print(f"Warning: git diff failed ({e}), falling back to all files.")
-                  return list(Path("results/submitted").rglob("*.json"))
+                  return [
+                      str(path)
+                      for path in Path("results/submitted").rglob("*.json")
+                  ]
 
-          json_files = get_changed_json_files()
+          changed_files = get_changed_files()
+          unexpected_files = [
+              path
+              for path in changed_files
+              if not (
+                  path.startswith("results/submitted/")
+                  and path.endswith(".json")
+              )
+          ]
+          if unexpected_files:
+              print(
+                  "Benchmark result submission PRs must only change JSON files "
+                  "under results/submitted/:"
+              )
+              for path in unexpected_files:
+                  print(f"- {path}")
+              sys.exit(1)
+
+          missing_json_files = [
+              path
+              for path in changed_files
+              if path.endswith(".json") and not Path(path).exists()
+          ]
+          if missing_json_files:
+              print(
+                  "Benchmark result submission PRs must not delete submitted "
+                  "result files:"
+              )
+              for path in missing_json_files:
+                  print(f"- {path}")
+              sys.exit(1)
+
+          json_files = [
+              Path(path)
+              for path in changed_files
+              if path.endswith(".json") and Path(path).exists()
+          ]
 
           if not json_files:
               print("No changed JSON files to validate.")

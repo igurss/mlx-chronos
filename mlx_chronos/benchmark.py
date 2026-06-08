@@ -332,6 +332,8 @@ def run_benchmark(
     token_count_sources = []
     completion_tokens_trials = []
     throughput_progress_samples_trials = []
+    warmup_calls = 2
+    warmup_failures = 0
 
     peak_ram_gb = None
     system_ram_peak_gb = None
@@ -345,7 +347,7 @@ def run_benchmark(
         thermal_tracker.set_phase("warmup")
         with _record_phase_duration(phase_timings, "warmup"):
             logger.info("Warming up (2 calls, not recorded)...")
-            for _ in range(2):
+            for _ in range(warmup_calls):
                 try:
                     engine.measure_tokens_per_second(
                         THROUGHPUT_PROMPT,
@@ -353,7 +355,12 @@ def run_benchmark(
                         max_tokens=WARMUP_MAX_TOKENS,
                     )
                 except Exception as exc:
+                    warmup_failures += 1
                     logger.warning(f"  Warmup call failed and was skipped: {exc}")
+            if warmup_failures == warmup_calls:
+                raise RuntimeError(
+                    "all warmup calls failed; benchmark did not reach a warmed state"
+                )
             logger.info("  Done.\n")
 
         logger.info(
@@ -591,6 +598,7 @@ def run_benchmark(
             "cooldown_seconds": cooldown_seconds,
             "phase_timings_seconds": phase_timings,
             "thermal_monitor": thermal_summary,
+            "warmup_failures": warmup_failures,
             "word_fallback_warning": word_fallback_warning,
             "engine_version_warning": engine_version_warning,
             "sustained_throttling_warning": sustained_throttling_warning,
@@ -598,6 +606,7 @@ def run_benchmark(
                 trials,
                 throughput_max_tokens,
                 throughput_min_tokens,
+                name=benchmark_profile,
             ),
             "notes": notes,
         }

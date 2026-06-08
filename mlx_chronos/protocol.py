@@ -69,9 +69,10 @@ def build_benchmark_protocol(
     trials: int,
     throughput_max_tokens: int,
     throughput_min_tokens: int | None,
+    name: str = "baseline",
 ) -> dict:
     return {
-        "name": "baseline",
+        "name": name,
         "version": BASELINE_PROTOCOL_VERSION,
         "warmup": _protocol_phase(
             [THROUGHPUT_PROMPT],

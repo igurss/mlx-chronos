@@ -3,17 +3,23 @@ name: Tests
 on:
   pull_request:
     paths:
-      - '.github/workflows/tests.yml'
-      - '.github/workflows/release.yml'
+      - '.github/workflows/*.yml'
+      - 'docs/index.html'
+      - 'docs/results_index.json'
       - 'mlx_chronos/**'
+      - 'results/submitted/*.json'
+      - 'results/submitted/**/*.json'
       - 'tests/**'
       - 'pyproject.toml'
   push:
     branches: [main]
     paths:
-      - '.github/workflows/tests.yml'
-      - '.github/workflows/release.yml'
+      - '.github/workflows/*.yml'
+      - 'docs/index.html'
+      - 'docs/results_index.json'
       - 'mlx_chronos/**'
+      - 'results/submitted/*.json'
+      - 'results/submitted/**/*.json'
       - 'tests/**'
       - 'pyproject.toml'
 
@@ -25,7 +31,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +55,16 @@ jobs:
           python -m mlx_chronos.cli --version
           python -m mlx_chronos.cli engines
           python -m mlx_chronos.detect
+
+      - name: Validate leaderboard JavaScript syntax
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('docs/index.html', 'utf8');
+          const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+            .map(match => match[1]);
+          for (const script of scripts) new Function(script);
+          NODE
 
       - name: Run tests
         run: pytest

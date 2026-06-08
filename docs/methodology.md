@@ -16,10 +16,12 @@ means the model has not seen this prompt before — no cache advantage.
 TTFT is measured with Python's monotonic high-resolution performance counter,
 so wall-clock changes during a run do not affect the latency value.
 
-Each trial uses a **unique prompt** from a fixed pool defined in `protocol.py`.
-This ensures the engine cannot serve the response from a previous cache hit.
-The JSON field remains `metrics.ttft_cold` for compatibility with existing
-v0.1 submissions.
+Each trial uses a **unique prompt within the run** from a fixed pool defined in
+`protocol.py`. This avoids cache hits caused by earlier trials in the same
+benchmark. It does not prove the engine had no matching cache state from a
+previous benchmark process; for strict cold-run interpretation, restart or clear
+the engine server before running. The JSON field remains `metrics.ttft_cold`
+for compatibility with existing v0.1 submissions.
 
 ### TTFT Cached — Time to First Token (cached)
 Same measurement, but using a **fixed prompt** that is sent on every cached
@@ -107,15 +109,16 @@ explicitly.
 During sustained throughput, mlx-Chronos records
 `trials.throughput_progress_samples_raw`. Intermediate progress samples are
 taken every 100 generated output units using the live streamed text available
-to the client. Final throughput still uses `usage.completion_tokens` when the
-engine provides it; intermediate samples may be marked `word_fallback` because
-most OpenAI-compatible streams expose exact usage only at the end of the
-stream.
+to the client. These intermediate samples are estimates unless the stream
+exposes exact usage before the end. Final throughput still uses
+`usage.completion_tokens` when the engine provides it; intermediate samples may
+be marked `word_fallback` because most OpenAI-compatible streams expose exact
+usage only at the end of the stream.
 
 The sustained profile also records `meta.sustained_throttling_warning` when a
-late-run throughput drop is observed and the thermal monitor saw a state change
-or non-nominal thermal state. This is a conservative signal, not proof of a
-specific hardware mechanism.
+late-run estimated throughput drop is observed and the thermal monitor saw a
+state change or non-nominal thermal state. This is a conservative heuristic,
+not proof of a specific hardware mechanism.
 
 ### System RAM Peak
 Total Mac RAM usage is sampled continuously from before warmup through the
@@ -248,10 +251,11 @@ little information.
 records the baseline protocol version, exact prompt text for warmup, cold TTFT,
 cached TTFT, and throughput, plus the requested min/max token bounds per phase.
 Protocol phase metadata also records whether the phase used streaming requests
-and whether `stream_options.include_usage` was requested. Results without
-protocol metadata should be treated as protocol v1. Input token counts are
-marked as `unavailable` until mlx-Chronos can obtain them from a tokenizer or
-engine response without adding unreliable estimates.
+and whether `stream_options.include_usage` was requested. The protocol name
+matches the selected benchmark profile (`baseline` or `sustained`) for new
+results. Results without protocol metadata should be treated as protocol v1.
+Input token counts are marked as `unavailable` until mlx-Chronos can obtain
+them from a tokenizer or engine response without adding unreliable estimates.
 
 **Phase timing and thermal metadata:** new results include
 `meta.phase_timings_seconds` and `meta.thermal_monitor` so readers can see how

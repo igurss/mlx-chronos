@@ -76,6 +76,7 @@ EXAMPLE_RESULT = {
             "non_nominal_observed": False,
             "non_nominal_phases": [],
         },
+        "warmup_failures": 0,
         "word_fallback_warning": False,
         "engine_version_warning": False,
         "sustained_throttling_warning": False,

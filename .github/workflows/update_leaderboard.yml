@@ -111,6 +111,7 @@ jobs:
                       "low_power_mode": hw.get("low_power_mode"),
                       "architecture": hw.get("architecture", "unknown"),
                       "trials": tri["count"],
+                      "warmup_failures": meta.get("warmup_failures", 0),
                       "chronos_version": meta["chronos_version"],
                       "date": meta["timestamp"][:10],
                       "notes": meta.get("notes"),

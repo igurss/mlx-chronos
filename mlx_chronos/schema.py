@@ -477,6 +477,10 @@ class Meta(ChronosBaseModel):
         None,
         description="Continuous thermal sampling summary for this run",
     )
+    warmup_failures: NonNegativeInt = Field(
+        0,
+        description="Number of unrecorded warmup calls that failed before measurement",
+    )
     word_fallback_warning: bool = Field(
         False,
         description="True when throughput token counts include word_fallback estimates",

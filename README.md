@@ -41,7 +41,7 @@ running engine:
 
 **Cold TTFT** — sends a prompt to the model and measures the time from request
 to first non-empty streamed token, including whitespace-only text tokens. Each
-trial uses a unique prompt to avoid cache hits.
+trial uses a unique prompt inside the run to avoid same-run cache hits.
 
 **Cached TTFT** — sends the same fixed prompt on every cached trial. A priming
 call loads it into cache first, then cached trials run consecutively. This
@@ -71,10 +71,11 @@ where non-nominal thermal state was observed.
 
 **Sustained profile** — `--profile sustained` runs a single long throughput
 trial with `max_tokens=1000` by default and records progress samples every 100
-generated output units. These samples make late-run throughput drops easier to
-spot. When a sustained run also observes a thermal-state change or non-nominal
-thermal state, mlx-Chronos records a sustained throttling warning in result
-metadata.
+generated output units. Intermediate samples are estimates when the stream only
+reports exact token usage at the end. These samples make late-run throughput
+drops easier to spot. When a sustained run also observes a thermal-state change
+or non-nominal thermal state, mlx-Chronos records a sustained throttling warning
+in result metadata.
 
 **Cooldown tracking** — before each run, mlx-Chronos checks the latest prior
 JSON result in the same output directory. The elapsed time is saved as

@@ -684,6 +684,9 @@ class BaseEngine(ABC):
                 ) from exc
 
         elapsed = time.perf_counter() - start
+        rounded_elapsed = round(max(elapsed, 0.0), 3)
+        if rounded_elapsed <= 0:
+            rounded_elapsed = 0.001
 
         if first_token_at is None:
             raise RuntimeError(
@@ -703,7 +706,7 @@ class BaseEngine(ABC):
             completion_tokens = max(1, len(completion_text.split()))
             token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
-        request_tps = 0.0 if elapsed <= 0 else round(completion_tokens / elapsed, 2)
+        request_tps = round(completion_tokens / rounded_elapsed, 2)
         decode_tps = None
         decode_source = DECODE_TIMING_UNAVAILABLE
         decode_elapsed = elapsed - (first_token_at - start)
@@ -738,7 +741,7 @@ class BaseEngine(ABC):
             request_tokens_per_second=request_tps,
             completion_tokens=completion_tokens,
             token_count_source=token_count_source,
-            elapsed_seconds=round(max(elapsed, 0.0), 3),
+            elapsed_seconds=rounded_elapsed,
             decode_tokens_per_second=decode_tps,
             decode_timing_source=decode_source,
             progress_samples=tuple(finalized_progress_samples),

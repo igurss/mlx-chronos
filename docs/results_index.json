@@ -31,6 +31,7 @@
     "low_power_mode": null,
     "architecture": "arm64",
     "trials": 5,
+    "warmup_failures": 0,
     "chronos_version": "0.1.0",
     "date": "2026-05-30",
     "notes": null
@@ -67,6 +68,7 @@
     "low_power_mode": null,
     "architecture": "arm64",
     "trials": 8,
+    "warmup_failures": 0,
     "chronos_version": "0.1.0b1",
     "date": "2026-05-28",
     "notes": "v0.1 live mlx-lm"
@@ -103,6 +105,7 @@
     "low_power_mode": null,
     "architecture": "arm64",
     "trials": 8,
+    "warmup_failures": 0,
     "chronos_version": "0.1.0b1",
     "date": "2026-05-28",
     "notes": "v0.1 live Ollama"
@@ -139,6 +142,7 @@
     "low_power_mode": null,
     "architecture": "arm64",
     "trials": 5,
+    "warmup_failures": 0,
     "chronos_version": "0.1.0",
     "date": "2026-05-30",
     "notes": null
@@ -175,6 +179,7 @@
     "low_power_mode": null,
     "architecture": "arm64",
     "trials": 8,
+    "warmup_failures": 0,
     "chronos_version": "0.1.0b1",
     "date": "2026-05-28",
     "notes": "v0.1 live oMLX"
@@ -211,6 +216,7 @@
     "low_power_mode": null,
     "architecture": "arm64",
     "trials": 5,
+    "warmup_failures": 0,
     "chronos_version": "0.1.0",
     "date": "2026-05-30",
     "notes": null
@@ -247,6 +253,7 @@
     "low_power_mode": null,
     "architecture": "arm64",
     "trials": 8,
+    "warmup_failures": 0,
     "chronos_version": "0.1.0b1",
     "date": "2026-05-28",
     "notes": "v0.1 live Rapid-MLX"

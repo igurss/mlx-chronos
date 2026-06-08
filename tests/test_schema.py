@@ -20,6 +20,7 @@ def test_valid_schema():
     assert result.meta.benchmark_profile == "baseline"
     assert result.meta.elapsed_since_last_benchmark_seconds is None
     assert result.meta.cooldown_seconds == 0.0
+    assert result.meta.warmup_failures == 0
     assert result.meta.word_fallback_warning is False
     assert result.meta.engine_version_warning is False
     assert result.meta.sustained_throttling_warning is False
@@ -193,6 +194,17 @@ def test_phase_timings_and_thermal_monitor_are_optional_for_older_results():
     result = BenchmarkResult(**data)
     assert result.meta.phase_timings_seconds is None
     assert result.meta.thermal_monitor is None
+
+
+def test_warmup_failures_defaults_for_older_results():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    del data["meta"]["warmup_failures"]
+
+    result = BenchmarkResult(**data)
+
+    assert result.meta.warmup_failures == 0
+
 
 def test_phase_timings_reject_total_shorter_than_phase_sum():
     invalid_data = EXAMPLE_RESULT.copy()

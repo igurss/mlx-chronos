@@ -231,6 +231,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["trials"]["throughput_elapsed_seconds_raw"] == [5.0, 5.0]
     assert result["meta"]["phase_timings_seconds"]["total_runtime"] >= 0
     assert result["meta"]["benchmark_profile"] == "baseline"
+    assert result["meta"]["warmup_failures"] == 0
     assert result["meta"]["word_fallback_warning"] is False
     assert result["meta"]["engine_version_warning"] is False
     assert result["meta"]["sustained_throttling_warning"] is False
@@ -647,9 +648,89 @@ def test_run_benchmark_records_sustained_progress_samples(
     assert result["meta"]["benchmark_profile"] == "sustained"
     assert result["meta"]["elapsed_since_last_benchmark_seconds"] == 120.0
     assert result["meta"]["cooldown_seconds"] == 60.0
+    assert result["meta"]["benchmark_protocol"]["name"] == "sustained"
     assert result["trials"]["throughput_progress_samples_raw"] == [
         list(progress_samples)
     ]
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_records_partial_warmup_failures(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_tokens_per_second.side_effect = [
+        RuntimeError("temporary warmup failure"),
+        20.0,
+    ]
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_throughput.return_value = throughput_measurement()
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        result = run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=1,
+            ram_sample_interval=0.01,
+        )
+
+    assert result["meta"]["warmup_failures"] == 1
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_aborts_when_all_warmups_fail(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_tokens_per_second.side_effect = RuntimeError("warmup failed")
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        with pytest.raises(RuntimeError, match="all warmup calls failed"):
+            run_benchmark(
+                engine_name="omlx",
+                model_name="org/test-model",
+                model_quantization="4bit",
+                trials=1,
+                ram_sample_interval=0.01,
+            )
+
+    mock_engine.measure_ttft.assert_not_called()
 
 
 @patch("mlx_chronos.benchmark.get_engine")

@@ -155,6 +155,21 @@ def test_measure_throughput_uses_client_stream_decode_timing(mock_stream):
     assert measurement.decode_tokens_per_second == pytest.approx(19.8, abs=0.001)
     assert measurement.decode_timing_source == "client_stream"
 
+
+@patch("httpx.stream")
+def test_measure_throughput_uses_stored_elapsed_for_request_tps(mock_stream):
+    mock_stream.return_value = stream_response(
+        completion_stream(content="hello", completion_tokens=100)
+    )
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 0.1, 0.4995]):
+        measurement = engine.measure_throughput("test prompt", "default", 100)
+
+    rounded_elapsed = round(0.4995, 3)
+    assert measurement.elapsed_seconds == rounded_elapsed
+    assert measurement.request_tokens_per_second == round(100 / rounded_elapsed, 2)
+
+
 @patch("httpx.stream")
 def test_measure_throughput_records_progress_samples(mock_stream):
     content = " ".join(["token"] * 120)

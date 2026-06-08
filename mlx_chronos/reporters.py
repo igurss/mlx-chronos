@@ -125,6 +125,8 @@ class MarkdownReporter(BaseReporter):
                 "- **Elapsed since prior result:** "
                 f"{meta['elapsed_since_last_benchmark_seconds']} s\n"
             )
+        if meta.get("warmup_failures"):
+            md += f"- **Warmup failures:** {meta['warmup_failures']}\n"
         phase_timings = meta.get("phase_timings_seconds")
         if phase_timings:
             md += f"- **Total runtime:** {phase_timings['total_runtime']} s\n"

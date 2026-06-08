@@ -991,6 +991,7 @@
         ["Engine RSS", row.ram_is_process_rss ? `${fmt(row.ram_peak_gb, 3)} GB` : "system fallback"],
         ["RAM method", row.ram_measurement_method],
         ["Trials", row.trials],
+        ["Warmup failures", row.warmup_failures ?? 0],
         ["Stddev tok/s", row.tps_stddev == null ? "-" : fmt(row.tps_stddev, 3)],
         ["Date", row.date],
         ["Notes", row.notes || "-"],
