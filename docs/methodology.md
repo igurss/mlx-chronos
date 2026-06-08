@@ -68,7 +68,9 @@ This metric includes HTTP/client overhead, prompt prefill, and decode. It should
 be read as end-to-end request throughput, not pure decode speed. The legacy JSON
 field remains `metrics.tokens_per_second` for compatibility; new results also
 mirror it as `metrics.request_tokens_per_second` and record per-trial elapsed
-request times in `trials.throughput_elapsed_seconds_raw`.
+request times in `trials.throughput_elapsed_seconds_raw`. Streaming throughput
+timing stops at the observed stream completion marker when one is provided, so
+socket/context teardown after the stream is not counted as generation time.
 
 Protocol v2 uses streaming mode (`stream: true`) with
 `stream_options.include_usage=true` so the same request can expose both
@@ -159,6 +161,9 @@ warmup through the recorded benchmark phases, then reported as the observed RSS
 peak. Engine RSS intentionally starts after warmup, while system RAM starts
 before warmup so model loading and cache pressure are included in the public
 memory metric.
+Child processes are resolved when RSS sampling starts and then reused during
+sampling to avoid repeatedly scanning the process tree during latency-sensitive
+phases.
 
 **Important:** this metric is best read as process overhead for the server, API
 layer, and runtime. It may not include model weights or Metal allocations that

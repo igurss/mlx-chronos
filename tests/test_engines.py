@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -49,6 +50,12 @@ class MockStreamContext:
         return self.response
 
     def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class SlowCloseStreamContext(MockStreamContext):
+    def __exit__(self, exc_type, exc, tb):
+        time.perf_counter()
         return False
 
 
@@ -187,6 +194,21 @@ def test_measure_throughput_uses_stored_elapsed_for_request_tps(mock_stream):
     rounded_elapsed = round(0.4995, 3)
     assert measurement.elapsed_seconds == rounded_elapsed
     assert measurement.request_tokens_per_second == round(100 / rounded_elapsed, 2)
+
+
+@patch("httpx.stream")
+def test_measure_throughput_uses_done_time_not_stream_close(mock_stream):
+    mock_stream.return_value = SlowCloseStreamContext(
+        MockStreamResponse(
+            completion_stream(content="hello", completion_tokens=100)
+        )
+    )
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 0.1, 1.0, 10.0]):
+        measurement = engine.measure_throughput("test prompt", "default", 100)
+
+    assert measurement.elapsed_seconds == 1.0
+    assert measurement.request_tokens_per_second == 100.0
 
 
 @patch("httpx.stream")
@@ -448,6 +470,26 @@ def test_validate_completion_request_rejects_invalid_shape(mock_post):
 
     with pytest.raises(RuntimeError, match="invalid completion response"):
         OMLXEngine().validate_completion_request("org/test-model")
+
+
+@patch("httpx.get")
+def test_ollama_server_running_requires_ollama_identity(mock_get):
+    models_response = MagicMock(status_code=200)
+    version_response = MagicMock(status_code=200)
+    version_response.json.return_value = {"version": "0.24.0"}
+    mock_get.side_effect = [models_response, version_response]
+
+    assert OllamaEngine().is_server_running() is True
+
+
+@patch("httpx.get")
+def test_ollama_server_running_rejects_wrong_server_on_port(mock_get):
+    models_response = MagicMock(status_code=200)
+    version_response = MagicMock(status_code=404)
+    mock_get.side_effect = [models_response, version_response]
+
+    assert OllamaEngine().is_server_running() is False
+
 
 def test_engine_port_env_override(monkeypatch):
     monkeypatch.setenv("MLX_CHRONOS_MLX_LM_PORT", "8090")

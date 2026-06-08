@@ -21,6 +21,12 @@
   listening process for RSS sampling.
 - Warn when cached TTFT is close to cold TTFT, since prompt/KV cache reuse may
   not have occurred.
+- Stop throughput timing at the observed stream completion marker instead of
+  including stream/context teardown time.
+- Cache engine child processes when RSS sampling starts so the tracker does not
+  rescan the process tree on every RAM sample.
+- Require Ollama's `/api/version` endpoint when checking whether an Ollama
+  server is actually listening on the configured port.
 - Avoid re-reading and re-validating benchmark JSON during `mlx-chronos submit`
   after the CLI has already loaded a publishable result.
 - Derive runtime benchmark profile validation from the schema `BenchmarkProfile`

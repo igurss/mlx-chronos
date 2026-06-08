@@ -34,21 +34,29 @@ class RAMTracker:
         self.pid = target_pid or os.getpid()
         self.interval = interval
         self._process = psutil.Process(self.pid)
+        self._child_processes: list[psutil.Process] = []
+        self._children_refreshed = False
         self.peak_ram_bytes = 0
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = None
 
+    def _refresh_child_processes(self) -> None:
+        try:
+            self._child_processes = self._process.children(recursive=True)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            self._child_processes = []
+        self._children_refreshed = True
+
     def _sample_rss(self) -> int:
         rss_bytes = self._process.memory_info().rss
-        try:
-            for child in self._process.children(recursive=True):
-                try:
-                    rss_bytes += child.memory_info().rss
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
+        if not self._children_refreshed:
+            self._refresh_child_processes()
+        for child in self._child_processes:
+            try:
+                rss_bytes += child.memory_info().rss
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
         return rss_bytes
 
     def _monitor(self):
@@ -71,6 +79,7 @@ class RAMTracker:
 
     def start(self):
         """Run the sampling."""
+        self._refresh_child_processes()
         self.peak_ram_bytes = self._sample_rss()
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._monitor, daemon=True)

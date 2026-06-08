@@ -131,6 +131,30 @@ def test_ram_tracker():
         
     assert tracker.peak_ram_bytes == 1024 ** 3
 
+
+def test_ram_tracker_caches_child_processes_between_samples():
+    with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls:
+        mock_process = MagicMock()
+        parent_mem_info = MagicMock()
+        parent_mem_info.rss = 1024 ** 3
+        mock_process.memory_info.return_value = parent_mem_info
+
+        child_process = MagicMock()
+        child_mem_info = MagicMock()
+        child_mem_info.rss = 512 * 1024 ** 2
+        child_process.memory_info.return_value = child_mem_info
+        mock_process.children.return_value = [child_process]
+        mock_process_cls.return_value = mock_process
+
+        tracker = RAMTracker(interval=0.1, target_pid=12345)
+        first_sample = tracker._sample_rss()
+        second_sample = tracker._sample_rss()
+
+    assert first_sample == int(1.5 * 1024 ** 3)
+    assert second_sample == int(1.5 * 1024 ** 3)
+    assert mock_process.children.call_count == 1
+
+
 def test_system_ram_tracker():
     with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         mem_info = MagicMock()

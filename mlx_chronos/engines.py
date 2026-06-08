@@ -71,6 +71,9 @@ class BaseEngine(ABC):
     def base_url(self) -> str:
         return f"http://localhost:{self.port}/v1"
 
+    def root_url(self) -> str:
+        return f"http://localhost:{self.port}"
+
     def endpoint(self) -> str:
         """API endpoint used by the engine."""
         return "/chat/completions"
@@ -195,9 +198,12 @@ class BaseEngine(ABC):
     def is_server_running(self) -> bool:
         try:
             r = httpx.get(f"{self.base_url()}/models", timeout=2.0)
-            return r.status_code == 200
+            return r.status_code == 200 and self._server_identity_matches()
         except Exception:
             return False
+
+    def _server_identity_matches(self) -> bool:
+        return True
 
     def list_model_ids(self) -> list[str]:
         """Return model ids exposed by the OpenAI-compatible /models endpoint."""
@@ -607,6 +613,7 @@ class BaseEngine(ABC):
                 payload["stream_options"] = {"include_usage": True}
             start = time.perf_counter()
             first_token_at = None
+            stream_finished_at = None
             completion_text_parts = []
             completion_tokens = None
             progress_samples = []
@@ -635,8 +642,11 @@ class BaseEngine(ABC):
                             continue
 
                         raw_chunk = line.removeprefix("data:").strip()
-                        if not raw_chunk or raw_chunk == "[DONE]":
+                        if not raw_chunk:
                             continue
+                        if raw_chunk == "[DONE]":
+                            stream_finished_at = time.perf_counter()
+                            break
 
                         try:
                             chunk = json.loads(raw_chunk)
@@ -683,7 +693,11 @@ class BaseEngine(ABC):
                     )
                 ) from exc
 
-        elapsed = time.perf_counter() - start
+        elapsed = (
+            stream_finished_at - start
+            if stream_finished_at is not None
+            else time.perf_counter() - start
+        )
         rounded_elapsed = round(max(elapsed, 0.0), 3)
         if rounded_elapsed <= 0:
             rounded_elapsed = 0.001
@@ -909,6 +923,16 @@ class OllamaEngine(BaseEngine):
 
     def is_installed(self) -> bool:
         return shutil.which("ollama") is not None
+
+    def _server_identity_matches(self) -> bool:
+        try:
+            response = httpx.get(f"{self.root_url()}/api/version", timeout=2.0)
+            if response.status_code != 200:
+                return False
+            data = response.json()
+        except Exception:
+            return False
+        return isinstance(data, dict) and isinstance(data.get("version"), str)
 
     def get_version(self) -> str:
         try:
