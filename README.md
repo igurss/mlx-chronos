@@ -227,7 +227,7 @@ is measured, how, and why.
 - [x] GitHub Pages leaderboard with model/chip/RAM engine comparison and configurable raw-data columns
 - [x] JSON and Markdown result export
 - [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
-- [x] Published Apple M2 sample results refreshed with the current benchmark protocol
+- [x] Published seed Apple M2 and M1 Max sample results for the public leaderboard
 - [x] Warnings for battery mode, Low Power Mode, non-nominal thermal state, and unavailable thermal state
 - [x] Integration tests against mock OpenAI-compatible servers
 - [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
