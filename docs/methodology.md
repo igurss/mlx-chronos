@@ -23,6 +23,12 @@ previous benchmark process; for strict cold-run interpretation, restart or clear
 the engine server before running. The JSON field remains `metrics.ttft_cold`
 for compatibility with existing v0.1 submissions.
 
+Cold prompts are fixed protocol text, not tokenizer-normalized strings. Their
+input length can vary slightly by tokenizer and engine. That variance is part
+of the published protocol and is visible through the exact prompt text in
+`meta.benchmark_protocol`; input token counts remain `unavailable` until they
+can be measured without adding engine-specific estimates.
+
 ### TTFT Cached — Time to First Token (cached)
 Same measurement, but using a **fixed prompt** that is sent on every cached
 trial. After cold TTFT trials finish, a priming call (not recorded) loads this
@@ -48,6 +54,9 @@ model latency.
 The cached metric is intentionally named `ttft_cached` in the v0.1 JSON schema.
 It means "fixed prompt after one priming request"; it does not guarantee that
 all engines implement identical KV-cache or prefix-cache behavior.
+New results set `meta.cached_ttft_warning=true` when cached TTFT is close to
+cold TTFT, because that pattern may indicate that the engine did not reuse a
+prompt/KV cache for that run.
 
 ### Request Throughput (tok/s)
 Completion tokens divided by the full client-observed request time, measured
@@ -82,8 +91,11 @@ mlx-Chronos records client-observed decode throughput in
 between first streamed content and the end of the stream. This is still a
 client-observed stream metric: it includes engine flush policy and any
 inter-token buffering or batching visible to the client. It is not an internal
-model/kernel decode measurement. If token usage is not available, decode
-throughput is left unavailable rather than estimated from word counts.
+model/kernel decode measurement. The calculation assumes
+`usage.completion_tokens` counts generated completion tokens; if an engine uses
+different usage semantics, request throughput is the safer cross-engine metric.
+If token usage is not available, decode throughput is left unavailable rather
+than estimated from word counts.
 
 Throughput trials request a fixed `max_tokens` value, 100 by default. Users can
 override this with `--max-tokens`. An optional `--min-tokens` request can be
@@ -117,8 +129,10 @@ usage only at the end of the stream.
 
 The sustained profile also records `meta.sustained_throttling_warning` when a
 late-run estimated throughput drop is observed and the thermal monitor saw a
-state change or non-nominal thermal state. This is a conservative heuristic,
-not proof of a specific hardware mechanism.
+state change or non-nominal thermal state. The check requires several progress
+intervals and compares the average of early intervals with the average of late
+intervals, so a single noisy first/last sample is not enough. This is still a
+conservative heuristic, not proof of a specific hardware mechanism.
 
 ### System RAM Peak
 Total Mac RAM usage is sampled continuously from before warmup through the
@@ -185,6 +199,9 @@ records start/end/worst thermal state, sample count, whether the state changed,
 and which benchmark phases observed a known non-nominal state.
 mlx-Chronos intentionally does not run `powermetrics` repeatedly during the
 benchmark because that would add subprocess overhead to the measurement.
+If PyObjC/Foundation is not installed, the continuous monitor records
+`source: unavailable` even though the one-shot hardware thermal state may still
+come from `powermetrics` before the benchmark starts.
 
 The result also records `meta.phase_timings_seconds` with elapsed time for
 warmup, cold TTFT, cache priming, cached TTFT, throughput, and total runtime.
@@ -199,7 +216,9 @@ runs where the second run starts with already-warm hardware.
 
 Passing `--cooldown-seconds N` makes the CLI wait until at least `N` seconds
 have elapsed since that prior result. Without an explicit cooldown, the CLI
-warns when the prior result is recent, but it does not block the run.
+warns when the prior result is recent, but it does not block the run. The
+built-in recent-run warning threshold is a pragmatic 300-second heuristic, not
+a measured guarantee that every Mac has returned to a fully cool state.
 
 ### Engine Version Detection
 Engine versions are recorded in `engine.version` when local detection succeeds:

@@ -1,4 +1,7 @@
+import json
 from pathlib import Path
+
+from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,3 +31,19 @@ def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
     assert "under results/submitted/:" in text
     assert "must not delete submitted " in text
     assert "result files:" in text
+
+
+def test_leaderboard_index_carries_standard_token_metadata():
+    data = json.loads((ROOT / "docs" / "results_index.json").read_text())
+
+    assert data["metadata"]["standard_throughput_max_tokens"] == (
+        DEFAULT_THROUGHPUT_MAX_TOKENS
+    )
+    assert isinstance(data["results"], list)
+
+
+def test_leaderboard_html_does_not_hardcode_standard_token_default():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert "const STANDARD_THROUGHPUT_MAX_TOKENS = 100" not in html
+    assert "standardThroughputMaxTokens" in html

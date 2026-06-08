@@ -42,12 +42,17 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mlx_chronos")
 
 DEFAULT_TRIALS = 5
-BENCHMARK_PROFILE_BASELINE = "baseline"
-BENCHMARK_PROFILE_SUSTAINED = "sustained"
-VALID_BENCHMARK_PROFILES = set(get_args(BenchmarkProfile))
+_BENCHMARK_PROFILE_VALUES = get_args(BenchmarkProfile)
+BENCHMARK_PROFILE_BASELINE = _BENCHMARK_PROFILE_VALUES[0]
+BENCHMARK_PROFILE_SUSTAINED = _BENCHMARK_PROFILE_VALUES[1]
+VALID_BENCHMARK_PROFILES = set(_BENCHMARK_PROFILE_VALUES)
 SUSTAINED_THROUGHPUT_MAX_TOKENS = 1000
 SUSTAINED_TRIALS = 1
 SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS = 100
+SUSTAINED_THROTTLING_DROP_RATIO = 0.85
+SUSTAINED_THROTTLING_MIN_INTERVALS = 4
+SUSTAINED_THROTTLING_EDGE_INTERVALS = 2
+CACHED_TTFT_WARNING_RATIO = 0.8
 
 
 def _normalize_token_count_source(source: object) -> str:
@@ -127,7 +132,8 @@ def _log_thermal_monitor_warnings(summary: dict) -> None:
     if source == "unavailable":
         logger.warning(
             "  Warning: thermal monitoring unavailable during run; "
-            "continuous thermal context is missing."
+            "continuous thermal context is missing. Install mlx-chronos[thermal] "
+            "to enable Foundation/PyObjC sampling without powermetrics overhead."
         )
         return
 
@@ -166,6 +172,12 @@ def _throughput_interval_rates(samples: list[dict]) -> list[float]:
     return rates
 
 
+def _edge_average(values: list[float], from_end: bool = False) -> float:
+    window = min(SUSTAINED_THROTTLING_EDGE_INTERVALS, len(values) // 2)
+    selected = values[-window:] if from_end else values[:window]
+    return sum(selected) / len(selected)
+
+
 def _detect_sustained_throttling(
     progress_samples_trials: list[list[dict]],
     thermal_summary: dict | None,
@@ -182,11 +194,11 @@ def _detect_sustained_throttling(
 
     for samples in progress_samples_trials:
         rates = _throughput_interval_rates(samples)
-        if len(rates) < 2:
+        if len(rates) < SUSTAINED_THROTTLING_MIN_INTERVALS:
             continue
-        first_rate = rates[0]
-        last_rate = rates[-1]
-        if first_rate > 0 and last_rate <= first_rate * 0.85:
+        early_rate = _edge_average(rates)
+        late_rate = _edge_average(rates, from_end=True)
+        if early_rate > 0 and late_rate <= early_rate * SUSTAINED_THROTTLING_DROP_RATIO:
             return True
     return False
 
@@ -491,6 +503,16 @@ def run_benchmark(
     ttft_cold_stats = compute_stats(ttft_cold_trials)
     ttft_cached_stats = compute_stats(ttft_cached_trials)
     tps_stats = compute_stats(tps_trials)
+    cached_ttft_warning = (
+        ttft_cold_stats["mean"] > 0
+        and ttft_cached_stats["mean"]
+        >= ttft_cold_stats["mean"] * CACHED_TTFT_WARNING_RATIO
+    )
+    if cached_ttft_warning:
+        logger.warning(
+            "  Warning: cached TTFT is close to cold TTFT. The engine may not "
+            "have reused a prompt/KV cache for this run."
+        )
     token_count_source = _summarize_token_count_sources(token_count_sources)
     word_fallback_warning = token_count_source in {
         TOKEN_COUNT_SOURCE_WORD_FALLBACK,
@@ -602,6 +624,7 @@ def run_benchmark(
             "word_fallback_warning": word_fallback_warning,
             "engine_version_warning": engine_version_warning,
             "sustained_throttling_warning": sustained_throttling_warning,
+            "cached_ttft_warning": cached_ttft_warning,
             "benchmark_protocol": build_benchmark_protocol(
                 trials,
                 throughput_max_tokens,

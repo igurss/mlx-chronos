@@ -180,7 +180,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     
     mock_engine = MagicMock()
     mock_engine.name = "omlx"
-    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_ttft.side_effect = [0.5, 0.5, 0.2, 0.2, 0.2]
     mock_engine.measure_tokens_per_second.return_value = 20.0
     mock_engine.measure_throughput.return_value = throughput_measurement(
         tps=20.0,
@@ -223,6 +223,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["metrics"]["decode_tokens_per_second"] is None
     assert result["metrics"]["decode_timing_source"] == "unavailable"
     assert result["metrics"]["ttft_cold"]["mean"] == 0.5
+    assert result["metrics"]["ttft_cached"]["mean"] == 0.2
     assert result["metrics"]["token_count_source"] == "usage.completion_tokens"
     assert result["metrics"]["ram_measurement_method"] == "process_rss"
     assert result["metrics"]["system_ram_peak_gb"] == 6.0
@@ -235,6 +236,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["meta"]["word_fallback_warning"] is False
     assert result["meta"]["engine_version_warning"] is False
     assert result["meta"]["sustained_throttling_warning"] is False
+    assert result["meta"]["cached_ttft_warning"] is False
     assert result["trials"]["throughput_progress_samples_raw"] is None
     assert set(result["meta"]["phase_timings_seconds"]) == {
         "warmup",
@@ -316,7 +318,10 @@ def test_run_benchmark(mock_detect, mock_get_engine):
 def test_detect_sustained_throttling_requires_thermal_signal():
     samples = [
         {"completion_tokens": 100, "elapsed_seconds": 2.0},
-        {"completion_tokens": 200, "elapsed_seconds": 8.0},
+        {"completion_tokens": 200, "elapsed_seconds": 4.0},
+        {"completion_tokens": 300, "elapsed_seconds": 6.0},
+        {"completion_tokens": 350, "elapsed_seconds": 8.0},
+        {"completion_tokens": 400, "elapsed_seconds": 10.0},
     ]
 
     assert _detect_sustained_throttling(
@@ -330,6 +335,21 @@ def test_detect_sustained_throttling_requires_thermal_signal():
         [samples],
         {
             "changed_during_run": False,
+            "non_nominal_observed": False,
+        },
+    ) is False
+
+
+def test_detect_sustained_throttling_requires_enough_intervals():
+    samples = [
+        {"completion_tokens": 100, "elapsed_seconds": 2.0},
+        {"completion_tokens": 200, "elapsed_seconds": 8.0},
+    ]
+
+    assert _detect_sustained_throttling(
+        [samples],
+        {
+            "changed_during_run": True,
             "non_nominal_observed": False,
         },
     ) is False

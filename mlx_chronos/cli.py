@@ -12,7 +12,6 @@ from mlx_chronos.benchmark import (
     BENCHMARK_PROFILE_BASELINE,
     BENCHMARK_PROFILE_SUSTAINED,
     DEFAULT_TRIALS,
-    DEFAULT_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
@@ -21,6 +20,7 @@ from mlx_chronos.benchmark import (
 )
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
+from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
@@ -125,6 +125,12 @@ def _emit_result_warnings(result: dict) -> None:
         print(
             "Warning: sustained profile observed a late throughput drop while "
             "thermal state changed or became non-nominal.",
+            file=sys.stderr,
+        )
+    if meta.get("cached_ttft_warning"):
+        print(
+            "Warning: cached TTFT is close to cold TTFT. The engine may not "
+            "have reused a prompt/KV cache for this run.",
             file=sys.stderr,
         )
 

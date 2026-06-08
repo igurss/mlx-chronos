@@ -624,14 +624,14 @@
     </main>
 
     <footer>
-      Results are community-submitted and validated through GitHub Actions. Standard runs use max_tokens=100 with no requested min_tokens.
+      Results are community-submitted and validated through GitHub Actions. Standard runs use <span id="standard-token-label">the project default max_tokens</span> with no requested min_tokens.
       Protocol v1 and v2 throughput are different workloads; row details keep the original protocol metadata visible.
     </footer>
   </div>
 
   <script>
     const RESULTS_INDEX = "results_index.json";
-    const STANDARD_THROUGHPUT_MAX_TOKENS = 100;
+    let standardThroughputMaxTokens = null;
 
     const ENGINE_LABELS = {
       "omlx": "oMLX",
@@ -796,14 +796,24 @@
     const rawBody = document.getElementById("raw-body");
     const rawEmpty = document.getElementById("raw-empty");
     const columnsPopover = document.getElementById("columns-popover");
+    const standardTokenLabel = document.getElementById("standard-token-label");
 
     async function loadResults() {
       try {
         const response = await fetch(RESULTS_INDEX);
         if (!response.ok) throw new Error("results index unavailable");
-        const rows = await response.json();
+        const payload = await response.json();
+        const rows = Array.isArray(payload) ? payload : (payload.results || []);
+        standardThroughputMaxTokens = Number.isFinite(
+          Number(payload?.metadata?.standard_throughput_max_tokens)
+        )
+          ? Number(payload.metadata.standard_throughput_max_tokens)
+          : null;
+        renderStandardTokenLabel();
         allRows = rows.map(normalizeRow);
       } catch {
+        standardThroughputMaxTokens = null;
+        renderStandardTokenLabel();
         allRows = [];
       }
 
@@ -813,11 +823,22 @@
       renderRaw();
     }
 
+    function renderStandardTokenLabel() {
+      standardTokenLabel.textContent = standardThroughputMaxTokens == null
+        ? "the project default max_tokens"
+        : `max_tokens=${standardThroughputMaxTokens}`;
+    }
+
     function normalizeRow(row, index) {
-      const throughputMaxTokens = Number(
-        row.throughput_max_tokens ?? STANDARD_THROUGHPUT_MAX_TOKENS
-      );
+      const throughputMaxTokens = row.throughput_max_tokens == null
+        ? null
+        : Number(row.throughput_max_tokens);
       const throughputMinTokens = row.throughput_min_tokens ?? null;
+      const inferredStandard = (
+        standardThroughputMaxTokens != null &&
+        throughputMaxTokens === standardThroughputMaxTokens &&
+        throughputMinTokens == null
+      );
       return {
         ...row,
         _id: `row-${index}`,
@@ -827,10 +848,7 @@
         throughput_max_tokens: throughputMaxTokens,
         throughput_min_tokens: throughputMinTokens,
         is_standard_throughput_tokens: Boolean(
-          row.is_standard_throughput_tokens ?? (
-            throughputMaxTokens === STANDARD_THROUGHPUT_MAX_TOKENS &&
-            throughputMinTokens == null
-          )
+          row.is_standard_throughput_tokens ?? inferredStandard
         ),
       };
     }
@@ -979,7 +997,7 @@
         ["Protocol", `v${row.protocol_version || "1"}`],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
-        ["Max tokens", row.throughput_max_tokens],
+        ["Max tokens", row.throughput_max_tokens == null ? "unknown" : row.throughput_max_tokens],
         ["Min tokens", row.throughput_min_tokens == null ? "none" : row.throughput_min_tokens],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Token source", row.token_count_source],
@@ -1143,6 +1161,7 @@
     }
 
     function maxTokensCell(row) {
+      if (row.throughput_max_tokens == null) return "-";
       const minTokens = row.throughput_min_tokens == null
         ? ""
         : ` / min ${escapeHtml(row.throughput_min_tokens)}`;

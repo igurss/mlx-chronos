@@ -496,6 +496,10 @@ class Meta(ChronosBaseModel):
             "thermal state changed or became non-nominal"
         ),
     )
+    cached_ttft_warning: bool = Field(
+        False,
+        description="True when cached TTFT is close to cold TTFT",
+    )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 
     @field_validator("timestamp")

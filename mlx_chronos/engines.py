@@ -776,7 +776,7 @@ class BaseEngine(ABC):
 class OMLXEngine(BaseEngine):
     name = ENGINE_NAME_OMLX
     default_port = 8000
-    expected_process_names = ("omlx", "python")
+    expected_process_names = ("omlx",)
 
     def is_installed(self) -> bool:
         return shutil.which("omlx") is not None
@@ -825,7 +825,7 @@ class OMLXEngine(BaseEngine):
 class RapidMLXEngine(BaseEngine):
     name = ENGINE_NAME_RAPID_MLX
     default_port = 8001
-    expected_process_names = ("rapid-mlx", "python")
+    expected_process_names = ("rapid-mlx", "rapid_mlx")
 
     def __init__(
         self,
@@ -888,7 +888,7 @@ class RapidMLXEngine(BaseEngine):
 class MLXLMEngine(BaseEngine):
     name = ENGINE_NAME_MLX_LM
     default_port = 8080
-    expected_process_names = ("mlx_lm", "mlx-lm", "python")
+    expected_process_names = ("mlx_lm", "mlx-lm")
 
     def is_installed(self) -> bool:
         return importlib.util.find_spec("mlx_lm") is not None

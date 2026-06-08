@@ -13,6 +13,14 @@
 - Reject mixed-content or deletion PRs in the submitted-result validation
   workflow.
 - Extend CI coverage to Python 3.14 and leaderboard JavaScript syntax checks.
+- Read the leaderboard's standard throughput token bound from generated index
+  metadata instead of duplicating the protocol default in JavaScript.
+- Compare sustained-throughput early/late window averages and require enough
+  progress intervals before emitting a throttling warning.
+- Avoid matching arbitrary Python processes as engine servers when locating the
+  listening process for RSS sampling.
+- Warn when cached TTFT is close to cold TTFT, since prompt/KV cache reuse may
+  not have occurred.
 - Avoid re-reading and re-validating benchmark JSON during `mlx-chronos submit`
   after the CLI has already loaded a publishable result.
 - Derive runtime benchmark profile validation from the schema `BenchmarkProfile`
@@ -47,6 +55,9 @@
   server had no matching cache state from an earlier process.
 - Clarify that sustained progress samples are estimated unless the stream
   provides exact usage before the final chunk.
+- Document the cached-TTFT warning, post-warmup scope of engine RSS, sustained
+  throttling heuristic, decode-throughput assumption, and 300-second cooldown
+  warning heuristic.
 - Document the PR-first benchmark submission flow while keeping the maintainer
   inbox as a fallback path.
 - Document benchmark port overrides, optional thermal install support, warmup

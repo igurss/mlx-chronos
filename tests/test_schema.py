@@ -24,6 +24,7 @@ def test_valid_schema():
     assert result.meta.word_fallback_warning is False
     assert result.meta.engine_version_warning is False
     assert result.meta.sustained_throttling_warning is False
+    assert result.meta.cached_ttft_warning is False
     assert result.meta.phase_timings_seconds.total_runtime == 38.1
     assert result.meta.thermal_monitor.source == "unavailable"
     assert result.meta.thermal_monitor.start_state == "unavailable_foundation"
@@ -204,6 +205,16 @@ def test_warmup_failures_defaults_for_older_results():
     result = BenchmarkResult(**data)
 
     assert result.meta.warmup_failures == 0
+
+
+def test_cached_ttft_warning_defaults_for_older_results():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    del data["meta"]["cached_ttft_warning"]
+
+    result = BenchmarkResult(**data)
+
+    assert result.meta.cached_ttft_warning is False
 
 
 def test_phase_timings_reject_total_shorter_than_phase_sum():

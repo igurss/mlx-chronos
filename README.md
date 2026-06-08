@@ -46,7 +46,8 @@ trial uses a unique prompt inside the run to avoid same-run cache hits.
 **Cached TTFT** — sends the same fixed prompt on every cached trial. A priming
 call loads it into cache first, then cached trials run consecutively. This
 measures cache performance without interleaving unrelated prompts between
-cached measurements.
+cached measurements. If cached TTFT is close to cold TTFT, new runs record a
+warning that cache reuse may not have happened.
 
 **Request throughput (tok/s)** — measures completion tokens divided by the full
 client-observed request time for a standard fixed prompt. This includes request
@@ -67,7 +68,9 @@ the practical question of how much memory pressure the run placed on the Mac.
 **Thermal monitor** — records phase timings plus a lightweight thermal summary
 during the run when macOS thermal state is available through Foundation/PyObjC.
 New JSON results include start/end/worst thermal state, sample count, and phases
-where non-nominal thermal state was observed.
+where non-nominal thermal state was observed. Without PyObjC/Foundation, the
+continuous monitor is unavailable even if a one-shot pre-run thermal state can
+be read through `powermetrics`.
 
 **Sustained profile** — `--profile sustained` runs a single long throughput
 trial with `max_tokens=1000` by default and records progress samples every 100
@@ -75,19 +78,21 @@ generated output units. Intermediate samples are estimates when the stream only
 reports exact token usage at the end. These samples make late-run throughput
 drops easier to spot. When a sustained run also observes a thermal-state change
 or non-nominal thermal state, mlx-Chronos records a sustained throttling warning
-in result metadata.
+in result metadata. The warning compares early and late progress-window
+averages, not a single first/last sample.
 
 **Cooldown tracking** — before each run, mlx-Chronos checks the latest prior
 JSON result in the same output directory. The elapsed time is saved as
 `meta.elapsed_since_last_benchmark_seconds`; `--cooldown-seconds` can enforce a
-pause before starting a new run.
+pause before starting a new run. The default recent-run warning threshold is a
+300-second heuristic.
 
-**Peak engine RSS** — records the resident memory of the engine server process
-after warmup, through the recorded benchmark phases, when the process can be
-identified. This is diagnostic only: it is not total model memory or a public
-efficiency ranking metric, because macOS/Metal unified-memory accounting can
-vary across environments. The default RAM sampling interval is 50ms and can be
-changed with `--ram-sample-interval`.
+**Post-warmup peak engine RSS** — records the resident memory of the engine
+server process after warmup, through the recorded benchmark phases, when the
+process can be identified. This is diagnostic only: it is not total model memory
+or a public efficiency ranking metric, because macOS/Metal unified-memory
+accounting can vary across environments. The default RAM sampling interval is
+50ms and can be changed with `--ram-sample-interval`.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. p95 is added only when at least 20 trials are available. The default is

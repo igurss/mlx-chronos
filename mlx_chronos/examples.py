@@ -80,6 +80,7 @@ EXAMPLE_RESULT = {
         "word_fallback_warning": False,
         "engine_version_warning": False,
         "sustained_throttling_warning": False,
+        "cached_ttft_warning": False,
         "benchmark_protocol": {
             "name": "baseline",
             "version": "2",

@@ -120,6 +120,11 @@ class MarkdownReporter(BaseReporter):
                 "- **Warning:** sustained profile observed late throughput "
                 "degradation with a thermal-state signal.\n"
             )
+        if meta.get("cached_ttft_warning"):
+            md += (
+                "- **Warning:** cached TTFT is close to cold TTFT; prompt/KV "
+                "cache reuse may not have occurred.\n"
+            )
         if meta.get("elapsed_since_last_benchmark_seconds") is not None:
             md += (
                 "- **Elapsed since prior result:** "
@@ -172,9 +177,12 @@ class MarkdownReporter(BaseReporter):
         )
 
         if metrics.get("ram_is_process_rss", False):
-            md += f"- **Peak engine RSS:** {ram_peak_gb} GB\n"
+            md += f"- **Post-warmup peak engine RSS:** {ram_peak_gb} GB\n"
         else:
-            md += f"- **Peak engine RSS fallback (system RAM):** {ram_peak_gb} GB\n"
+            md += (
+                "- **Post-warmup engine RSS fallback (system RAM):** "
+                f"{ram_peak_gb} GB\n"
+            )
         md += (
             f"- **RAM measurement method:** "
             f"{self._format_optional(metrics.get('ram_measurement_method'))}\n"

@@ -115,6 +115,25 @@ def test_get_engine():
 def test_engine_registry_matches_schema_constants():
     assert set(ENGINES) == VALID_ENGINE_NAMES
 
+
+def test_process_match_rejects_generic_python_process(monkeypatch):
+    fake_process = MagicMock()
+    fake_process.name.return_value = "python"
+    fake_process.cmdline.return_value = ["python", "-m", "jupyter"]
+    monkeypatch.setattr("mlx_chronos.engines.psutil.Process", lambda _pid: fake_process)
+
+    assert OMLXEngine()._process_matches_engine(12345) is False
+
+
+def test_process_match_accepts_engine_specific_python_module(monkeypatch):
+    fake_process = MagicMock()
+    fake_process.name.return_value = "python"
+    fake_process.cmdline.return_value = ["python", "-m", "rapid_mlx.server"]
+    monkeypatch.setattr("mlx_chronos.engines.psutil.Process", lambda _pid: fake_process)
+
+    assert RapidMLXEngine()._process_matches_engine(12345) is True
+
+
 @patch("httpx.stream")
 def test_measure_tokens_per_second(mock_stream):
     mock_stream.return_value = stream_response(

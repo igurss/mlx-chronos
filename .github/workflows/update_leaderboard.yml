@@ -127,8 +127,17 @@ jobs:
                   print(f"- {error}")
               sys.exit(1)
 
+          payload = {
+              "metadata": {
+                  "standard_throughput_max_tokens": (
+                      DEFAULT_THROUGHPUT_MAX_TOKENS
+                  ),
+              },
+              "results": index,
+          }
+
           out = Path("docs/results_index.json")
-          out.write_text(json.dumps(index, indent=2))
+          out.write_text(json.dumps(payload, indent=2) + "\n")
           print(f"Generated index with {len(index)} results.")
           EOF
 
