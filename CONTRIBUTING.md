@@ -73,17 +73,18 @@ mlx-chronos run --engine omlx \
 **4. Submit your result**
 ```bash
 mlx-chronos submit --file results/local/your-result.json --dry-run
-mlx-chronos submit --file results/local/your-result.json
 ```
 
-The first command validates the JSON locally without sending it. The second
-command sends the JSON file to the maintainer inbox with brief form metadata so
-the provider does not classify the submission as blank spam. Accepted results
-are reviewed and published manually.
+This validates the JSON locally without sending it. To submit the result for the
+public leaderboard, copy the checked JSON into `results/submitted/` with a clear
+filename and open a pull request that changes only that JSON file. GitHub
+Actions will label the PR as `result-submission`, validate the file, and keep
+submission PRs easy to filter from code changes.
 
-To include a real contact address with the submission:
+If opening a PR is inconvenient, the maintainer inbox remains available as a
+fallback:
 ```bash
-mlx-chronos submit --file results/local/your-result.json --email you@example.com
+mlx-chronos submit --file results/local/your-result.json
 ```
 
 Public leaderboard submissions must use `usage.completion_tokens` as the

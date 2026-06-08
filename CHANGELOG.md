@@ -23,6 +23,8 @@
 
 ### Features
 - Add `mlx-chronos --version` and `mlx-chronos models --engine ...`.
+- Add automatic pull-request labels for benchmark result submissions, code
+  changes, and documentation-only changes.
 - Redesign the public leaderboard around a model/chip/RAM compare view, while
   keeping raw submitted data available behind configurable optional columns.
 - Expose decode throughput, power source, and Low Power Mode in the generated
@@ -31,6 +33,8 @@
   detection.
 
 ### Documentation
+- Document the PR-first benchmark submission flow while keeping the maintainer
+  inbox as a fallback path.
 - Document benchmark port overrides, optional thermal install support, warmup
   token bounds, and the RAM sampling start-point asymmetry.
 - Note that legacy `metrics.tokens_per_second` mirrors

@@ -1,0 +1,98 @@
+name: Label Pull Request
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply category label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // pull_request_target has write permissions. Do not checkout or run PR code here.
+            const categoryLabels = {
+              "result-submission": {
+                color: "0E8A16",
+                description: "Benchmark JSON submission"
+              },
+              "code": {
+                color: "1D76DB",
+                description: "Code or workflow change"
+              },
+              "documentation": {
+                color: "0075CA",
+                description: "Documentation-only change"
+              }
+            };
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: issue_number,
+              per_page: 100
+            });
+            const changedPaths = files.map((file) => file.filename);
+            if (changedPaths.length === 0) {
+              core.info("No changed files found; skipping category label.");
+              return;
+            }
+
+            const isResultSubmissionPath = (path) =>
+              path.startsWith("results/submitted/") && path.endsWith(".json");
+            const isDocsPath = (path) =>
+              path.startsWith("docs/") ||
+              ["README.md", "CONTRIBUTING.md", "CHANGELOG.md"].includes(path);
+
+            const nextLabel = changedPaths.every(isResultSubmissionPath)
+              ? "result-submission"
+              : changedPaths.every(isDocsPath)
+                ? "documentation"
+                : "code";
+
+            for (const [name, label] of Object.entries(categoryLabels)) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name,
+                  color: label.color,
+                  description: label.description
+                });
+              }
+            }
+
+            const existingLabels = new Set(
+              context.payload.pull_request.labels.map((label) => label.name)
+            );
+            for (const name of Object.keys(categoryLabels)) {
+              if (name === nextLabel || !existingLabels.has(name)) continue;
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            if (!existingLabels.has(nextLabel)) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number,
+                labels: [nextLabel]
+              });
+            }
+
+            core.info(`Applied ${nextLabel} label for: ${changedPaths.join(", ")}`);

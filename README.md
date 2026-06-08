@@ -176,26 +176,24 @@ Optional thermal-state support through macOS Foundation can be installed with
 
 1. Run `mlx-chronos run` on your Mac
 2. A JSON file is generated in `results/local/` (use `--format all` for a Markdown summary too)
-3. Check the result without sending it:
+3. Check the result:
    ```bash
    mlx-chronos submit --file results/local/your-result.json --dry-run
    ```
-4. Send the JSON to the maintainer inbox:
-   ```bash
-   mlx-chronos submit --file results/local/your-result.json
-   ```
-5. The maintainer reviews accepted JSON files and publishes verified results manually
+4. Copy the checked JSON into `results/submitted/` with a clear filename
+5. Open a pull request with only that JSON file changed
+6. GitHub Actions labels the PR as `result-submission`, validates the schema,
+   and the maintainer reviews it before merge
 
 Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens`. Local runs can still be saved with a fallback token
 estimate, but those results are not accepted for the public leaderboard and are
 marked with `meta.word_fallback_warning`.
 
-Maintainers can override the public inbox endpoint with `--endpoint` or the
-`MLX_CHRONOS_SUBMIT_ENDPOINT` environment variable. The command sends the JSON
-file as `result_json` plus brief form metadata so the inbox provider does not
-classify the submission as blank spam. To include a real contact address, pass
-`--email` or set `MLX_CHRONOS_SUBMITTER_EMAIL`.
+If opening a PR is inconvenient, `mlx-chronos submit --file ...` still sends the
+validated JSON to the maintainer inbox as a fallback. Maintainers can override
+the inbox endpoint with `--endpoint` or the `MLX_CHRONOS_SUBMIT_ENDPOINT`
+environment variable.
 
 See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for detailed instructions.
 
@@ -218,6 +216,7 @@ is measured, how, and why.
 - [x] Continuous engine RSS and system RAM peak sampling
 - [x] Preflight validation for engine, server, and model access
 - [x] GitHub Actions validation for submitted results
+- [x] PR-based result submissions with automatic `result-submission`, `code`, and `documentation` labels
 - [x] GitHub Pages leaderboard with model/chip/RAM engine comparison and configurable raw-data columns
 - [x] JSON and Markdown result export
 - [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
