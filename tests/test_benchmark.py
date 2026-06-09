@@ -20,6 +20,7 @@ from mlx_chronos.protocol import (
 )
 from mlx_chronos.constants import MAX_TRIALS
 from mlx_chronos.detect import BenchmarkConditionWarning
+from mlx_chronos.integrity import validate_integrity_seal
 from mlx_chronos.measurements import ThroughputMeasurement
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
@@ -283,6 +284,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     }
     assert result["meta"]["thermal_monitor"]["source"] == "foundation"
     assert result["meta"]["thermal_monitor"]["worst_state"] == "nominal"
+    validate_integrity_seal(result)
     thermal_tracker = FakeThermalStateTracker.instances[0]
     assert thermal_tracker.started is True
     assert thermal_tracker.phases == [

@@ -137,4 +137,10 @@ EXAMPLE_RESULT = {
         },
         "notes": "Test run",
     },
+    "integrity": {
+        "schema": "mlx-chronos-integrity-v1",
+        "algorithm": "sha256-canonical-json",
+        "signed_payload": "benchmark-result-without-integrity",
+        "digest": "9595ae61d5b88ca65ff52a031725334497c92a026ac903b031df0191a86680c1",
+    },
 }

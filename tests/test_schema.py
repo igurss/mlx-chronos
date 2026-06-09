@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 from mlx_chronos.constants import MAX_TRIALS, P95_MIN_TRIALS, VALID_ENGINE_NAMES
 from mlx_chronos.examples import EXAMPLE_RESULT
+from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.schema import BenchmarkResult, Engine, TrialStats
 
 def test_valid_schema():
@@ -53,6 +54,8 @@ def test_valid_schema():
         result.meta.benchmark_protocol.throughput.input_token_count_source
         == "unavailable"
     )
+    assert result.integrity.schema_name == "mlx-chronos-integrity-v1"
+    validate_integrity_seal(EXAMPLE_RESULT)
 
 def test_legacy_thermal_state_is_normalized():
     data = EXAMPLE_RESULT.copy()
@@ -103,48 +106,41 @@ def test_completion_token_raw_lengths_must_match_trial_count():
     with pytest.raises(ValidationError, match="trials.count"):
         BenchmarkResult(**invalid_data)
 
-def test_completion_token_raw_is_optional_for_older_results():
+def test_completion_token_raw_is_required():
     data = EXAMPLE_RESULT.copy()
     data["trials"] = data["trials"].copy()
     del data["trials"]["completion_tokens_raw"]
     del data["trials"]["throughput_elapsed_seconds_raw"]
 
-    result = BenchmarkResult(**data)
-    assert result.trials.completion_tokens_raw is None
-    assert result.trials.throughput_elapsed_seconds_raw is None
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**data)
 
 
-def test_completion_tokens_and_elapsed_seconds_must_be_provided_together():
+def test_completion_tokens_and_elapsed_seconds_are_required():
     data = EXAMPLE_RESULT.copy()
     data["trials"] = data["trials"].copy()
     del data["trials"]["completion_tokens_raw"]
 
-    with pytest.raises(ValidationError, match="must be provided together"):
+    with pytest.raises(ValidationError):
         BenchmarkResult(**data)
 
     data = EXAMPLE_RESULT.copy()
     data["trials"] = data["trials"].copy()
     del data["trials"]["throughput_elapsed_seconds_raw"]
 
-    with pytest.raises(ValidationError, match="must be provided together"):
+    with pytest.raises(ValidationError):
         BenchmarkResult(**data)
 
-def test_new_throughput_raw_fields_are_optional_for_older_results():
+def test_request_throughput_raw_fields_are_required():
     data = EXAMPLE_RESULT.copy()
     data["trials"] = data["trials"].copy()
     del data["trials"]["throughput_elapsed_seconds_raw"]
-    del data["trials"]["decode_tokens_per_second_raw"]
     del data["trials"]["completion_tokens_raw"]
     data["metrics"] = data["metrics"].copy()
     del data["metrics"]["request_tokens_per_second"]
-    del data["metrics"]["decode_tokens_per_second"]
-    del data["metrics"]["decode_timing_source"]
 
-    result = BenchmarkResult(**data)
-    assert result.trials.throughput_elapsed_seconds_raw is None
-    assert result.trials.completion_tokens_raw is None
-    assert result.metrics.request_tokens_per_second is None
-    assert result.metrics.decode_timing_source == "unavailable"
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**data)
 
 def test_decode_timing_source_accepts_client_stream():
     data = EXAMPLE_RESULT.copy()
@@ -178,43 +174,60 @@ def test_decode_timing_source_rejects_unproduced_engine_response():
     with pytest.raises(ValidationError, match="decode_timing_source"):
         BenchmarkResult(**data)
 
-def test_benchmark_protocol_is_optional_for_older_results():
+def test_benchmark_protocol_is_required():
     data = EXAMPLE_RESULT.copy()
     data["meta"] = data["meta"].copy()
     del data["meta"]["benchmark_protocol"]
 
-    result = BenchmarkResult(**data)
-    assert result.meta.benchmark_protocol is None
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**data)
 
-def test_phase_timings_and_thermal_monitor_are_optional_for_older_results():
+def test_phase_timings_and_thermal_monitor_are_required():
     data = EXAMPLE_RESULT.copy()
     data["meta"] = data["meta"].copy()
     del data["meta"]["phase_timings_seconds"]
     del data["meta"]["thermal_monitor"]
 
-    result = BenchmarkResult(**data)
-    assert result.meta.phase_timings_seconds is None
-    assert result.meta.thermal_monitor is None
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**data)
 
 
-def test_warmup_failures_defaults_for_older_results():
+def test_warmup_failures_is_required():
     data = EXAMPLE_RESULT.copy()
     data["meta"] = data["meta"].copy()
     del data["meta"]["warmup_failures"]
 
-    result = BenchmarkResult(**data)
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**data)
 
-    assert result.meta.warmup_failures == 0
 
-
-def test_cached_ttft_warning_defaults_for_older_results():
+def test_cached_ttft_warning_is_required():
     data = EXAMPLE_RESULT.copy()
     data["meta"] = data["meta"].copy()
     del data["meta"]["cached_ttft_warning"]
 
-    result = BenchmarkResult(**data)
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**data)
 
-    assert result.meta.cached_ttft_warning is False
+
+def test_integrity_seal_rejects_tampering():
+    data = EXAMPLE_RESULT.copy()
+    data["metrics"] = data["metrics"].copy()
+    data["metrics"]["tokens_per_second"] = {
+        **data["metrics"]["tokens_per_second"],
+        "mean": 99.0,
+    }
+
+    with pytest.raises(IntegrityError, match="digest"):
+        validate_integrity_seal(data)
+
+
+def test_integrity_seal_is_required():
+    data = EXAMPLE_RESULT.copy()
+    del data["integrity"]
+
+    with pytest.raises(IntegrityError, match="missing"):
+        validate_integrity_seal(data)
 
 
 def test_phase_timings_reject_total_shorter_than_phase_sum():
@@ -317,16 +330,17 @@ def test_throughput_progress_samples_validate_tps():
         [
             {
                 "completion_tokens": 100,
-                "elapsed_seconds": 5.0,
-                "tokens_per_second": 20.0,
+                "elapsed_seconds": elapsed,
+                "tokens_per_second": round(100 / elapsed, 2),
                 "token_count_source": "usage.completion_tokens",
             }
         ]
-    ] * data["trials"]["count"]
+        for elapsed in data["trials"]["throughput_elapsed_seconds_raw"]
+    ]
 
     result = BenchmarkResult(**data)
 
-    assert result.trials.throughput_progress_samples_raw[0][0].tokens_per_second == 20.0
+    assert result.trials.throughput_progress_samples_raw[0][0].tokens_per_second == 18.48
 
 def test_throughput_progress_samples_reject_bad_tps():
     invalid_data = EXAMPLE_RESULT.copy()

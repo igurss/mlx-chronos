@@ -20,8 +20,7 @@ Each trial uses a **unique prompt within the run** from a fixed pool defined in
 `protocol.py`. This avoids cache hits caused by earlier trials in the same
 benchmark. It does not prove the engine had no matching cache state from a
 previous benchmark process; for strict cold-run interpretation, restart or clear
-the engine server before running. The JSON field remains `metrics.ttft_cold`
-for compatibility with existing v0.1 submissions.
+the engine server before running. The JSON field is `metrics.ttft_cold`.
 
 Cold prompts are fixed protocol text, not tokenizer-normalized strings. Their
 input length can vary slightly by tokenizer and engine. That variance is part
@@ -34,8 +33,7 @@ Same measurement, but using a **fixed prompt** that is sent on every cached
 trial. After cold TTFT trials finish, a priming call (not recorded) loads this
 prompt into the engine cache. Cached TTFT trials then run consecutively so
 unrelated prompts do not evict or overwrite the cache between measurements.
-The JSON field remains `metrics.ttft_cached` for compatibility with existing
-v0.1 submissions.
+The JSON field is `metrics.ttft_cached`.
 
 ### TTFT Interpretation Across Engines
 TTFT is an observed client-side latency: mlx-Chronos starts timing before the
@@ -54,7 +52,7 @@ model latency.
 The cached metric is intentionally named `ttft_cached` in the v0.1 JSON schema.
 It means "fixed prompt after one priming request"; it does not guarantee that
 all engines implement identical KV-cache or prefix-cache behavior.
-New results set `meta.cached_ttft_warning=true` when cached TTFT is close to
+Results set `meta.cached_ttft_warning=true` when cached TTFT is close to
 cold TTFT, because that pattern may indicate that the engine did not reuse a
 prompt/KV cache for that run.
 
@@ -65,22 +63,21 @@ across all engines and all versions of mlx-Chronos to ensure comparability. Do
 not change this prompt without bumping `chronos_version`.
 
 This metric includes HTTP/client overhead, prompt prefill, and decode. It should
-be read as end-to-end request throughput, not pure decode speed. The legacy JSON
-field remains `metrics.tokens_per_second` for compatibility; new results also
-mirror it as `metrics.request_tokens_per_second` and record per-trial elapsed
-request times in `trials.throughput_elapsed_seconds_raw`. Streaming throughput
+be read as end-to-end request throughput, not pure decode speed. Current JSON
+records this value in both `metrics.tokens_per_second` and
+`metrics.request_tokens_per_second`; those two fields are expected to match.
+Per-trial elapsed request times are recorded in
+`trials.throughput_elapsed_seconds_raw`. Streaming throughput
 timing stops at the observed stream completion marker when one is provided, so
 socket/context teardown after the stream is not counted as generation time.
 
-Protocol v2 uses streaming mode (`stream: true`) with
+The current protocol uses streaming mode (`stream: true`) with
 `stream_options.include_usage=true` so the same request can expose both
-time-to-first-content and final `usage.completion_tokens`. Protocol v1 used
-non-streaming throughput requests, so v1 and v2 throughput numbers are not the
-same workload and should not be treated as perfectly interchangeable. The result
-records `metrics.token_count_source`. Leaderboard submissions must use
+time-to-first-content and final `usage.completion_tokens`. The result records
+`metrics.token_count_source`. Leaderboard submissions must use
 `usage.completion_tokens`; local runs that fall back to a word-based estimate
 are marked as `word_fallback` or `mixed` and are not considered comparable.
-New benchmark results also record `trials.completion_tokens_raw`, the generated
+Benchmark results also record `trials.completion_tokens_raw`, the generated
 completion-token count for each throughput trial.
 If an engine rejects `stream_options.include_usage`, mlx-Chronos retries the
 same streaming request without that option and records the result as a local
@@ -170,12 +167,11 @@ Child processes are resolved when RSS sampling starts and then reused during
 sampling to avoid repeatedly scanning the process tree during latency-sensitive
 phases.
 
-**Important:** this metric is diagnostic and retained for legacy JSON
-compatibility. It is not a public comparison metric. It is best read as process
-overhead for the server, API layer, and runtime. It may not include model
-weights or Metal allocations that are mapped outside ordinary process RSS. Model
-sizes should still be read from their model cards. Use System RAM Peak for
-memory comparison.
+**Important:** this metric is diagnostic. It is not a public comparison metric.
+It is best read as process overhead for the server, API layer, and runtime. It
+may not include model weights or Metal allocations that are mapped outside
+ordinary process RSS. Model sizes should still be read from their model cards.
+Use System RAM Peak for memory comparison.
 
 When the engine process cannot be identified by port, system-used memory is
 reported as a fallback (marked in the results). Fallback values are not the same
@@ -197,7 +193,7 @@ result records an `unavailable_*` status.
 `mlx-chronos validate` and `mlx-chronos run` warn when thermal state is
 unavailable, when macOS reports a non-nominal thermal state, or when battery
 power / Low Power Mode are detected. These warnings are informational: the run
-continues. New results record power source and Low Power Mode in
+continues. Results record power source and Low Power Mode in
 `hardware.power_source` and `hardware.low_power_mode` so benchmark conditions
 can be audited later.
 
@@ -205,7 +201,7 @@ Installing `mlx-chronos[thermal]` adds the optional PyObjC Foundation bridge,
 which lets mlx-Chronos read thermal state through macOS APIs without requiring
 `powermetrics` privileges.
 
-New benchmark results also include a lightweight continuous thermal monitor in
+Benchmark results also include a lightweight continuous thermal monitor in
 `meta.thermal_monitor`. It samples only the Foundation path during the run and
 records start/end/worst thermal state, sample count, whether the state changed,
 and which benchmark phases observed a known non-nominal state.
@@ -243,7 +239,7 @@ Engine versions are recorded in `engine.version` when local detection succeeds:
 - Ollama: `ollama --version`.
 
 If detection fails, the result records `unknown` instead of blocking the run.
-New results also set `meta.engine_version_warning=true` so local reports and
+Results also set `meta.engine_version_warning=true` so local reports and
 the public leaderboard can call out the comparability risk.
 
 Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB
@@ -278,19 +274,26 @@ reported only when at least 20 trials are available; it is intentionally omitted
 for small sample sizes where it collapses toward the observed maximum and adds
 little information.
 
-**Protocol metadata:** new results include `meta.benchmark_protocol`, which
+**Protocol metadata:** results include `meta.benchmark_protocol`, which
 records the baseline protocol version, exact prompt text for warmup, cold TTFT,
 cached TTFT, and throughput, plus the requested min/max token bounds per phase.
 Protocol phase metadata also records whether the phase used streaming requests
 and whether `stream_options.include_usage` was requested. The protocol name
-matches the selected benchmark profile (`baseline` or `sustained`) for new
-results. Results without protocol metadata should be treated as protocol v1.
-Input token counts are marked as `unavailable` until mlx-Chronos can obtain
-them from a tokenizer or engine response without adding unreliable estimates.
+matches the selected benchmark profile (`baseline` or `sustained`). Input token
+counts are marked as `unavailable` until mlx-Chronos can obtain them from a
+tokenizer or engine response without adding unreliable estimates.
 
-**Phase timing and thermal metadata:** new results include
+**Phase timing and thermal metadata:** results include
 `meta.phase_timings_seconds` and `meta.thermal_monitor` so readers can see how
 long each phase took and whether thermal state changed during the run.
+
+**Integrity metadata:** results include a top-level `integrity` seal. The seal
+is a SHA-256 digest over canonical JSON with the `integrity` field removed.
+GitHub Actions verifies this before accepting public submissions. This is
+tamper-evident metadata, not a cryptographic proof that the benchmark was run on
+the claimed machine; a determined user can still forge a coherent result by
+modifying the open-source tool. The goal is to catch manual JSON edits and keep
+the public submission path honest.
 
 ---
 

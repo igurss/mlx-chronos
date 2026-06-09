@@ -31,15 +31,11 @@ jobs:
           TARGET_BRANCH: origin/${{ github.base_ref }}
         run: |
           python - <<'EOF'
-          import json
           import os
           import subprocess
           import sys
           from pathlib import Path
-          from pydantic import ValidationError
-
-          from mlx_chronos.schema import BenchmarkResult
-          from mlx_chronos.submit import SubmissionError, validate_publishable_result
+          from mlx_chronos.submit import SubmissionError, load_publishable_result
 
           def get_changed_files() -> list[str]:
               target_branch = os.environ.get("TARGET_BRANCH", "origin/main")
@@ -117,15 +113,9 @@ jobs:
 
           for path in json_files:
               try:
-                  data = json.loads(path.read_text())
-                  result = BenchmarkResult(**data)
-                  validate_publishable_result(result)
+                  load_publishable_result(path)
 
                   print(f"OK: {path.name}")
-              except ValidationError as e:
-                  print(f"FAIL: {path.name}")
-                  print(e)
-                  errors.append(path.name)
               except SubmissionError as e:
                   print(f"FAIL: {path.name} - {e}")
                   errors.append(path.name)

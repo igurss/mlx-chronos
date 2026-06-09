@@ -8,6 +8,13 @@
   `max_tokens=100`; standard sustained runs require 1 trial and
   `max_tokens=1000`; both require no requested `min_tokens` and usage-based
   completion-token counts.
+- Add a tamper-evident JSON integrity seal and require it for public
+  submissions through both `mlx-chronos submit` and GitHub Actions validation.
+- Require current result metadata for public submissions instead of accepting
+  missing protocol/timing/raw fields from early protocol rows.
+- Remove the early protocol v1 submitted results from the bundled leaderboard
+  index so the public UI only shows results generated with the current format.
+- Remove the leaderboard HTML fallback for the old flat-array index shape.
 
 ## [0.1.3] — 2026-06-08
 

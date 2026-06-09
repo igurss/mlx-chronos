@@ -32,7 +32,7 @@ def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
     assert "under results/submitted/:" in text
     assert "must not delete submitted " in text
     assert "result files:" in text
-    assert "validate_publishable_result(result)" in text
+    assert "load_publishable_result(path)" in text
 
 
 def test_leaderboard_index_carries_standard_token_metadata():
@@ -48,7 +48,7 @@ def test_leaderboard_index_carries_standard_token_metadata():
 
 
 def test_update_leaderboard_workflow_uses_publishable_result_policy():
-    assert "validate_publishable_result(result)" in workflow_text(
+    assert "load_publishable_result(path)" in workflow_text(
         "update_leaderboard.yml"
     )
 
@@ -59,3 +59,4 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
     assert "const STANDARD_THROUGHPUT_MAX_TOKENS = 100" not in html
     assert "standardThroughputMaxTokens" in html
     assert "standardSustainedMaxTokens" in html
+    assert "integrity-sealed" in html

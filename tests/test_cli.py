@@ -15,6 +15,7 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.examples import EXAMPLE_RESULT
+from mlx_chronos.integrity import seal_result
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.submit import SubmissionError, load_publishable_result, submit_result_file
@@ -462,7 +463,7 @@ def test_submitted_results_are_not_gitignored():
     assert "results/local/" in gitignore
 
 def write_result(path: Path, data: dict | None = None) -> Path:
-    path.write_text(json.dumps(data or EXAMPLE_RESULT), encoding="utf-8")
+    path.write_text(json.dumps(seal_result(data or EXAMPLE_RESULT)), encoding="utf-8")
     return path
 
 @patch("mlx_chronos.submit.httpx.post")
@@ -580,6 +581,16 @@ def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
 
     assert exc.value.code == 1
     assert "usage.completion_tokens" in capsys.readouterr().err
+
+
+def test_load_publishable_result_rejects_tampered_integrity(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["metrics"]["tokens_per_second"]["mean"] = 99.0
+    result_path = tmp_path / "result.json"
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+
+    with pytest.raises(SubmissionError, match="integrity"):
+        load_publishable_result(result_path)
 
 def resize_result_trials(result: dict, count: int) -> None:
     for key in (

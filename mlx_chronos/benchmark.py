@@ -23,6 +23,7 @@ from mlx_chronos.constants import (
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import get_engine
+from mlx_chronos.integrity import placeholder_integrity_seal, seal_result
 from mlx_chronos.measurements import (
     DECODE_TIMING_CLIENT_STREAM,
     DECODE_TIMING_UNAVAILABLE,
@@ -645,10 +646,12 @@ def run_benchmark(
                 name=benchmark_profile,
             ),
             "notes": notes,
-        }
+        },
+        "integrity": placeholder_integrity_seal(),
     }
     # Validate against schema before returning
-    return dump_benchmark_result(BenchmarkResult(**result))
+    validated = dump_benchmark_result(BenchmarkResult(**result))
+    return seal_result(validated)
 
 
 if __name__ == "__main__":

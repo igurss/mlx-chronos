@@ -5,12 +5,14 @@ import httpx
 from pydantic import ValidationError
 
 from mlx_chronos.constants import (
+    PHASE_TIMING_TOLERANCE_SECONDS,
     PUBLIC_LEADERBOARD_MIN_TRIALS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
     TOKEN_COUNT_SOURCE_USAGE,
 )
-from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
+from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
+from mlx_chronos.protocol import BASELINE_PROTOCOL_VERSION, DEFAULT_THROUGHPUT_MAX_TOKENS
 from mlx_chronos.schema import BenchmarkResult
 
 
@@ -46,18 +48,22 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
         )
 
     protocol = result.meta.benchmark_protocol
-    if protocol is None and profile == PUBLIC_PROFILE_SUSTAINED:
+    if protocol.version != BASELINE_PROTOCOL_VERSION:
         raise SubmissionError(
-            "sustained leaderboard submissions require benchmark protocol metadata"
+            "leaderboard submissions must use current benchmark protocol "
+            f"version {BASELINE_PROTOCOL_VERSION}; got {protocol.version!r}"
         )
 
-    throughput = protocol.throughput if protocol is not None else None
-    requested_max_tokens = (
-        throughput.requested_max_tokens if throughput is not None else None
-    )
-    requested_min_tokens = (
-        throughput.requested_min_tokens if throughput is not None else None
-    )
+    throughput = protocol.throughput
+    requested_max_tokens = throughput.requested_max_tokens
+    requested_min_tokens = throughput.requested_min_tokens
+
+    elapsed_sum = sum(result.trials.throughput_elapsed_seconds_raw)
+    phase_elapsed = result.meta.phase_timings_seconds.throughput
+    if phase_elapsed + PHASE_TIMING_TOLERANCE_SECONDS < elapsed_sum:
+        raise SubmissionError(
+            "throughput phase timing must cover raw throughput elapsed seconds"
+        )
 
     if requested_min_tokens is not None:
         raise SubmissionError(
@@ -108,6 +114,11 @@ def load_publishable_result(path: Path) -> tuple[bytes, BenchmarkResult]:
         raise SubmissionError("result file must be UTF-8 encoded JSON") from exc
     except json.JSONDecodeError as exc:
         raise SubmissionError(f"result file is not valid JSON: {exc}") from exc
+
+    try:
+        validate_integrity_seal(data)
+    except IntegrityError as exc:
+        raise SubmissionError(f"result integrity check failed: {exc}") from exc
 
     try:
         result = BenchmarkResult.model_validate(data)

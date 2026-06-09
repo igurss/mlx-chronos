@@ -628,8 +628,7 @@
     </main>
 
     <footer>
-      Results are community-submitted and validated through GitHub Actions. Standard runs use <span id="standard-token-label">the project default token bounds</span> with no requested min_tokens.
-      Protocol v1 and v2 throughput are different workloads; row details keep the original protocol metadata visible.
+      Results are community-submitted, integrity-sealed, and validated through GitHub Actions. Standard runs use <span id="standard-token-label">the project default token bounds</span> with no requested min_tokens.
     </footer>
   </div>
 
@@ -719,7 +718,13 @@
         key: "protocol",
         label: "Protocol",
         sortKey: "protocol_version",
-        value: row => `v${escapeHtml(row.protocol_version || "1")}`,
+        value: row => `v${escapeHtml(row.protocol_version)}`,
+      },
+      {
+        key: "integrity",
+        label: "Integrity",
+        sortKey: "integrity",
+        value: row => integrityCell(row),
       },
       {
         key: "profile",
@@ -815,7 +820,7 @@
         const response = await fetch(RESULTS_INDEX);
         if (!response.ok) throw new Error("results index unavailable");
         const payload = await response.json();
-        const rows = Array.isArray(payload) ? payload : (payload.results || []);
+        const rows = payload.results || [];
         standardThroughputMaxTokens = Number.isFinite(
           Number(payload?.metadata?.standard_throughput_max_tokens)
         )
@@ -856,7 +861,7 @@
         ? null
         : Number(row.throughput_max_tokens);
       const throughputMinTokens = row.throughput_min_tokens ?? null;
-      const benchmarkProfile = row.benchmark_profile || "baseline";
+      const benchmarkProfile = row.benchmark_profile;
       const inferredStandard = isStandardProfileTokenBound(
         benchmarkProfile,
         throughputMaxTokens,
@@ -866,6 +871,7 @@
         ...row,
         _id: `row-${index}`,
         benchmark_profile: benchmarkProfile,
+        integrity: row.integrity || "unknown",
         decode_tps: row.decode_tps ?? null,
         power_source: row.power_source ?? null,
         low_power_mode: row.low_power_mode ?? null,
@@ -1011,6 +1017,9 @@
       if (!row.is_standard_throughput_tokens) {
         badges.push(`<span class="badge badge-amber">custom tokens</span>`);
       }
+      if (row.integrity === "sealed") {
+        badges.push(`<span class="badge badge-green">sealed</span>`);
+      }
       if (String(row.thermal_state || "").startsWith("unavailable")) {
         badges.push(`<span class="badge badge-gray">thermal unknown</span>`);
       } else if (row.thermal_state && row.thermal_state !== "nominal") {
@@ -1032,7 +1041,8 @@
       const details = [
         ["Engine version", row.engine_version],
         ["Profile", profileLabel(row.benchmark_profile)],
-        ["Protocol", `v${row.protocol_version || "1"}`],
+        ["Protocol", `v${row.protocol_version}`],
+        ["Integrity", conditionValue(row.integrity)],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
         ["Max tokens", row.throughput_max_tokens == null ? "unknown" : row.throughput_max_tokens],
@@ -1208,6 +1218,13 @@
         ? ` <span class="badge badge-green">standard</span>`
         : "";
       return `${escapeHtml(row.throughput_max_tokens)}${minTokens}${badge}`;
+    }
+
+    function integrityCell(row) {
+      if (row.integrity === "sealed") {
+        return `<span class="badge badge-green">sealed</span>`;
+      }
+      return `<span class="badge badge-amber">${escapeHtml(row.integrity || "unknown")}</span>`;
     }
 
     function isStandardProfileTokenBound(profile, maxTokens, minTokens) {

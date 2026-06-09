@@ -31,12 +31,10 @@ jobs:
           import json
           import sys
           from pathlib import Path
-          from pydantic import ValidationError
 
           from mlx_chronos.constants import SUSTAINED_THROUGHPUT_MAX_TOKENS
           from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
-          from mlx_chronos.schema import BenchmarkResult
-          from mlx_chronos.submit import SubmissionError, validate_publishable_result
+          from mlx_chronos.submit import SubmissionError, load_publishable_result
 
           results_dir = Path("results/submitted")
           index = []
@@ -44,31 +42,23 @@ jobs:
 
           for path in sorted(results_dir.rglob("*.json")):
               try:
-                  data = json.loads(path.read_text())
-                  result = BenchmarkResult(**data)
-                  validate_publishable_result(result)
+                  _, result = load_publishable_result(path)
 
-                  data = result.model_dump(mode="json")
+                  data = result.model_dump(mode="json", by_alias=True)
                   hw = data["hardware"]
                   eng = data["engine"]
                   mod = data["model"]
                   met = data["metrics"]
                   tri = data["trials"]
                   meta = data["meta"]
+                  integrity = data["integrity"]
                   decode_stats = met.get("decode_tokens_per_second") or {}
-                  protocol = meta.get("benchmark_protocol") or {}
-                  throughput_protocol = protocol.get("throughput") or {}
-                  benchmark_profile = (
-                      meta.get("benchmark_profile")
-                      or protocol.get("name")
-                      or "baseline"
-                  )
-                  throughput_max_tokens = (
-                      throughput_protocol.get("requested_max_tokens")
-                      or DEFAULT_THROUGHPUT_MAX_TOKENS
-                  )
+                  protocol = meta["benchmark_protocol"]
+                  throughput_protocol = protocol["throughput"]
+                  benchmark_profile = meta["benchmark_profile"]
+                  throughput_max_tokens = throughput_protocol["requested_max_tokens"]
                   throughput_min_tokens = throughput_protocol.get("requested_min_tokens")
-                  completion_tokens_raw = tri.get("completion_tokens_raw")
+                  completion_tokens_raw = tri["completion_tokens_raw"]
                   completion_tokens_mean = (
                       round(sum(completion_tokens_raw) / len(completion_tokens_raw), 1)
                       if completion_tokens_raw
@@ -116,19 +106,19 @@ jobs:
                       "system_ram_peak_gb": met["system_ram_peak_gb"],
                       "system_ram_peak_percent": met["system_ram_peak_percent"],
                       "token_count_source": met["token_count_source"],
-                      "protocol_version": protocol.get("version", "1"),
-                      "thermal_state": hw.get("thermal_state", "unavailable_permission"),
+                      "protocol_version": protocol["version"],
+                      "integrity": "sealed",
+                      "integrity_schema": integrity["schema"],
+                      "thermal_state": hw["thermal_state"],
                       "power_source": hw.get("power_source"),
                       "low_power_mode": hw.get("low_power_mode"),
-                      "architecture": hw.get("architecture", "unknown"),
+                      "architecture": hw["architecture"],
                       "trials": tri["count"],
-                      "warmup_failures": meta.get("warmup_failures", 0),
+                      "warmup_failures": meta["warmup_failures"],
                       "chronos_version": meta["chronos_version"],
                       "date": meta["timestamp"][:10],
                       "notes": meta.get("notes"),
                   })
-              except ValidationError as e:
-                  errors.append(f"{path.name}: {e}")
               except SubmissionError as e:
                   errors.append(f"{path.name}: {e}")
               except Exception as e:

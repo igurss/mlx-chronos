@@ -90,6 +90,12 @@ class MarkdownReporter(BaseReporter):
         md += f"- **Profile:** {self._format_optional(meta.get('benchmark_profile'))}\n"
         md += f"- **Trials:** {trials.get('count', 'unknown')}\n"
         md += f"- **Token count source:** {self._format_optional(metrics.get('token_count_source'))}\n"
+        integrity = result.get("integrity") or {}
+        if integrity:
+            md += (
+                "- **Integrity:** "
+                f"{self._format_optional(integrity.get('schema'))}\n"
+            )
         protocol = meta.get("benchmark_protocol") or {}
         if protocol:
             md += (

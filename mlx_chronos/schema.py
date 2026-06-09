@@ -13,6 +13,7 @@ from mlx_chronos.constants import (
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
 )
+from mlx_chronos.integrity import INTEGRITY_DIGEST_HEX_LENGTH
 from mlx_chronos.measurements import (
     DECODE_TIMING_CLIENT_STREAM,
     DECODE_TIMING_UNAVAILABLE,
@@ -64,7 +65,36 @@ EngineName = Literal[
 
 
 class ChronosBaseModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+class IntegritySeal(ChronosBaseModel):
+    schema_name: Literal["mlx-chronos-integrity-v1"] = Field(
+        ...,
+        alias="schema",
+        description="Integrity seal schema version",
+    )
+    algorithm: Literal["sha256-canonical-json"] = Field(
+        ...,
+        description="Hashing algorithm used for the canonical result payload",
+    )
+    signed_payload: Literal["benchmark-result-without-integrity"] = Field(
+        ...,
+        description="Payload covered by the digest",
+    )
+    digest: str = Field(
+        ...,
+        min_length=INTEGRITY_DIGEST_HEX_LENGTH,
+        max_length=INTEGRITY_DIGEST_HEX_LENGTH,
+        description="SHA-256 digest of the canonical benchmark result payload",
+    )
+
+    @field_validator("digest")
+    @classmethod
+    def validate_digest(cls, value: str) -> str:
+        if any(character not in "0123456789abcdef" for character in value):
+            raise ValueError("digest must be lowercase hexadecimal")
+        return value
 
 
 class Hardware(ChronosBaseModel):
@@ -177,11 +207,11 @@ class Metrics(ChronosBaseModel):
             "including request overhead, prefill, and decode"
         ),
     )
-    request_tokens_per_second: Optional[TrialStats] = Field(
-        None,
+    request_tokens_per_second: TrialStats = Field(
+        ...,
         description=(
             "Client-observed total request throughput (tok/s), including request "
-            "overhead, prefill, and decode. New results mirror tokens_per_second here."
+            "overhead, prefill, and decode. Current results mirror tokens_per_second here."
         ),
     )
     decode_tokens_per_second: Optional[TrialStats] = Field(
@@ -278,16 +308,16 @@ class Trials(ChronosBaseModel):
     ttft_cold_raw: list[NonNegativeFloat] = Field(..., description="Raw cold TTFT values per trial")
     ttft_cached_raw: list[NonNegativeFloat] = Field(..., description="Raw cached TTFT values per trial")
     tokens_per_second_raw: list[NonNegativeFloat] = Field(..., description="Raw tok/s values per trial")
-    throughput_elapsed_seconds_raw: Optional[list[PositiveFloat]] = Field(
-        None,
+    throughput_elapsed_seconds_raw: list[PositiveFloat] = Field(
+        ...,
         description="Client-observed elapsed seconds for each throughput request",
     )
     decode_tokens_per_second_raw: Optional[list[NonNegativeFloat]] = Field(
         None,
         description="Raw decode-only tok/s values per throughput trial when available",
     )
-    completion_tokens_raw: Optional[list[NonNegativeInt]] = Field(
-        None,
+    completion_tokens_raw: list[NonNegativeInt] = Field(
+        ...,
         description=(
             "Generated completion token counts per throughput trial when available. "
             "For word_fallback results this is an estimated output word count."
@@ -453,11 +483,11 @@ class Meta(ChronosBaseModel):
     chronos_version: str = Field(..., min_length=1, description="mlx-chronos version used")
     timestamp: datetime = Field(..., description="Timestamp of the benchmark run")
     benchmark_profile: BenchmarkProfile = Field(
-        "baseline",
+        ...,
         description="Benchmark profile selected for the run",
     )
-    ram_sample_interval_seconds: Optional[float] = Field(
-        None,
+    ram_sample_interval_seconds: PositiveFloat = Field(
+        ...,
         gt=0,
         description="Seconds between diagnostic engine RSS and system RAM samples",
     )
@@ -469,39 +499,39 @@ class Meta(ChronosBaseModel):
         None,
         description="Requested cooldown delay before this run, if any",
     )
-    benchmark_protocol: Optional[BenchmarkProtocol] = Field(
-        None,
+    benchmark_protocol: BenchmarkProtocol = Field(
+        ...,
         description="Prompt and token-bound metadata for reproducing the benchmark",
     )
-    phase_timings_seconds: Optional[PhaseTimings] = Field(
-        None,
+    phase_timings_seconds: PhaseTimings = Field(
+        ...,
         description="Elapsed time for each benchmark phase and the total run",
     )
-    thermal_monitor: Optional[ThermalMonitor] = Field(
-        None,
+    thermal_monitor: ThermalMonitor = Field(
+        ...,
         description="Continuous thermal sampling summary for this run",
     )
     warmup_failures: NonNegativeInt = Field(
-        0,
+        ...,
         description="Number of unrecorded warmup calls that failed before measurement",
     )
     word_fallback_warning: bool = Field(
-        False,
+        ...,
         description="True when throughput token counts include word_fallback estimates",
     )
     engine_version_warning: bool = Field(
-        False,
+        ...,
         description="True when engine.version is unknown",
     )
     sustained_throttling_warning: bool = Field(
-        False,
+        ...,
         description=(
             "True when a sustained run observes a late throughput drop while "
             "thermal state changed or became non-nominal"
         ),
     )
     cached_ttft_warning: bool = Field(
-        False,
+        ...,
         description="True when cached TTFT is close to cold TTFT",
     )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
@@ -521,9 +551,12 @@ class BenchmarkResult(ChronosBaseModel):
     metrics: Metrics
     trials: Trials
     meta: Meta
+    integrity: IntegritySeal
 
     @model_validator(mode="after")
     def validate_summary_stats_match_raw_trials(self):
+        if self.meta.benchmark_protocol.name != self.meta.benchmark_profile:
+            raise ValueError("benchmark_protocol.name must match benchmark_profile")
         self._assert_stats_match_raw(
             self.metrics.ttft_cold,
             self.trials.ttft_cold_raw,
@@ -539,12 +572,11 @@ class BenchmarkResult(ChronosBaseModel):
             self.trials.tokens_per_second_raw,
             "metrics.tokens_per_second",
         )
-        if self.metrics.request_tokens_per_second is not None:
-            self._assert_stats_match_raw(
-                self.metrics.request_tokens_per_second,
-                self.trials.tokens_per_second_raw,
-                "metrics.request_tokens_per_second",
-            )
+        self._assert_stats_match_raw(
+            self.metrics.request_tokens_per_second,
+            self.trials.tokens_per_second_raw,
+            "metrics.request_tokens_per_second",
+        )
         if self.trials.decode_tokens_per_second_raw is None:
             if self.metrics.decode_tokens_per_second is not None:
                 raise ValueError(
@@ -560,19 +592,9 @@ class BenchmarkResult(ChronosBaseModel):
                 self.trials.decode_tokens_per_second_raw,
                 "metrics.decode_tokens_per_second",
             )
-        if (
-            self.trials.completion_tokens_raw is None
-            and self.trials.throughput_elapsed_seconds_raw is not None
-        ) or (
-            self.trials.completion_tokens_raw is not None
-            and self.trials.throughput_elapsed_seconds_raw is None
-        ):
-            raise ValueError(
-                "trials.completion_tokens_raw and "
-                "trials.throughput_elapsed_seconds_raw must be provided together"
-            )
-        if self.trials.completion_tokens_raw is not None:
-            self._assert_request_tps_matches_tokens_and_elapsed()
+        self._assert_request_tps_matches_tokens_and_elapsed()
+        self._assert_throughput_token_bounds()
+        self._assert_progress_samples_match_final_trials()
         return self
 
     def _assert_request_tps_matches_tokens_and_elapsed(self) -> None:
@@ -591,6 +613,48 @@ class BenchmarkResult(ChronosBaseModel):
                     "trials.tokens_per_second_raw must match completion token "
                     "counts divided by throughput elapsed seconds "
                     f"(trial {index}: expected {expected_tps}, got {tps})"
+                )
+
+    def _assert_throughput_token_bounds(self) -> None:
+        if self.metrics.token_count_source != "usage.completion_tokens":
+            return
+        throughput_protocol = self.meta.benchmark_protocol.throughput
+        max_tokens = throughput_protocol.requested_max_tokens
+        min_tokens = throughput_protocol.requested_min_tokens
+        for index, tokens in enumerate(self.trials.completion_tokens_raw, start=1):
+            if tokens > max_tokens:
+                raise ValueError(
+                    "trials.completion_tokens_raw must not exceed requested "
+                    f"throughput max_tokens (trial {index}: max {max_tokens}, got {tokens})"
+                )
+            if min_tokens is not None and tokens < min_tokens:
+                raise ValueError(
+                    "trials.completion_tokens_raw must respect requested "
+                    f"throughput min_tokens (trial {index}: min {min_tokens}, got {tokens})"
+                )
+
+    def _assert_progress_samples_match_final_trials(self) -> None:
+        if self.trials.throughput_progress_samples_raw is None:
+            return
+        tolerance = 0.001
+        for index, samples in enumerate(
+            self.trials.throughput_progress_samples_raw,
+            start=1,
+        ):
+            if not samples:
+                continue
+            final_sample = samples[-1]
+            expected_tokens = self.trials.completion_tokens_raw[index - 1]
+            expected_elapsed = self.trials.throughput_elapsed_seconds_raw[index - 1]
+            if final_sample.completion_tokens != expected_tokens:
+                raise ValueError(
+                    "final throughput progress sample must match completion "
+                    f"tokens for trial {index}"
+                )
+            if abs(final_sample.elapsed_seconds - expected_elapsed) > tolerance:
+                raise ValueError(
+                    "final throughput progress sample must match throughput "
+                    f"elapsed seconds for trial {index}"
                 )
 
     @staticmethod
@@ -630,7 +694,7 @@ class BenchmarkResult(ChronosBaseModel):
 
 
 def dump_benchmark_result(result: BenchmarkResult) -> dict:
-    data = result.model_dump(mode="json")
+    data = result.model_dump(mode="json", by_alias=True)
     metric_stats_fields = (
         "ttft_cold",
         "ttft_cached",

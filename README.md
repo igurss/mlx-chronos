@@ -89,11 +89,10 @@ pause before starting a new run. The default recent-run warning threshold is a
 
 **Post-warmup engine RSS diagnostic** — records the resident memory of the
 engine server process after warmup, through the recorded benchmark phases, when
-the process can be identified. This is retained for debugging and legacy JSON
-compatibility only: it is not total model memory and not a public comparison
-metric, because macOS/Metal unified-memory accounting can vary across
-environments. The default RAM sampling interval is 50ms and can be changed with
-`--ram-sample-interval`.
+the process can be identified. This is retained for debugging only: it is not
+total model memory and not a public comparison metric, because macOS/Metal
+unified-memory accounting can vary across environments. The default RAM
+sampling interval is 50ms and can be changed with `--ram-sample-interval`.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. p95 is added only when at least 20 trials are available. The default is
@@ -101,12 +100,10 @@ and max. p95 is added only when at least 20 trials are available. The default is
 Results are saved as structured JSON in `results/local/` by default. Maintainers
 publish reviewed JSON files into `results/submitted/` after accepting them for
 the community leaderboard.
-New result JSON also records the benchmark protocol metadata, including exact
-prompt text and requested token bounds, so runs can be reproduced without
-digging through source code.
-Current protocol v2 throughput uses streaming requests with usage metadata.
-Older protocol v1 results used non-streaming throughput, so compare those rows
-with that workload difference in mind.
+Result JSON records benchmark protocol metadata, including exact prompt text
+and requested token bounds, so runs can be reproduced without digging through
+source code. New public submissions must also carry a tamper-evident integrity
+seal that GitHub Actions verifies before a row can enter the leaderboard.
 
 ---
 
@@ -128,7 +125,7 @@ Low Power Mode, and engine version.
 `0.1.3` is a compatibility-preserving patch release over `0.1.2`. It tightens
 throughput timing, sustained-run warnings, release checks, and submission
 validation, clarifies System RAM Peak as the comparable memory metric, and
-keeps Engine RSS as a legacy diagnostic field in the raw result details.
+keeps Engine RSS as a diagnostic field in the raw result details.
 
 ---
 
@@ -189,8 +186,8 @@ Optional thermal-state support through macOS Foundation can be installed with
    ```
 4. Copy the checked JSON into `results/submitted/` with a clear filename
 5. Open a pull request with only that JSON file changed
-6. GitHub Actions labels the PR as `result-submission`, validates the schema,
-   and the maintainer reviews it before merge
+6. GitHub Actions labels the PR as `result-submission`, validates the schema and
+   integrity seal, and the maintainer reviews it before merge
 
 Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens` and keep one of the standard profiles: baseline with
@@ -199,6 +196,10 @@ at least 5 trials and `max_tokens=100`, or sustained with 1 trial and
 can still be saved with fallback token estimates or custom token bounds, but
 those results are not accepted for the public leaderboard and are marked in
 their JSON metadata where applicable.
+
+Do not edit submitted JSON by hand after the run. Public submissions include an
+`integrity` seal over the canonical result payload; changing any benchmark field
+invalidates that seal and the submission validator will reject the file.
 
 If opening a PR is inconvenient, `mlx-chronos submit --file ...` still sends the
 validated JSON to the maintainer inbox as a fallback. Maintainers can override
