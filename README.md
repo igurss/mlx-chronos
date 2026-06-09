@@ -193,12 +193,12 @@ Optional thermal-state support through macOS Foundation can be installed with
    and the maintainer reviews it before merge
 
 Leaderboard submissions must report throughput using the engine response's
-`usage.completion_tokens`, use the baseline profile, include at least 5 trials,
-and keep the standard throughput request (`max_tokens=100`, no requested
-`min_tokens`). Local custom runs can still be saved with fallback token
-estimates, custom token bounds, or the sustained profile, but those results are
-not accepted for the public leaderboard and are marked in their JSON metadata
-where applicable.
+`usage.completion_tokens` and keep one of the standard profiles: baseline with
+at least 5 trials and `max_tokens=100`, or sustained with 1 trial and
+`max_tokens=1000`. Neither profile may request `min_tokens`. Local custom runs
+can still be saved with fallback token estimates or custom token bounds, but
+those results are not accepted for the public leaderboard and are marked in
+their JSON metadata where applicable.
 
 If opening a PR is inconvenient, `mlx-chronos submit --file ...` still sends the
 validated JSON to the maintainer inbox as a fallback. Maintainers can override

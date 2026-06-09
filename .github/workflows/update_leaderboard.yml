@@ -33,6 +33,7 @@ jobs:
           from pathlib import Path
           from pydantic import ValidationError
 
+          from mlx_chronos.constants import SUSTAINED_THROUGHPUT_MAX_TOKENS
           from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
           from mlx_chronos.schema import BenchmarkResult
           from mlx_chronos.submit import SubmissionError, validate_publishable_result
@@ -57,6 +58,11 @@ jobs:
                   decode_stats = met.get("decode_tokens_per_second") or {}
                   protocol = meta.get("benchmark_protocol") or {}
                   throughput_protocol = protocol.get("throughput") or {}
+                  benchmark_profile = (
+                      meta.get("benchmark_profile")
+                      or protocol.get("name")
+                      or "baseline"
+                  )
                   throughput_max_tokens = (
                       throughput_protocol.get("requested_max_tokens")
                       or DEFAULT_THROUGHPUT_MAX_TOKENS
@@ -77,6 +83,7 @@ jobs:
                       "engine_version": eng["version"],
                       "model": mod["name"],
                       "quantization": mod["quantization"],
+                      "benchmark_profile": benchmark_profile,
                       "tps": met["tokens_per_second"]["mean"],
                       "tps_stddev": met["tokens_per_second"]["stddev"],
                       "decode_tps": decode_stats.get("mean"),
@@ -90,8 +97,16 @@ jobs:
                       "throughput_max_tokens": throughput_max_tokens,
                       "throughput_min_tokens": throughput_min_tokens,
                       "is_standard_throughput_tokens": (
-                          throughput_max_tokens == DEFAULT_THROUGHPUT_MAX_TOKENS
-                          and throughput_min_tokens is None
+                          (
+                              benchmark_profile == "baseline"
+                              and throughput_max_tokens == DEFAULT_THROUGHPUT_MAX_TOKENS
+                              and throughput_min_tokens is None
+                          )
+                          or (
+                              benchmark_profile == "sustained"
+                              and throughput_max_tokens == SUSTAINED_THROUGHPUT_MAX_TOKENS
+                              and throughput_min_tokens is None
+                          )
                       ),
                       "ttft_cold": met["ttft_cold"]["mean"],
                       "ttft_cached": met["ttft_cached"]["mean"],
@@ -129,6 +144,9 @@ jobs:
               "metadata": {
                   "standard_throughput_max_tokens": (
                       DEFAULT_THROUGHPUT_MAX_TOKENS
+                  ),
+                  "standard_sustained_max_tokens": (
+                      SUSTAINED_THROUGHPUT_MAX_TOKENS
                   ),
               },
               "results": index,

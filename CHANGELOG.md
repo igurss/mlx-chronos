@@ -4,9 +4,10 @@
 
 ### Reliability
 - Enforce public leaderboard comparability in `mlx-chronos submit` and
-  submission workflows: baseline profile, at least 5 trials, standard
-  `max_tokens=100`, no requested `min_tokens`, and usage-based completion-token
-  counts.
+  submission workflows: standard baseline runs require at least 5 trials and
+  `max_tokens=100`; standard sustained runs require 1 trial and
+  `max_tokens=1000`; both require no requested `min_tokens` and usage-based
+  completion-token counts.
 
 ## [0.1.3] — 2026-06-08
 

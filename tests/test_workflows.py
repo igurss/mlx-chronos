@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
+from mlx_chronos.constants import SUSTAINED_THROUGHPUT_MAX_TOKENS
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -40,6 +41,9 @@ def test_leaderboard_index_carries_standard_token_metadata():
     assert data["metadata"]["standard_throughput_max_tokens"] == (
         DEFAULT_THROUGHPUT_MAX_TOKENS
     )
+    assert data["metadata"]["standard_sustained_max_tokens"] == (
+        SUSTAINED_THROUGHPUT_MAX_TOKENS
+    )
     assert isinstance(data["results"], list)
 
 
@@ -54,3 +58,4 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
 
     assert "const STANDARD_THROUGHPUT_MAX_TOKENS = 100" not in html
     assert "standardThroughputMaxTokens" in html
+    assert "standardSustainedMaxTokens" in html

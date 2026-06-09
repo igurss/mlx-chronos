@@ -6,6 +6,8 @@ from pydantic import ValidationError
 
 from mlx_chronos.constants import (
     PUBLIC_LEADERBOARD_MIN_TRIALS,
+    SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_TRIALS,
     TOKEN_COUNT_SOURCE_USAGE,
 )
 from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
@@ -17,6 +19,8 @@ DEFAULT_SUBMIT_ENDPOINT = "https://usebasin.com/f/29157002c003"
 SUBMITTER_EMAIL_ENV = "MLX_CHRONOS_SUBMITTER_EMAIL"
 DEFAULT_SUBMITTER_EMAIL = "182094468+igurss@users.noreply.github.com"
 PUBLIC_TOKEN_COUNT_SOURCE = TOKEN_COUNT_SOURCE_USAGE
+PUBLIC_PROFILE_BASELINE = "baseline"
+PUBLIC_PROFILE_SUSTAINED = "sustained"
 
 
 class SubmissionError(RuntimeError):
@@ -32,34 +36,62 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
             f"{PUBLIC_TOKEN_COUNT_SOURCE!r}; got {token_source!r}"
         )
 
-    if result.meta.benchmark_profile != "baseline":
-        raise SubmissionError(
-            "leaderboard submissions must use the baseline profile; "
-            f"got {result.meta.benchmark_profile!r}"
-        )
+    profile = result.meta.benchmark_profile
 
-    if result.trials.count < PUBLIC_LEADERBOARD_MIN_TRIALS:
+    if profile not in {PUBLIC_PROFILE_BASELINE, PUBLIC_PROFILE_SUSTAINED}:
         raise SubmissionError(
-            "leaderboard submissions must include at least "
-            f"{PUBLIC_LEADERBOARD_MIN_TRIALS} trials; got {result.trials.count}"
+            "leaderboard submissions must use a standard profile "
+            f"({PUBLIC_PROFILE_BASELINE!r} or {PUBLIC_PROFILE_SUSTAINED!r}); "
+            f"got {profile!r}"
         )
 
     protocol = result.meta.benchmark_protocol
-    if protocol is None:
-        return
-
-    throughput = protocol.throughput
-    if throughput.requested_max_tokens != DEFAULT_THROUGHPUT_MAX_TOKENS:
+    if protocol is None and profile == PUBLIC_PROFILE_SUSTAINED:
         raise SubmissionError(
-            "leaderboard submissions must use standard throughput "
-            f"max_tokens={DEFAULT_THROUGHPUT_MAX_TOKENS}; got "
-            f"{throughput.requested_max_tokens}"
+            "sustained leaderboard submissions require benchmark protocol metadata"
         )
 
-    if throughput.requested_min_tokens is not None:
+    throughput = protocol.throughput if protocol is not None else None
+    requested_max_tokens = (
+        throughput.requested_max_tokens if throughput is not None else None
+    )
+    requested_min_tokens = (
+        throughput.requested_min_tokens if throughput is not None else None
+    )
+
+    if requested_min_tokens is not None:
         raise SubmissionError(
             "leaderboard submissions must not request throughput min_tokens; "
-            f"got {throughput.requested_min_tokens}"
+            f"got {requested_min_tokens}"
+        )
+
+    if profile == PUBLIC_PROFILE_BASELINE:
+        if result.trials.count < PUBLIC_LEADERBOARD_MIN_TRIALS:
+            raise SubmissionError(
+                "baseline leaderboard submissions must include at least "
+                f"{PUBLIC_LEADERBOARD_MIN_TRIALS} trials; got {result.trials.count}"
+            )
+        if (
+            requested_max_tokens is not None
+            and requested_max_tokens != DEFAULT_THROUGHPUT_MAX_TOKENS
+        ):
+            raise SubmissionError(
+                "baseline leaderboard submissions must use standard throughput "
+                f"max_tokens={DEFAULT_THROUGHPUT_MAX_TOKENS}; got "
+                f"{requested_max_tokens}"
+            )
+        return
+
+    if result.trials.count != SUSTAINED_TRIALS:
+        raise SubmissionError(
+            "sustained leaderboard submissions must use the standard sustained "
+            f"trial count ({SUSTAINED_TRIALS}); got {result.trials.count}"
+        )
+    if requested_max_tokens != SUSTAINED_THROUGHPUT_MAX_TOKENS:
+        raise SubmissionError(
+            "sustained leaderboard submissions must use standard sustained "
+            f"max_tokens={SUSTAINED_THROUGHPUT_MAX_TOKENS}; got "
+            f"{requested_max_tokens}"
         )
 
 

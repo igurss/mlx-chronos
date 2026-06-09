@@ -8,7 +8,11 @@ from unittest.mock import patch
 from argparse import Namespace
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import cmd_models, cmd_run, cmd_submit, cmd_validate, main
-from mlx_chronos.constants import MAX_TRIALS
+from mlx_chronos.constants import (
+    MAX_TRIALS,
+    SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_TRIALS,
+)
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.examples import EXAMPLE_RESULT
 from mlx_chronos.schema import BenchmarkResult
@@ -577,7 +581,7 @@ def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
     assert exc.value.code == 1
     assert "usage.completion_tokens" in capsys.readouterr().err
 
-def shrink_result_to_four_trials(result: dict) -> None:
+def resize_result_trials(result: dict, count: int) -> None:
     for key in (
         "ttft_cold_raw",
         "ttft_cached_raw",
@@ -586,8 +590,8 @@ def shrink_result_to_four_trials(result: dict) -> None:
         "decode_tokens_per_second_raw",
         "completion_tokens_raw",
     ):
-        result["trials"][key] = result["trials"][key][:4]
-    result["trials"]["count"] = 4
+        result["trials"][key] = result["trials"][key][:count]
+    result["trials"]["count"] = count
     result["metrics"]["ttft_cold"] = compute_stats(result["trials"]["ttft_cold_raw"])
     result["metrics"]["ttft_cached"] = compute_stats(result["trials"]["ttft_cached_raw"])
     throughput_stats = compute_stats(result["trials"]["tokens_per_second_raw"])
@@ -597,23 +601,48 @@ def shrink_result_to_four_trials(result: dict) -> None:
         result["trials"]["decode_tokens_per_second_raw"]
     )
 
+
+def shrink_result_to_four_trials(result: dict) -> None:
+    resize_result_trials(result, 4)
+
+
+def make_standard_sustained_result(result: dict) -> None:
+    resize_result_trials(result, SUSTAINED_TRIALS)
+    result["meta"]["benchmark_profile"] = "sustained"
+    result["meta"]["benchmark_protocol"]["name"] = "sustained"
+    result["meta"]["benchmark_protocol"]["throughput"][
+        "requested_max_tokens"
+    ] = SUSTAINED_THROUGHPUT_MAX_TOKENS
+
+
+def make_sustained_with_two_trials(result: dict) -> None:
+    resize_result_trials(result, 2)
+    result["meta"]["benchmark_profile"] = "sustained"
+    result["meta"]["benchmark_protocol"]["name"] = "sustained"
+    result["meta"]["benchmark_protocol"]["throughput"][
+        "requested_max_tokens"
+    ] = SUSTAINED_THROUGHPUT_MAX_TOKENS
+
+
+def make_sustained_with_baseline_max_tokens(result: dict) -> None:
+    resize_result_trials(result, SUSTAINED_TRIALS)
+    result["meta"]["benchmark_profile"] = "sustained"
+    result["meta"]["benchmark_protocol"]["name"] = "sustained"
+
+
 @pytest.mark.parametrize(
     ("mutate", "message"),
     [
         (
-            lambda result: result["meta"].__setitem__("benchmark_profile", "sustained"),
-            "baseline profile",
-        ),
-        (
             shrink_result_to_four_trials,
-            "at least 5 trials",
+            "baseline leaderboard submissions must include at least 5 trials",
         ),
         (
             lambda result: result["meta"]["benchmark_protocol"]["throughput"].__setitem__(
                 "requested_max_tokens",
                 1000,
             ),
-            "max_tokens=100",
+            "baseline leaderboard submissions must use standard throughput",
         ),
         (
             lambda result: result["meta"]["benchmark_protocol"]["throughput"].__setitem__(
@@ -621,6 +650,14 @@ def shrink_result_to_four_trials(result: dict) -> None:
                 80,
             ),
             "must not request throughput min_tokens",
+        ),
+        (
+            make_sustained_with_two_trials,
+            "sustained leaderboard submissions must use the standard sustained trial count",
+        ),
+        (
+            make_sustained_with_baseline_max_tokens,
+            "sustained leaderboard submissions must use standard sustained max_tokens=1000",
         ),
     ],
 )
@@ -635,6 +672,21 @@ def test_load_publishable_result_rejects_nonstandard_leaderboard_runs(
 
     with pytest.raises(SubmissionError, match=message):
         load_publishable_result(result_path)
+
+
+def test_load_publishable_result_accepts_standard_sustained_run(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    make_standard_sustained_result(result)
+    result_path = write_result(tmp_path / "result.json", result)
+
+    _, parsed = load_publishable_result(result_path)
+
+    assert parsed.meta.benchmark_profile == "sustained"
+    assert parsed.trials.count == SUSTAINED_TRIALS
+    assert (
+        parsed.meta.benchmark_protocol.throughput.requested_max_tokens
+        == SUSTAINED_THROUGHPUT_MAX_TOKENS
+    )
 
 @patch("mlx_chronos.submit.httpx.post")
 def test_cmd_submit_env_endpoint_overrides_default(mock_post, tmp_path, monkeypatch):

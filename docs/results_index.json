@@ -1,6 +1,7 @@
 {
   "metadata": {
-    "standard_throughput_max_tokens": 100
+    "standard_throughput_max_tokens": 100,
+    "standard_sustained_max_tokens": 1000
   },
   "results": [
     {
@@ -11,6 +12,7 @@
       "engine_version": "0.31.3",
       "model": "Qwen3.5-4B-OptiQ-4bit",
       "quantization": "4bit",
+      "benchmark_profile": "baseline",
       "tps": 49.554,
       "tps_stddev": 2.315,
       "decode_tps": null,
@@ -48,6 +50,7 @@
       "engine_version": "0.31.3",
       "model": "Qwen3.5-4B-OptiQ-4bit",
       "quantization": "4bit",
+      "benchmark_profile": "baseline",
       "tps": 21.087,
       "tps_stddev": 0.703,
       "decode_tps": null,
@@ -85,6 +88,7 @@
       "engine_version": "0.24.0",
       "model": "qwen3.5:4b-mlx",
       "quantization": "nvfp4",
+      "benchmark_profile": "baseline",
       "tps": 23.312,
       "tps_stddev": 0.046,
       "decode_tps": null,
@@ -122,6 +126,7 @@
       "engine_version": "unknown",
       "model": "Qwen3.5-4B-OptiQ-4bit",
       "quantization": "4bit",
+      "benchmark_profile": "baseline",
       "tps": 50.458,
       "tps_stddev": 0.431,
       "decode_tps": null,
@@ -159,6 +164,7 @@
       "engine_version": "unknown",
       "model": "Qwen3.5-4B-OptiQ-4bit",
       "quantization": "4bit",
+      "benchmark_profile": "baseline",
       "tps": 20.613,
       "tps_stddev": 0.034,
       "decode_tps": null,
@@ -196,6 +202,7 @@
       "engine_version": "rapid-mlx 0.6.69",
       "model": "Qwen3.5-4B-OptiQ-4bit",
       "quantization": "4bit",
+      "benchmark_profile": "baseline",
       "tps": 58.808,
       "tps_stddev": 2.153,
       "decode_tps": null,
@@ -233,6 +240,7 @@
       "engine_version": "rapid-mlx 0.6.66",
       "model": "Qwen3.5-4B-OptiQ-4bit",
       "quantization": "4bit",
+      "benchmark_profile": "baseline",
       "tps": 22.902,
       "tps_stddev": 0.945,
       "decode_tps": null,
