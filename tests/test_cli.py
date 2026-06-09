@@ -12,7 +12,8 @@ from mlx_chronos.constants import MAX_TRIALS
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.examples import EXAMPLE_RESULT
 from mlx_chronos.schema import BenchmarkResult
-from mlx_chronos.submit import submit_result_file
+from mlx_chronos.stats import compute_stats
+from mlx_chronos.submit import SubmissionError, load_publishable_result, submit_result_file
 
 def test_cmd_run_invalid_trials(capsys):
     args = Namespace(trials=0, ram_sample_interval=0.1, format="json")
@@ -575,6 +576,65 @@ def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
 
     assert exc.value.code == 1
     assert "usage.completion_tokens" in capsys.readouterr().err
+
+def shrink_result_to_four_trials(result: dict) -> None:
+    for key in (
+        "ttft_cold_raw",
+        "ttft_cached_raw",
+        "tokens_per_second_raw",
+        "throughput_elapsed_seconds_raw",
+        "decode_tokens_per_second_raw",
+        "completion_tokens_raw",
+    ):
+        result["trials"][key] = result["trials"][key][:4]
+    result["trials"]["count"] = 4
+    result["metrics"]["ttft_cold"] = compute_stats(result["trials"]["ttft_cold_raw"])
+    result["metrics"]["ttft_cached"] = compute_stats(result["trials"]["ttft_cached_raw"])
+    throughput_stats = compute_stats(result["trials"]["tokens_per_second_raw"])
+    result["metrics"]["tokens_per_second"] = throughput_stats
+    result["metrics"]["request_tokens_per_second"] = throughput_stats
+    result["metrics"]["decode_tokens_per_second"] = compute_stats(
+        result["trials"]["decode_tokens_per_second_raw"]
+    )
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda result: result["meta"].__setitem__("benchmark_profile", "sustained"),
+            "baseline profile",
+        ),
+        (
+            shrink_result_to_four_trials,
+            "at least 5 trials",
+        ),
+        (
+            lambda result: result["meta"]["benchmark_protocol"]["throughput"].__setitem__(
+                "requested_max_tokens",
+                1000,
+            ),
+            "max_tokens=100",
+        ),
+        (
+            lambda result: result["meta"]["benchmark_protocol"]["throughput"].__setitem__(
+                "requested_min_tokens",
+                80,
+            ),
+            "must not request throughput min_tokens",
+        ),
+    ],
+)
+def test_load_publishable_result_rejects_nonstandard_leaderboard_runs(
+    tmp_path,
+    mutate,
+    message,
+):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    mutate(result)
+    result_path = write_result(tmp_path / "result.json", result)
+
+    with pytest.raises(SubmissionError, match=message):
+        load_publishable_result(result_path)
 
 @patch("mlx_chronos.submit.httpx.post")
 def test_cmd_submit_env_endpoint_overrides_default(mock_post, tmp_path, monkeypatch):

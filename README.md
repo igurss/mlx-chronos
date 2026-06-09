@@ -58,7 +58,7 @@ completion-token usage is available. If an engine cannot provide usage in the
 streaming response, the run falls back to a local estimate and is marked as not
 leaderboard-comparable. Throughput uses a fixed
 requested `max_tokens` value by default, and optional output token bounds can be
-requested with `--max-tokens` / `--min-tokens`.
+requested with `--max-tokens` / `--min-tokens` for local experiments.
 
 **System RAM peak** — continuously samples total Mac RAM usage from before
 warmup through the recorded benchmark phases and reports the observed peak in
@@ -193,9 +193,12 @@ Optional thermal-state support through macOS Foundation can be installed with
    and the maintainer reviews it before merge
 
 Leaderboard submissions must report throughput using the engine response's
-`usage.completion_tokens`. Local runs can still be saved with a fallback token
-estimate, but those results are not accepted for the public leaderboard and are
-marked with `meta.word_fallback_warning`.
+`usage.completion_tokens`, use the baseline profile, include at least 5 trials,
+and keep the standard throughput request (`max_tokens=100`, no requested
+`min_tokens`). Local custom runs can still be saved with fallback token
+estimates, custom token bounds, or the sustained profile, but those results are
+not accepted for the public leaderboard and are marked in their JSON metadata
+where applicable.
 
 If opening a PR is inconvenient, `mlx-chronos submit --file ...` still sends the
 validated JSON to the maintainer inbox as a fallback. Maintainers can override

@@ -100,25 +100,28 @@ If token usage is not available, decode throughput is left unavailable rather
 than estimated from word counts.
 
 Throughput trials request a fixed `max_tokens` value, 100 by default. Users can
-override this with `--max-tokens`. An optional `--min-tokens` request can be
-sent to engines that support it; when `usage.completion_tokens` is available,
-mlx-Chronos checks that the recorded throughput output respects the requested
-range. If an engine ignores `min_tokens`, the run is not treated as comparable
-under that requested bound.
+override this with `--max-tokens` for local experiments. An optional
+`--min-tokens` request can be sent to engines that support it; when
+`usage.completion_tokens` is available, mlx-Chronos checks that the recorded
+throughput output respects the requested range. If an engine ignores
+`min_tokens`, the run is not treated as comparable under that requested bound.
 
 The default leaderboard workload is `max_tokens=100`. The result metadata
 records the requested throughput token bound in
 `meta.benchmark_protocol.throughput.requested_max_tokens`. The public
-leaderboard's compare view defaults to standard runs, while the raw-data view
-keeps token-bound metadata available as optional columns. Rows with
-`max_tokens=100` and no requested `min_tokens` are marked as the standard
-workload; other rows are treated as custom-token runs.
+leaderboard accepts only baseline-profile submissions with at least 5 trials,
+`max_tokens=100`, no requested `min_tokens`, and
+`usage.completion_tokens` token counts. The raw-data view keeps token-bound
+metadata available as optional columns for auditability and future schema
+changes.
 
 ### Sustained Throughput Profile
 `mlx-chronos run --profile sustained` keeps the same benchmark phases but
 changes the default run shape to one trial and a long throughput request:
 `max_tokens=1000`. Users can still override `--trials` or `--max-tokens`
 explicitly.
+The sustained profile is meant for local diagnostics and future sustained-run
+analysis; it is not accepted into the public leaderboard's standard result set.
 
 During sustained throughput, mlx-Chronos records
 `trials.throughput_progress_samples_raw`. Intermediate progress samples are
@@ -309,7 +312,8 @@ To reproduce a result:
 5. Run `mlx-chronos run` with default trial count (5), or use the same explicit
    trial count when comparing larger runs
 6. Check the JSON with `mlx-chronos submit --file results/local/your-result.json --dry-run`
-7. Submit only results whose throughput token source is `usage.completion_tokens`
+7. Submit only baseline results with at least 5 trials, standard throughput
+   token bounds, and token source `usage.completion_tokens`
 
 Results may vary slightly across runs due to thermal state, battery/Low Power
 Mode behavior, and system load. This is expected and reflected in the stddev

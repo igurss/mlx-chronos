@@ -4,6 +4,11 @@ from pathlib import Path
 import httpx
 from pydantic import ValidationError
 
+from mlx_chronos.constants import (
+    PUBLIC_LEADERBOARD_MIN_TRIALS,
+    TOKEN_COUNT_SOURCE_USAGE,
+)
+from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
 from mlx_chronos.schema import BenchmarkResult
 
 
@@ -11,11 +16,51 @@ SUBMIT_ENDPOINT_ENV = "MLX_CHRONOS_SUBMIT_ENDPOINT"
 DEFAULT_SUBMIT_ENDPOINT = "https://usebasin.com/f/29157002c003"
 SUBMITTER_EMAIL_ENV = "MLX_CHRONOS_SUBMITTER_EMAIL"
 DEFAULT_SUBMITTER_EMAIL = "182094468+igurss@users.noreply.github.com"
-PUBLIC_TOKEN_COUNT_SOURCE = "usage.completion_tokens"
+PUBLIC_TOKEN_COUNT_SOURCE = TOKEN_COUNT_SOURCE_USAGE
 
 
 class SubmissionError(RuntimeError):
     """Raised when a benchmark result cannot be submitted."""
+
+
+def validate_publishable_result(result: BenchmarkResult) -> None:
+    """Check public leaderboard comparability constraints."""
+    token_source = result.metrics.token_count_source
+    if token_source != PUBLIC_TOKEN_COUNT_SOURCE:
+        raise SubmissionError(
+            "leaderboard submissions must use "
+            f"{PUBLIC_TOKEN_COUNT_SOURCE!r}; got {token_source!r}"
+        )
+
+    if result.meta.benchmark_profile != "baseline":
+        raise SubmissionError(
+            "leaderboard submissions must use the baseline profile; "
+            f"got {result.meta.benchmark_profile!r}"
+        )
+
+    if result.trials.count < PUBLIC_LEADERBOARD_MIN_TRIALS:
+        raise SubmissionError(
+            "leaderboard submissions must include at least "
+            f"{PUBLIC_LEADERBOARD_MIN_TRIALS} trials; got {result.trials.count}"
+        )
+
+    protocol = result.meta.benchmark_protocol
+    if protocol is None:
+        return
+
+    throughput = protocol.throughput
+    if throughput.requested_max_tokens != DEFAULT_THROUGHPUT_MAX_TOKENS:
+        raise SubmissionError(
+            "leaderboard submissions must use standard throughput "
+            f"max_tokens={DEFAULT_THROUGHPUT_MAX_TOKENS}; got "
+            f"{throughput.requested_max_tokens}"
+        )
+
+    if throughput.requested_min_tokens is not None:
+        raise SubmissionError(
+            "leaderboard submissions must not request throughput min_tokens; "
+            f"got {throughput.requested_min_tokens}"
+        )
 
 
 def load_publishable_result(path: Path) -> tuple[bytes, BenchmarkResult]:
@@ -37,12 +82,7 @@ def load_publishable_result(path: Path) -> tuple[bytes, BenchmarkResult]:
     except ValidationError as exc:
         raise SubmissionError(f"result does not match the mlx-chronos schema: {exc}") from exc
 
-    token_source = result.metrics.token_count_source
-    if token_source != PUBLIC_TOKEN_COUNT_SOURCE:
-        raise SubmissionError(
-            "leaderboard submissions must use "
-            f"{PUBLIC_TOKEN_COUNT_SOURCE!r}; got {token_source!r}"
-        )
+    validate_publishable_result(result)
 
     return raw, result
 

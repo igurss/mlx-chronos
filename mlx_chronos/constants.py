@@ -1,6 +1,7 @@
 """Shared constants for benchmark result contracts."""
 
 MAX_TRIALS = 30
+PUBLIC_LEADERBOARD_MIN_TRIALS = 5
 P95_MIN_TRIALS = 20
 
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05

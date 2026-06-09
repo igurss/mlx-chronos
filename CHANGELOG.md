@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Reliability
+- Enforce public leaderboard comparability in `mlx-chronos submit` and
+  submission workflows: baseline profile, at least 5 trials, standard
+  `max_tokens=100`, no requested `min_tokens`, and usage-based completion-token
+  counts.
+
 ## [0.1.3] — 2026-06-08
 
 Patch release focused on benchmark measurement reliability, leaderboard

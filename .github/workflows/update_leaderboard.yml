@@ -33,9 +33,9 @@ jobs:
           from pathlib import Path
           from pydantic import ValidationError
 
-          from mlx_chronos.constants import TOKEN_COUNT_SOURCE_USAGE
           from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
           from mlx_chronos.schema import BenchmarkResult
+          from mlx_chronos.submit import SubmissionError, validate_publishable_result
 
           results_dir = Path("results/submitted")
           index = []
@@ -45,11 +45,7 @@ jobs:
               try:
                   data = json.loads(path.read_text())
                   result = BenchmarkResult(**data)
-                  if result.metrics.token_count_source != TOKEN_COUNT_SOURCE_USAGE:
-                      raise ValueError(
-                          "leaderboard results must use usage.completion_tokens "
-                          "for throughput token counts"
-                      )
+                  validate_publishable_result(result)
 
                   data = result.model_dump(mode="json")
                   hw = data["hardware"]
@@ -117,6 +113,8 @@ jobs:
                       "notes": meta.get("notes"),
                   })
               except ValidationError as e:
+                  errors.append(f"{path.name}: {e}")
+              except SubmissionError as e:
                   errors.append(f"{path.name}: {e}")
               except Exception as e:
                   errors.append(f"{path.name}: {e}")

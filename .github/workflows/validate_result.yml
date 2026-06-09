@@ -38,8 +38,8 @@ jobs:
           from pathlib import Path
           from pydantic import ValidationError
 
-          from mlx_chronos.constants import TOKEN_COUNT_SOURCE_USAGE
           from mlx_chronos.schema import BenchmarkResult
+          from mlx_chronos.submit import SubmissionError, validate_publishable_result
 
           def get_changed_files() -> list[str]:
               target_branch = os.environ.get("TARGET_BRANCH", "origin/main")
@@ -119,16 +119,15 @@ jobs:
               try:
                   data = json.loads(path.read_text())
                   result = BenchmarkResult(**data)
-                  if result.metrics.token_count_source != TOKEN_COUNT_SOURCE_USAGE:
-                      raise ValueError(
-                          "submitted leaderboard results must use "
-                          "usage.completion_tokens for throughput token counts"
-                      )
+                  validate_publishable_result(result)
 
                   print(f"OK: {path.name}")
               except ValidationError as e:
                   print(f"FAIL: {path.name}")
                   print(e)
+                  errors.append(path.name)
+              except SubmissionError as e:
+                  print(f"FAIL: {path.name} - {e}")
                   errors.append(path.name)
               except Exception as e:
                   print(f"FAIL: {path.name} - {e}")
