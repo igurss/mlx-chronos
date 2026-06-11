@@ -113,6 +113,15 @@ def test_leaderboard_has_persistent_theme_toggle():
     assert "document.documentElement.dataset.theme" in html
 
 
+def test_leaderboard_column_menu_is_not_clipped_by_panel():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert ".raw-panel {\n      overflow: visible;" in html
+    assert "--columns-popover-max-height" in html
+    assert "updateColumnPopoverLayout" in html
+    assert 'columnsMenu.dataset.openDirection = openUp ? "up" : "down";' in html
+
+
 def test_leaderboard_compare_recency_uses_full_timestamp():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 

@@ -649,7 +649,10 @@
       border-top: 1px solid var(--line-soft);
     }
 
-    .raw-panel { overflow: hidden; }
+    .raw-panel {
+      overflow: visible;
+      position: relative;
+    }
 
     .raw-toolbar {
       display: grid;
@@ -687,15 +690,21 @@
       position: absolute;
       right: 0;
       top: calc(100% + 8px);
-      z-index: 3;
-      width: min(360px, calc(100vw - 48px));
-      max-height: 380px;
+      z-index: 10;
+      width: min(420px, calc(100vw - 48px));
+      max-height: min(560px, var(--columns-popover-max-height, 420px));
       overflow: auto;
+      overscroll-behavior: contain;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow);
       padding: 8px;
+    }
+
+    .columns-menu[data-open-direction="up"] .columns-popover {
+      top: auto;
+      bottom: calc(100% + 8px);
     }
 
     .column-option {
@@ -1124,6 +1133,7 @@
     const rawHead = document.getElementById("raw-head");
     const rawBody = document.getElementById("raw-body");
     const rawEmpty = document.getElementById("raw-empty");
+    const columnsMenu = document.querySelector(".columns-menu");
     const columnsPopover = document.getElementById("columns-popover");
     const standardTokenLabel = document.getElementById("standard-token-label");
     const themeToggle = document.getElementById("theme-toggle");
@@ -1434,6 +1444,22 @@
       `).join("");
     }
 
+    function updateColumnPopoverLayout() {
+      const margin = 18;
+      const minHeight = 240;
+      const maxHeight = 560;
+      const rect = columnsMenu.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom - margin;
+      const spaceAbove = rect.top - margin;
+      const openUp = spaceAbove > spaceBelow && spaceBelow < minHeight;
+      const availableSpace = Math.max(minHeight, openUp ? spaceAbove : spaceBelow);
+      columnsMenu.dataset.openDirection = openUp ? "up" : "down";
+      columnsPopover.style.setProperty(
+        "--columns-popover-max-height",
+        `${Math.min(maxHeight, Math.floor(availableSpace))}px`,
+      );
+    }
+
     function visibleRawColumns() {
       return [
         ...BASE_RAW_COLUMNS,
@@ -1700,6 +1726,12 @@
         visibleOptionalColumns.delete(input.value);
       }
       renderRaw();
+    });
+    columnsMenu.addEventListener("toggle", () => {
+      if (columnsMenu.open) updateColumnPopoverLayout();
+    });
+    window.addEventListener("resize", () => {
+      if (columnsMenu.open) updateColumnPopoverLayout();
     });
     themeToggle.addEventListener("click", () => {
       setTheme(
