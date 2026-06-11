@@ -4,8 +4,6 @@ from unittest.mock import MagicMock, patch
 from mlx_chronos.benchmark import (
     BENCHMARK_PROFILE_BASELINE,
     BENCHMARK_PROFILE_SUSTAINED,
-    SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
-    SUSTAINED_THROUGHPUT_MAX_TOKENS,
     VALID_BENCHMARK_PROFILES,
     _detect_sustained_throttling,
     run_benchmark,
@@ -17,7 +15,12 @@ from mlx_chronos.protocol import (
     TTFT_MAX_TOKENS,
     WARMUP_MAX_TOKENS,
 )
-from mlx_chronos.constants import DEFAULT_THROUGHPUT_MAX_TOKENS, MAX_TRIALS
+from mlx_chronos.constants import (
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
+    MAX_TRIALS,
+    SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
+    SUSTAINED_THROUGHPUT_MAX_TOKENS,
+)
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.integrity import validate_integrity_seal
 from mlx_chronos.measurements import ThroughputMeasurement

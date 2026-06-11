@@ -365,16 +365,31 @@ class BaseEngine(ABC):
 
         try:
             process = psutil.Process(pid)
-            process_text = " ".join(
-                [
-                    process.name(),
-                    " ".join(process.cmdline()),
-                ]
-            ).lower()
+            process_tokens = [
+                os.path.basename(token).lower()
+                for token in [process.name(), *process.cmdline()]
+                if token
+            ]
         except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
             return False
 
-        return any(name.lower() in process_text for name in self.expected_process_names)
+        for name in self.expected_process_names:
+            normalized_names = {
+                name.lower(),
+                name.lower().replace("-", "_"),
+                name.lower().replace("_", "-"),
+            }
+            for token in process_tokens:
+                if any(
+                    token == expected or token.startswith(f"{expected}.")
+                    for expected in normalized_names
+                ):
+                    return True
+        return False
+
+    def _parse_version_output(self, output: str) -> str | None:
+        match = re.search(r"\bv?(\d+(?:\.\d+)+(?:[-+._a-zA-Z0-9]*)?)\b", output)
+        return match.group(1) if match else None
 
     def _stream_chunk_has_content(self, chunk: dict) -> bool:
         choices = chunk.get("choices")
@@ -795,10 +810,6 @@ class OMLXEngine(BaseEngine):
     def is_installed(self) -> bool:
         return shutil.which("omlx") is not None
 
-    def _parse_version_output(self, output: str) -> str | None:
-        match = re.search(r"\bv?(\d+(?:\.\d+)+(?:[-+._a-zA-Z0-9]*)?)\b", output)
-        return match.group(1) if match else None
-
     def get_version(self) -> str:
         version_commands = [
             ["omlx", "--version"],
@@ -892,7 +903,12 @@ class RapidMLXEngine(BaseEngine):
                 text=True,
                 timeout=3,
             )
-            return result.stdout.strip() or "unknown"
+            output = f"{result.stdout}\n{result.stderr}"
+            return (
+                self._parse_version_output(output)
+                or result.stdout.strip()
+                or "unknown"
+            )
         except Exception:
             return "unknown"
 

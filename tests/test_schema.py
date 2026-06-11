@@ -477,6 +477,19 @@ def test_timestamp_must_be_timezone_aware():
     with pytest.raises(ValidationError, match="timezone-aware"):
         BenchmarkResult(**invalid_data)
 
+
+def test_benchmark_protocol_name_must_be_known_profile():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["benchmark_protocol"] = {
+        **invalid_data["meta"]["benchmark_protocol"],
+        "name": "custom",
+    }
+
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**invalid_data)
+
+
 def test_quantization_is_normalized():
     data = EXAMPLE_RESULT.copy()
     data["model"] = data["model"].copy()

@@ -99,3 +99,19 @@ def test_markdown_reporter_handles_missing_ram_fields(tmp_path):
         "(system RAM):** unknown GB"
     ) in content
     assert "**Peak system RAM:** unknown GB (unknown%)" in content
+
+
+def test_markdown_reporter_handles_partial_phase_timings(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["meta"]["phase_timings_seconds"] = {
+        "warmup": 10.512,
+        "throughput": 27.104,
+    }
+
+    output_path = MarkdownReporter().save(result, tmp_path)
+
+    content = output_path.read_text()
+    assert "**Total runtime:**" not in content
+    assert "## Phase Timings" in content
+    assert "**Warmup:** 10.512 s" in content
+    assert "**Throughput:** 27.104 s" in content

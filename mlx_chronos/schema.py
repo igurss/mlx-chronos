@@ -416,7 +416,7 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
 
 
 class BenchmarkProtocol(ChronosBaseModel):
-    name: str = Field(..., min_length=1, description="Benchmark protocol name")
+    name: BenchmarkProfile = Field(..., description="Benchmark protocol name")
     version: str = Field(..., min_length=1, description="Benchmark protocol version")
     warmup: BenchmarkProtocolPhase
     ttft_cold: BenchmarkProtocolPhase

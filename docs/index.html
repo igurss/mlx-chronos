@@ -378,10 +378,7 @@
       border-top: 1px solid var(--line-soft);
     }
 
-    .raw-panel {
-      display: none;
-      overflow: hidden;
-    }
+    .raw-panel { overflow: hidden; }
 
     .raw-toolbar {
       display: grid;
@@ -1012,7 +1009,10 @@
     }
 
     function compareRunRecency(a, b) {
-      const dateDiff = Date.parse(b.date || 0) - Date.parse(a.date || 0);
+      const dateDiff = (
+        Date.parse(b.timestamp || b.date || 0) -
+        Date.parse(a.timestamp || a.date || 0)
+      );
       if (dateDiff !== 0) return dateDiff;
       return numericSortValue(b.tps) - numericSortValue(a.tps);
     }
@@ -1314,7 +1314,6 @@
       document.getElementById("tab-raw").setAttribute("aria-selected", "false");
       document.getElementById("compare-view").hidden = false;
       document.getElementById("raw-view").hidden = true;
-      document.getElementById("raw-view").style.display = "none";
     });
 
     document.getElementById("tab-raw").addEventListener("click", () => {
@@ -1324,7 +1323,6 @@
       document.getElementById("tab-compare").setAttribute("aria-selected", "false");
       document.getElementById("compare-view").hidden = true;
       document.getElementById("raw-view").hidden = false;
-      document.getElementById("raw-view").style.display = "block";
       renderRaw();
     });
 

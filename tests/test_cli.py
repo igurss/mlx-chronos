@@ -602,6 +602,10 @@ def resize_result_trials(result: dict, count: int) -> None:
         "completion_tokens_raw",
     ):
         result["trials"][key] = result["trials"][key][:count]
+    if result["trials"].get("throughput_progress_samples_raw") is not None:
+        result["trials"]["throughput_progress_samples_raw"] = result["trials"][
+            "throughput_progress_samples_raw"
+        ][:count]
     result["trials"]["count"] = count
     result["metrics"]["ttft_cold"] = compute_stats(result["trials"]["ttft_cold_raw"])
     result["metrics"]["ttft_cached"] = compute_stats(result["trials"]["ttft_cached_raw"])

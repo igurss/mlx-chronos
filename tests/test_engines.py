@@ -141,6 +141,15 @@ def test_process_match_accepts_engine_specific_python_module(monkeypatch):
     assert RapidMLXEngine()._process_matches_engine(12345) is True
 
 
+def test_process_match_rejects_engine_name_only_in_path(monkeypatch):
+    fake_process = MagicMock()
+    fake_process.name.return_value = "python"
+    fake_process.cmdline.return_value = ["python", "/tmp/omlx-benchmarks/test.py"]
+    monkeypatch.setattr("mlx_chronos.engines.psutil.Process", lambda _pid: fake_process)
+
+    assert OMLXEngine()._process_matches_engine(12345) is False
+
+
 @patch("httpx.stream")
 def test_measure_tokens_per_second(mock_stream):
     mock_stream.return_value = stream_response(
@@ -573,10 +582,21 @@ def test_ollama_get_version(mock_run):
 def test_rapid_mlx_get_version_uses_timeout(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "rapid-mlx 0.6.68\n"
+    mock_result.stderr = ""
     mock_run.return_value = mock_result
 
-    assert RapidMLXEngine().get_version() == "rapid-mlx 0.6.68"
+    assert RapidMLXEngine().get_version() == "0.6.68"
     assert mock_run.call_args.kwargs["timeout"] == 3
+
+
+@patch("subprocess.run")
+def test_rapid_mlx_get_version_accepts_plain_version(mock_run):
+    mock_result = MagicMock()
+    mock_result.stdout = "0.6.68\n"
+    mock_result.stderr = ""
+    mock_run.return_value = mock_result
+
+    assert RapidMLXEngine().get_version() == "0.6.68"
 
 @patch("httpx.get")
 def test_rapid_mlx_resolve_model_id(mock_get):

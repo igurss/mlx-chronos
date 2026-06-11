@@ -61,6 +61,8 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
 
     elapsed_sum = sum(result.trials.throughput_elapsed_seconds_raw)
     phase_elapsed = result.meta.phase_timings_seconds.throughput
+    # The phase timer should cover all per-trial throughput elapsed durations;
+    # tolerate tiny differences from independent rounding.
     if phase_elapsed + PHASE_TIMING_TOLERANCE_SECONDS < elapsed_sum:
         raise SubmissionError(
             "throughput phase timing must cover raw throughput elapsed seconds"

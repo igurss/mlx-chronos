@@ -118,6 +118,7 @@ jobs:
                       "trials": tri["count"],
                       "warmup_failures": meta["warmup_failures"],
                       "chronos_version": meta["chronos_version"],
+                      "timestamp": meta["timestamp"],
                       "date": meta["timestamp"][:10],
                       "notes": meta.get("notes"),
                   })

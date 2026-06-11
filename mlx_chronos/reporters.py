@@ -139,7 +139,7 @@ class MarkdownReporter(BaseReporter):
         if meta.get("warmup_failures"):
             md += f"- **Warmup failures:** {meta['warmup_failures']}\n"
         phase_timings = meta.get("phase_timings_seconds")
-        if phase_timings:
+        if phase_timings and phase_timings.get("total_runtime") is not None:
             md += f"- **Total runtime:** {phase_timings['total_runtime']} s\n"
         md += "\n"
         
@@ -228,7 +228,7 @@ class MarkdownReporter(BaseReporter):
                 md += f"- **Non-nominal phases:** {', '.join(phases)}\n"
 
         if phase_timings:
-            md += "\n## Phase Timings\n"
+            timing_lines = []
             for label, key in [
                 ("Warmup", "warmup"),
                 ("Cold TTFT", "ttft_cold"),
@@ -236,7 +236,12 @@ class MarkdownReporter(BaseReporter):
                 ("Cached TTFT", "ttft_cached"),
                 ("Throughput", "throughput"),
             ]:
-                md += f"- **{label}:** {phase_timings[key]} s\n"
+                value = phase_timings.get(key)
+                if value is not None:
+                    timing_lines.append(f"- **{label}:** {value} s\n")
+            if timing_lines:
+                md += "\n## Phase Timings\n"
+                md += "".join(timing_lines)
 
         raw_sections = [
             (label, values)

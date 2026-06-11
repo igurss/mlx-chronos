@@ -1,6 +1,7 @@
 """Example benchmark payloads used by smoke checks, docs, and tests."""
 
 # Keep EXAMPLE_RESULT aligned with the current schema and release metadata.
+# If this payload changes, regenerate the integrity digest with seal_result().
 
 EXAMPLE_RESULT = {
     "hardware": {
