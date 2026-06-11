@@ -103,6 +103,15 @@ def test_leaderboard_tabs_use_hidden_without_inline_display_toggle():
     assert 'document.getElementById("raw-view").style.display' not in html
 
 
+def test_leaderboard_has_persistent_theme_toggle():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="theme-toggle"' in html
+    assert 'role="switch"' in html
+    assert "mlxChronosTheme" in html
+    assert "document.documentElement.dataset.theme" in html
+
+
 def test_leaderboard_compare_recency_uses_full_timestamp():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 
