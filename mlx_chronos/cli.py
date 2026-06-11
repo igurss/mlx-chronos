@@ -17,6 +17,7 @@ from mlx_chronos.benchmark import (
 )
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
+from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
@@ -140,6 +141,7 @@ def cmd_run(args):
     profile, trials, max_tokens = _resolve_profile_defaults(args)
     cooldown_seconds = getattr(args, "cooldown_seconds", 0.0)
     min_tokens = getattr(args, "min_tokens", None)
+    connection_mode = getattr(args, "connection_mode", CONNECTION_MODE_PERSISTENT)
     if trials < 1:
         print("Error: --trials must be at least 1.", file=sys.stderr)
         raise SystemExit(2)
@@ -205,6 +207,7 @@ def cmd_run(args):
             elapsed_since_last_benchmark_seconds=elapsed_since_last,
             cooldown_seconds=cooldown_seconds,
             progress_sample_interval_tokens=progress_sample_interval_tokens,
+            connection_mode=connection_mode,
         )
     except (RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -503,6 +506,16 @@ def main():
         help=(
             "Wait until at least this many seconds have elapsed since the latest "
             "prior JSON result in the output directory (default: 0)."
+        ),
+    )
+    run_parser.add_argument(
+        "--connection-mode",
+        choices=sorted(VALID_CONNECTION_MODES),
+        default=CONNECTION_MODE_PERSISTENT,
+        help=(
+            "HTTP connection behavior for benchmark requests. persistent reuses "
+            "one client across the run; per_request opens requests independently "
+            "(default: persistent)."
         ),
     )
     run_parser.add_argument(

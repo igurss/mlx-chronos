@@ -131,6 +131,16 @@ def test_run_benchmark_rejects_trials_above_max():
             trials=MAX_TRIALS + 1,
         )
 
+
+def test_run_benchmark_rejects_invalid_connection_mode():
+    with pytest.raises(ValueError, match="connection_mode"):
+        run_benchmark(
+            engine_name="omlx",
+            model_name="Qwen3.5-4B-OptiQ-4bit",
+            model_quantization="4bit",
+            connection_mode="pooled",
+        )
+
 def test_ram_tracker():
     with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls:
         mock_process = MagicMock()
@@ -299,11 +309,13 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     ]
     protocol = result["meta"]["benchmark_protocol"]
     assert protocol["name"] == "baseline"
-    assert protocol["version"] == "2"
+    assert protocol["version"] == "3"
     assert protocol["warmup"]["request_mode"] == "streaming"
     assert protocol["warmup"]["stream_usage_requested"] is True
+    assert protocol["warmup"]["connection_mode"] == "persistent"
     assert protocol["ttft_cold"]["request_mode"] == "streaming"
     assert protocol["ttft_cold"]["stream_usage_requested"] is False
+    assert protocol["ttft_cold"]["connection_mode"] == "persistent"
     assert protocol["ttft_cold"]["prompts"] == COLD_PROMPTS[:2]
     assert protocol["ttft_cold"]["requested_max_tokens"] == TTFT_MAX_TOKENS
     assert protocol["throughput"]["prompts"] == [THROUGHPUT_PROMPT]
@@ -311,6 +323,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert protocol["throughput"]["requested_min_tokens"] is None
     assert protocol["throughput"]["request_mode"] == "streaming"
     assert protocol["throughput"]["stream_usage_requested"] is True
+    assert protocol["throughput"]["connection_mode"] == "persistent"
     assert protocol["throughput"]["input_token_count_source"] == "unavailable"
 
     ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]
@@ -352,6 +365,15 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         assert call.kwargs["model"] == "org/test-model"
     for call in mock_engine.measure_throughput.call_args_list:
         assert call.kwargs["model"] == "org/test-model"
+    clients = [
+        call.kwargs["client"]
+        for call in (
+            mock_engine.measure_tokens_per_second.call_args_list
+            + mock_engine.measure_ttft.call_args_list
+            + mock_engine.measure_throughput.call_args_list
+        )
+    ]
+    assert len({id(client) for client in clients}) == 1
 
 
 def test_detect_sustained_throttling_requires_thermal_signal():

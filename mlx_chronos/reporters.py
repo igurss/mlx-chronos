@@ -111,6 +111,10 @@ class MarkdownReporter(BaseReporter):
                     f"max {throughput_protocol.get('requested_max_tokens', 'unknown')}, "
                     f"min {min_tokens_label}\n"
                 )
+                md += (
+                    "- **HTTP connection mode:** "
+                    f"{self._format_optional(throughput_protocol.get('connection_mode'))}\n"
+                )
         if meta.get("word_fallback_warning"):
             md += (
                 "- **Warning:** throughput token counts used word_fallback; "

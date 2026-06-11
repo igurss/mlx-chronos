@@ -177,6 +177,28 @@ def test_measure_throughput_returns_structured_measurement(mock_stream):
     assert measurement.decode_tokens_per_second == 149.0
     assert measurement.decode_timing_source == "client_stream"
 
+
+@patch("httpx.stream")
+def test_measure_throughput_uses_provided_http_client(mock_stream):
+    client = MagicMock()
+    client.stream.return_value = stream_response(
+        completion_stream(content="hello", completion_tokens=100)
+    )
+    engine = OMLXEngine()
+
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
+        measurement = engine.measure_throughput(
+            "test prompt",
+            "default",
+            100,
+            client=client,
+        )
+
+    assert measurement.request_tokens_per_second == pytest.approx(66.67, abs=0.001)
+    client.stream.assert_called_once()
+    mock_stream.assert_not_called()
+
+
 @patch("httpx.stream")
 def test_measure_throughput_uses_client_stream_decode_timing(mock_stream):
     mock_stream.return_value = stream_response(
@@ -670,6 +692,21 @@ def test_measure_ttft_success(mock_stream):
     with patch("time.perf_counter", side_effect=[0.0, 0.5]):
         ttft = engine.measure_ttft("hello")
         assert ttft == 0.5
+
+
+@patch("httpx.stream")
+def test_measure_ttft_uses_provided_http_client(mock_stream):
+    client = MagicMock()
+    client.stream.side_effect = mock_stream_response
+    engine = OMLXEngine()
+
+    with patch("time.perf_counter", side_effect=[0.0, 0.5]):
+        ttft = engine.measure_ttft("hello", client=client)
+
+    assert ttft == 0.5
+    client.stream.assert_called_once()
+    mock_stream.assert_not_called()
+
 
 @contextmanager
 def mock_stream_response_empty(*args, **kwargs):

@@ -718,6 +718,12 @@
         value: row => `v${escapeHtml(row.protocol_version)}`,
       },
       {
+        key: "connection_mode",
+        label: "HTTP mode",
+        sortKey: "connection_mode",
+        value: row => connectionModeLabel(row.connection_mode),
+      },
+      {
         key: "integrity",
         label: "Integrity",
         sortKey: "integrity",
@@ -1062,6 +1068,7 @@
         ["Engine version", row.engine_version],
         ["Profile", profileLabel(row.benchmark_profile)],
         ["Protocol", `v${row.protocol_version}`],
+        ["HTTP mode", connectionModeLabel(row.connection_mode)],
         ["Integrity", conditionValue(row.integrity)],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
@@ -1276,6 +1283,12 @@
     function profileLabel(profile) {
       if (profile === "sustained") return "Sustained";
       return "Baseline";
+    }
+
+    function connectionModeLabel(mode) {
+      if (mode === "persistent") return "persistent";
+      if (mode === "per_request") return "per request";
+      return conditionValue(mode);
     }
 
     function fmtTokenCounts(values) {

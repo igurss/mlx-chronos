@@ -46,10 +46,11 @@ def test_valid_schema():
     ]
     assert result.meta.benchmark_protocol is not None
     assert result.meta.benchmark_protocol.name == "baseline"
-    assert result.meta.benchmark_protocol.version == "2"
+    assert result.meta.benchmark_protocol.version == "3"
     assert result.meta.benchmark_protocol.throughput.requested_max_tokens == 100
     assert result.meta.benchmark_protocol.throughput.request_mode == "streaming"
     assert result.meta.benchmark_protocol.throughput.stream_usage_requested is True
+    assert result.meta.benchmark_protocol.throughput.connection_mode == "persistent"
     assert (
         result.meta.benchmark_protocol.throughput.input_token_count_source
         == "unavailable"
@@ -322,6 +323,22 @@ def test_benchmark_protocol_rejects_stream_usage_for_non_streaming_phase():
 
     with pytest.raises(ValidationError, match="stream_usage_requested"):
         BenchmarkResult(**invalid_data)
+
+
+def test_benchmark_protocol_rejects_invalid_connection_mode():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["benchmark_protocol"] = {
+        **invalid_data["meta"]["benchmark_protocol"],
+        "throughput": {
+            **invalid_data["meta"]["benchmark_protocol"]["throughput"],
+            "connection_mode": "pooled",
+        },
+    }
+
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**invalid_data)
+
 
 def test_throughput_progress_samples_validate_tps():
     data = EXAMPLE_RESULT.copy()

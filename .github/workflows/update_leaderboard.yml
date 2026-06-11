@@ -60,6 +60,7 @@ jobs:
                   benchmark_profile = meta["benchmark_profile"]
                   throughput_max_tokens = throughput_protocol["requested_max_tokens"]
                   throughput_min_tokens = throughput_protocol.get("requested_min_tokens")
+                  connection_mode = throughput_protocol.get("connection_mode")
                   completion_tokens_raw = tri["completion_tokens_raw"]
                   completion_tokens_mean = (
                       round(sum(completion_tokens_raw) / len(completion_tokens_raw), 1)
@@ -88,6 +89,7 @@ jobs:
                       "completion_tokens_mean": completion_tokens_mean,
                       "throughput_max_tokens": throughput_max_tokens,
                       "throughput_min_tokens": throughput_min_tokens,
+                      "connection_mode": connection_mode,
                       "is_standard_throughput_tokens": (
                           (
                               benchmark_profile == "baseline"

@@ -84,7 +84,7 @@ EXAMPLE_RESULT = {
         "cached_ttft_warning": False,
         "benchmark_protocol": {
             "name": "baseline",
-            "version": "2",
+            "version": "3",
             "warmup": {
                 "prompts": [
                     "Explain in detail how the attention mechanism works in transformer "
@@ -94,6 +94,7 @@ EXAMPLE_RESULT = {
                 "requested_min_tokens": None,
                 "request_mode": "streaming",
                 "stream_usage_requested": True,
+                "connection_mode": "persistent",
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
@@ -109,6 +110,7 @@ EXAMPLE_RESULT = {
                 "requested_min_tokens": None,
                 "request_mode": "streaming",
                 "stream_usage_requested": False,
+                "connection_mode": "persistent",
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
@@ -120,6 +122,7 @@ EXAMPLE_RESULT = {
                 "requested_min_tokens": None,
                 "request_mode": "streaming",
                 "stream_usage_requested": False,
+                "connection_mode": "persistent",
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
@@ -132,6 +135,7 @@ EXAMPLE_RESULT = {
                 "requested_min_tokens": None,
                 "request_mode": "streaming",
                 "stream_usage_requested": True,
+                "connection_mode": "persistent",
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
@@ -142,6 +146,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "9595ae61d5b88ca65ff52a031725334497c92a026ac903b031df0191a86680c1",
+        "digest": "50aa405140111b5f19602a46c16341a1893f33a34424c2c3fcfa7a63ef2dca4f",
     },
 }

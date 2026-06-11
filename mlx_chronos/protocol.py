@@ -1,7 +1,13 @@
 from mlx_chronos.constants import DEFAULT_THROUGHPUT_MAX_TOKENS
 
 
-BASELINE_PROTOCOL_VERSION = "2"
+BASELINE_PROTOCOL_VERSION = "3"
+CONNECTION_MODE_PER_REQUEST = "per_request"
+CONNECTION_MODE_PERSISTENT = "persistent"
+VALID_CONNECTION_MODES = {
+    CONNECTION_MODE_PER_REQUEST,
+    CONNECTION_MODE_PERSISTENT,
+}
 TTFT_MAX_TOKENS = 1
 WARMUP_MAX_TOKENS = 30
 
@@ -55,6 +61,7 @@ def _protocol_phase(
     requested_min_tokens: int | None = None,
     request_mode: str | None = None,
     stream_usage_requested: bool | None = None,
+    connection_mode: str | None = None,
 ) -> dict:
     return {
         "prompts": prompts,
@@ -62,6 +69,7 @@ def _protocol_phase(
         "requested_min_tokens": requested_min_tokens,
         "request_mode": request_mode,
         "stream_usage_requested": stream_usage_requested,
+        "connection_mode": connection_mode,
         "input_tokens": None,
         "input_token_count_source": "unavailable",
     }
@@ -72,7 +80,12 @@ def build_benchmark_protocol(
     throughput_max_tokens: int,
     throughput_min_tokens: int | None,
     name: str = "baseline",
+    connection_mode: str = CONNECTION_MODE_PERSISTENT,
 ) -> dict:
+    if connection_mode not in VALID_CONNECTION_MODES:
+        raise ValueError(
+            f"connection_mode must be one of {sorted(VALID_CONNECTION_MODES)}"
+        )
     return {
         "name": name,
         "version": BASELINE_PROTOCOL_VERSION,
@@ -81,18 +94,21 @@ def build_benchmark_protocol(
             WARMUP_MAX_TOKENS,
             request_mode="streaming",
             stream_usage_requested=True,
+            connection_mode=connection_mode,
         ),
         "ttft_cold": _protocol_phase(
             COLD_PROMPTS[:trials],
             TTFT_MAX_TOKENS,
             request_mode="streaming",
             stream_usage_requested=False,
+            connection_mode=connection_mode,
         ),
         "ttft_cached": _protocol_phase(
             [CACHED_TTFT_PROMPT],
             TTFT_MAX_TOKENS,
             request_mode="streaming",
             stream_usage_requested=False,
+            connection_mode=connection_mode,
         ),
         "throughput": _protocol_phase(
             [THROUGHPUT_PROMPT],
@@ -100,5 +116,6 @@ def build_benchmark_protocol(
             throughput_min_tokens,
             request_mode="streaming",
             stream_usage_requested=True,
+            connection_mode=connection_mode,
         ),
     }

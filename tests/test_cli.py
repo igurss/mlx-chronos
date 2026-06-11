@@ -343,6 +343,7 @@ def test_cmd_run_format_all_calls_reporters():
             elapsed_since_last_benchmark_seconds=None,
             cooldown_seconds=0.0,
             progress_sample_interval_tokens=None,
+            connection_mode="persistent",
         )
         mock_json.assert_called_once()
         mock_md.assert_called_once()

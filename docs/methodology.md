@@ -41,6 +41,13 @@ HTTP request and stops when the OpenAI-compatible stream yields the first valid
 content/reasoning/text delta. It is not a direct measurement of an engine's
 internal prefill or decode boundary.
 
+Starting with protocol v3, benchmark runs use one persistent `httpx.Client`
+across warmup, TTFT, and throughput requests by default. This lets the HTTP
+client reuse keep-alive connections when the engine supports them, reducing
+per-request TCP/HTTP setup noise and better matching repeated agent-loop usage.
+Older protocol v2 runs used independent per-request calls, so their TTFT may
+include more connection setup overhead.
+
 Different engines and proxy layers may buffer streamed output differently. Some
 emit role-only chunks before text, some batch small deltas, and some may delay
 the first visible token until their HTTP layer flushes. For that reason,
@@ -277,11 +284,12 @@ little information.
 **Protocol metadata:** results include `meta.benchmark_protocol`, which
 records the baseline protocol version, exact prompt text for warmup, cold TTFT,
 cached TTFT, and throughput, plus the requested min/max token bounds per phase.
-Protocol phase metadata also records whether the phase used streaming requests
-and whether `stream_options.include_usage` was requested. The protocol name
-matches the selected benchmark profile (`baseline` or `sustained`). Input token
-counts are marked as `unavailable` until mlx-Chronos can obtain them from a
-tokenizer or engine response without adding unreliable estimates.
+Protocol phase metadata also records whether the phase used streaming requests,
+whether `stream_options.include_usage` was requested, and whether HTTP
+connections were `persistent` or `per_request`. The protocol name matches the
+selected benchmark profile (`baseline` or `sustained`). Input token counts are
+marked as `unavailable` until mlx-Chronos can obtain them from a tokenizer or
+engine response without adding unreliable estimates.
 
 **Phase timing and thermal metadata:** results include
 `meta.phase_timings_seconds` and `meta.thermal_monitor` so readers can see how

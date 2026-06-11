@@ -59,6 +59,7 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
 
     assert "load_publishable_result(path)" in text
     assert '"timestamp": meta["timestamp"]' in text
+    assert '"connection_mode": connection_mode' in text
 
 
 def test_result_workflows_use_single_error_handler():
@@ -95,6 +96,13 @@ def test_leaderboard_compare_recency_uses_full_timestamp():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 
     assert "b.timestamp || b.date" in html
+
+
+def test_leaderboard_exposes_http_connection_mode():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert "connectionModeLabel" in html
+    assert "HTTP mode" in html
 
 
 def test_leaderboard_clean_badge_is_not_blocked_by_integrity_badge():

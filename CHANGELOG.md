@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Reliability
+- Bump the baseline benchmark protocol to v3 and reuse one persistent HTTP
+  client across benchmark requests by default; protocol phase metadata now
+  records the HTTP connection mode.
 - Enforce public leaderboard comparability in `mlx-chronos submit` and
   submission workflows: standard baseline runs require at least 5 trials and
   `max_tokens=100`; standard sustained runs require 1 trial and

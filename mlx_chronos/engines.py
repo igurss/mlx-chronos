@@ -74,6 +74,10 @@ class BaseEngine(ABC):
     def root_url(self) -> str:
         return f"http://localhost:{self.port}"
 
+    def http_client(self) -> httpx.Client:
+        """Return a reusable HTTP client for benchmark request loops."""
+        return httpx.Client()
+
     def endpoint(self) -> str:
         """API endpoint used by the engine."""
         return "/chat/completions"
@@ -544,7 +548,23 @@ class BaseEngine(ABC):
             max_tokens * THROUGHPUT_TIMEOUT_SECONDS_PER_TOKEN,
         )
 
-    def measure_ttft(self, prompt: str, model: str = "default") -> float:
+    def _stream_request(
+        self,
+        client: httpx.Client | None,
+        method: str,
+        url: str,
+        **kwargs,
+    ):
+        if client is not None:
+            return client.stream(method, url, **kwargs)
+        return httpx.stream(method, url, **kwargs)
+
+    def measure_ttft(
+        self,
+        prompt: str,
+        model: str = "default",
+        client: httpx.Client | None = None,
+    ) -> float:
         """Measure Time To First Token."""
         payload = self.build_payload(prompt=prompt, model=model, max_tokens=1, stream=True)
         start = time.perf_counter()
@@ -553,7 +573,13 @@ class BaseEngine(ABC):
         request_model = str(payload["model"])
         action = "measure TTFT"
         try:
-            with httpx.stream("POST", url, json=payload, timeout=30.0) as r:
+            with self._stream_request(
+                client,
+                "POST",
+                url,
+                json=payload,
+                timeout=30.0,
+            ) as r:
                 r.raise_for_status()
 
                 for line in r.iter_lines():
@@ -603,6 +629,7 @@ class BaseEngine(ABC):
         max_tokens: int = 100,
         min_tokens: int | None = None,
         progress_sample_interval_tokens: int | None = None,
+        client: httpx.Client | None = None,
     ) -> ThroughputMeasurement:
         """Measure request throughput and client-observed decode throughput."""
         if (
@@ -635,7 +662,8 @@ class BaseEngine(ABC):
             next_progress_sample_at = progress_sample_interval_tokens
 
             try:
-                with httpx.stream(
+                with self._stream_request(
+                    client,
                     "POST",
                     url,
                     json=payload,
@@ -782,6 +810,7 @@ class BaseEngine(ABC):
         model: str = "default",
         max_tokens: int = 100,
         min_tokens: int | None = None,
+        client: httpx.Client | None = None,
     ) -> float:
         """Measure client-observed total request throughput."""
         return self.measure_throughput(
@@ -789,6 +818,7 @@ class BaseEngine(ABC):
             model=model,
             max_tokens=max_tokens,
             min_tokens=min_tokens,
+            client=client,
         ).request_tokens_per_second
 
     @abstractmethod

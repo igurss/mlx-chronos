@@ -48,6 +48,10 @@ RequestMode = Literal[
     "streaming",
     "non_streaming",
 ]
+ConnectionMode = Literal[
+    "per_request",
+    "persistent",
+]
 ThermalMonitorSource = Literal[
     "foundation",
     "unavailable",
@@ -377,6 +381,10 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
     stream_usage_requested: Optional[bool] = Field(
         None,
         description="Whether stream_options.include_usage was requested for this phase",
+    )
+    connection_mode: ConnectionMode = Field(
+        ...,
+        description="Whether HTTP connections were reused across benchmark requests",
     )
     input_tokens: Optional[list[NonNegativeInt]] = Field(
         None,

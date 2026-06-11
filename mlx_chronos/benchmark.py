@@ -1,5 +1,5 @@
 import json
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 import logging
@@ -33,7 +33,9 @@ from mlx_chronos.measurements import (
 from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
+    CONNECTION_MODE_PERSISTENT,
     THROUGHPUT_PROMPT,
+    VALID_CONNECTION_MODES,
     WARMUP_MAX_TOKENS,
     build_benchmark_protocol,
 )
@@ -227,6 +229,7 @@ def run_benchmark(
     elapsed_since_last_benchmark_seconds: float | None = None,
     cooldown_seconds: float | None = None,
     progress_sample_interval_tokens: int | None = None,
+    connection_mode: str = CONNECTION_MODE_PERSISTENT,
 ) -> dict:
     """
     Run a full benchmark session for a given engine and model.
@@ -267,6 +270,10 @@ def run_benchmark(
         and progress_sample_interval_tokens < 1
     ):
         raise ValueError("progress_sample_interval_tokens must be at least 1")
+    if connection_mode not in VALID_CONNECTION_MODES:
+        raise ValueError(
+            f"connection_mode must be one of {sorted(VALID_CONNECTION_MODES)}"
+        )
     model_name = model_name.strip()
     if not model_name:
         raise ValueError("model name must not be empty")
@@ -284,6 +291,7 @@ def run_benchmark(
     logger.info(f"  Model  : {model_name} ({model_quantization})")
     logger.info(f"  Profile: {benchmark_profile}")
     logger.info(f"  Trials : {trials}")
+    logger.info(f"  HTTP   : {connection_mode}")
     token_range = (
         f"{throughput_min_tokens}-{throughput_max_tokens}"
         if throughput_min_tokens is not None
@@ -367,118 +375,141 @@ def run_benchmark(
 
     try:
         # Warmup phase — 2 calls with the throughput prompt, not recorded
-        thermal_tracker.set_phase("warmup")
-        with _record_phase_duration(phase_timings, "warmup"):
-            logger.info("Warming up (2 calls, not recorded)...")
-            for _ in range(warmup_calls):
+        with (
+            engine.http_client()
+            if connection_mode == CONNECTION_MODE_PERSISTENT
+            else nullcontext(None)
+        ) as http_client:
+            if connection_mode == CONNECTION_MODE_PERSISTENT:
+                logger.info("Using one persistent HTTP client for benchmark requests.")
+            thermal_tracker.set_phase("warmup")
+            with _record_phase_duration(phase_timings, "warmup"):
+                logger.info("Warming up (2 calls, not recorded)...")
+                for _ in range(warmup_calls):
+                    try:
+                        engine.measure_tokens_per_second(
+                            THROUGHPUT_PROMPT,
+                            model=model_name,
+                            max_tokens=WARMUP_MAX_TOKENS,
+                            client=http_client,
+                        )
+                    except Exception as exc:
+                        warmup_failures += 1
+                        logger.warning(f"  Warmup call failed and was skipped: {exc}")
+                if warmup_failures == warmup_calls:
+                    raise RuntimeError(
+                        "all warmup calls failed; benchmark did not reach a warmed state"
+                    )
+                logger.info("  Done.\n")
+
+            logger.info(
+                f"Starting diagnostic post-warmup engine RSS sampling "
+                f"({ram_sample_interval:.3f}s interval)..."
+            )
+            # Diagnostic engine RSS intentionally starts after warmup, while system
+            # RAM started before warmup to include model loading and cache pressure.
+            target_pid = engine.get_server_pid()
+            if target_pid is None:
+                logger.warning(
+                    "Engine PID not found; diagnostic engine RSS will use system "
+                    "RAM peak fallback."
+                )
+            else:
                 try:
-                    engine.measure_tokens_per_second(
-                        THROUGHPUT_PROMPT,
+                    ram_tracker = RAMTracker(
+                        interval=ram_sample_interval,
+                        target_pid=target_pid,
+                    )
+                    ram_tracker.start()
+                    ram_is_process_rss = True
+                except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+                    logger.warning(
+                        "Could not start diagnostic engine RSS sampling for PID "
+                        f"{target_pid}: {exc}"
+                    )
+                    ram_tracker = None
+
+            thermal_tracker.set_phase("ttft_cold")
+            with _record_phase_duration(phase_timings, "ttft_cold"):
+                logger.info("Running cold TTFT trials...")
+                for i in range(trials):
+                    cold_prompt = COLD_PROMPTS[i]
+                    logger.info(f"  Cold trial {i + 1}/{trials} (unique prompt)...")
+                    ttft_cold_trials.append(
+                        engine.measure_ttft(
+                            cold_prompt,
+                            model=model_name,
+                            client=http_client,
+                        )
+                    )
+
+            thermal_tracker.set_phase("cache_priming")
+            with _record_phase_duration(phase_timings, "cache_priming"):
+                logger.info("\nPriming cache for cached TTFT measurement...")
+                try:
+                    engine.measure_ttft(
+                        CACHED_TTFT_PROMPT,
                         model=model_name,
-                        max_tokens=WARMUP_MAX_TOKENS,
+                        client=http_client,
                     )
                 except Exception as exc:
-                    warmup_failures += 1
-                    logger.warning(f"  Warmup call failed and was skipped: {exc}")
-            if warmup_failures == warmup_calls:
-                raise RuntimeError(
-                    "all warmup calls failed; benchmark did not reach a warmed state"
-                )
-            logger.info("  Done.\n")
-
-        logger.info(
-            f"Starting diagnostic post-warmup engine RSS sampling "
-            f"({ram_sample_interval:.3f}s interval)..."
-        )
-        # Diagnostic engine RSS intentionally starts after warmup, while system
-        # RAM started before warmup to include model loading and cache pressure.
-        target_pid = engine.get_server_pid()
-        if target_pid is None:
-            logger.warning(
-                "Engine PID not found; diagnostic engine RSS will use system "
-                "RAM peak fallback."
-            )
-        else:
-            try:
-                ram_tracker = RAMTracker(
-                    interval=ram_sample_interval,
-                    target_pid=target_pid,
-                )
-                ram_tracker.start()
-                ram_is_process_rss = True
-            except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
-                logger.warning(
-                    "Could not start diagnostic engine RSS sampling for PID "
-                    f"{target_pid}: {exc}"
-                )
-                ram_tracker = None
-
-        thermal_tracker.set_phase("ttft_cold")
-        with _record_phase_duration(phase_timings, "ttft_cold"):
-            logger.info("Running cold TTFT trials...")
-            for i in range(trials):
-                cold_prompt = COLD_PROMPTS[i]
-                logger.info(f"  Cold trial {i + 1}/{trials} (unique prompt)...")
-                ttft_cold_trials.append(
-                    engine.measure_ttft(cold_prompt, model=model_name)
-                )
-
-        thermal_tracker.set_phase("cache_priming")
-        with _record_phase_duration(phase_timings, "cache_priming"):
-            logger.info("\nPriming cache for cached TTFT measurement...")
-            try:
-                engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
-            except Exception as exc:
-                logger.warning(f"  Cache priming failed; cached TTFT may be cold: {exc}")
-            logger.info("  Done.\n")
-
-        thermal_tracker.set_phase("ttft_cached")
-        with _record_phase_duration(phase_timings, "ttft_cached"):
-            logger.info("Running cached TTFT trials...")
-            for i in range(trials):
-                logger.info(f"  Cached trial {i + 1}/{trials} (fixed prompt)...")
-                ttft_cached_trials.append(
-                    engine.measure_ttft(CACHED_TTFT_PROMPT, model=model_name)
-                )
-
-        thermal_tracker.set_phase("throughput")
-        with _record_phase_duration(phase_timings, "throughput"):
-            logger.info("\nRunning throughput trials...")
-            for i in range(trials):
-                logger.info(f"  Throughput trial {i + 1}/{trials}...")
-                measurement = _validate_throughput_measurement(
-                    engine.measure_throughput(
-                        THROUGHPUT_PROMPT,
-                        model=model_name,
-                        max_tokens=throughput_max_tokens,
-                        min_tokens=throughput_min_tokens,
-                        progress_sample_interval_tokens=(
-                            progress_sample_interval_tokens
-                        ),
+                    logger.warning(
+                        f"  Cache priming failed; cached TTFT may be cold: {exc}"
                     )
-                )
-                tps_trials.append(measurement.request_tokens_per_second)
-                throughput_elapsed_trials.append(measurement.elapsed_seconds)
-                token_source = _normalize_token_count_source(
-                    measurement.token_count_source
-                )
-                completion_tokens = _normalize_completion_tokens(
-                    measurement.completion_tokens
-                )
-                _validate_token_bounds(
-                    completion_tokens,
-                    token_source,
-                    throughput_min_tokens,
-                    throughput_max_tokens,
-                )
-                token_count_sources.append(token_source)
-                completion_tokens_trials.append(completion_tokens)
-                throughput_progress_samples_trials.append(
-                    list(measurement.progress_samples)
-                )
-                if measurement.decode_tokens_per_second is not None:
-                    decode_tps_trials.append(measurement.decode_tokens_per_second)
-                    decode_timing_sources.append(measurement.decode_timing_source)
+                logger.info("  Done.\n")
+
+            thermal_tracker.set_phase("ttft_cached")
+            with _record_phase_duration(phase_timings, "ttft_cached"):
+                logger.info("Running cached TTFT trials...")
+                for i in range(trials):
+                    logger.info(f"  Cached trial {i + 1}/{trials} (fixed prompt)...")
+                    ttft_cached_trials.append(
+                        engine.measure_ttft(
+                            CACHED_TTFT_PROMPT,
+                            model=model_name,
+                            client=http_client,
+                        )
+                    )
+
+            thermal_tracker.set_phase("throughput")
+            with _record_phase_duration(phase_timings, "throughput"):
+                logger.info("\nRunning throughput trials...")
+                for i in range(trials):
+                    logger.info(f"  Throughput trial {i + 1}/{trials}...")
+                    measurement = _validate_throughput_measurement(
+                        engine.measure_throughput(
+                            THROUGHPUT_PROMPT,
+                            model=model_name,
+                            max_tokens=throughput_max_tokens,
+                            min_tokens=throughput_min_tokens,
+                            progress_sample_interval_tokens=(
+                                progress_sample_interval_tokens
+                            ),
+                            client=http_client,
+                        )
+                    )
+                    tps_trials.append(measurement.request_tokens_per_second)
+                    throughput_elapsed_trials.append(measurement.elapsed_seconds)
+                    token_source = _normalize_token_count_source(
+                        measurement.token_count_source
+                    )
+                    completion_tokens = _normalize_completion_tokens(
+                        measurement.completion_tokens
+                    )
+                    _validate_token_bounds(
+                        completion_tokens,
+                        token_source,
+                        throughput_min_tokens,
+                        throughput_max_tokens,
+                    )
+                    token_count_sources.append(token_source)
+                    completion_tokens_trials.append(completion_tokens)
+                    throughput_progress_samples_trials.append(
+                        list(measurement.progress_samples)
+                    )
+                    if measurement.decode_tokens_per_second is not None:
+                        decode_tps_trials.append(measurement.decode_tokens_per_second)
+                        decode_timing_sources.append(measurement.decode_timing_source)
     finally:
         thermal_tracker.set_phase("teardown")
         if ram_tracker:
@@ -644,6 +675,7 @@ def run_benchmark(
                 throughput_max_tokens,
                 throughput_min_tokens,
                 name=benchmark_profile,
+                connection_mode=connection_mode,
             ),
             "notes": notes,
         },
