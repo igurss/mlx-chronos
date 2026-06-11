@@ -668,6 +668,17 @@ def make_sustained_with_baseline_max_tokens(result: dict) -> None:
             "must not request throughput min_tokens",
         ),
         (
+            lambda result: result["hardware"].__setitem__("low_power_mode", "on"),
+            "Low Power Mode disabled",
+        ),
+        (
+            lambda result: result["hardware"].__setitem__(
+                "low_power_mode",
+                "unavailable_pmset_not_found",
+            ),
+            "Low Power Mode disabled",
+        ),
+        (
             make_sustained_with_two_trials,
             "sustained leaderboard submissions must use the standard sustained trial count",
         ),

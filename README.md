@@ -114,9 +114,9 @@ Compare submitted results by model, chip, and RAM:
 **[→ igurss.github.io/mlx-chronos](https://igurss.github.io/mlx-chronos)**
 
 The default view compares engines for a selected model and Mac configuration.
-The raw-data view keeps the full table available with optional columns for
-secondary metadata such as protocol, token bounds, thermal state, power source,
-Low Power Mode, and engine version.
+The raw-data view keeps the submitted rows available with optional columns for
+useful comparison metadata such as profile, token bounds, thermal state, exact
+machine model, engine version, trial count, and quantization.
 
 ---
 
@@ -192,10 +192,10 @@ Optional thermal-state support through macOS Foundation can be installed with
 Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens` and keep one of the standard profiles: baseline with
 at least 5 trials and `max_tokens=100`, or sustained with 1 trial and
-`max_tokens=1000`. Neither profile may request `min_tokens`. Local custom runs
-can still be saved with fallback token estimates or custom token bounds, but
-those results are not accepted for the public leaderboard and are marked in
-their JSON metadata where applicable.
+`max_tokens=1000`. Neither profile may request `min_tokens`, and macOS Low
+Power Mode must be disabled. Local custom runs can still be saved with fallback
+token estimates or custom token bounds, but those results are not accepted for
+the public leaderboard and are marked in their JSON metadata where applicable.
 
 Do not edit submitted JSON by hand after the run. Public submissions include an
 `integrity` seal over the canonical result payload; changing any benchmark field

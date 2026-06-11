@@ -599,7 +599,7 @@
 
       <section class="panel raw-panel" id="raw-view" aria-labelledby="tab-raw" hidden>
         <div class="raw-toolbar">
-          <input id="raw-search" type="search" placeholder="Search model, engine, chip, notes" aria-label="Search raw benchmark rows" />
+          <input id="raw-search" type="search" placeholder="Search model, engine, chip, machine" aria-label="Search raw benchmark rows" />
           <label class="check-control">
             <input id="raw-standard" type="checkbox" />
             Standard runs
@@ -625,7 +625,7 @@
     </main>
 
     <footer>
-      Results are community-submitted, integrity-sealed, and validated through GitHub Actions. Standard runs use <span id="standard-token-label">the project default token bounds</span> with no requested min_tokens.
+      Results are community-submitted, integrity-sealed, and validated through GitHub Actions. Public runs use <span id="standard-token-label">the project default token bounds</span>, no requested min_tokens, and macOS Low Power Mode disabled.
     </footer>
   </div>
 
@@ -712,22 +712,11 @@
         value: row => `${fmt(row.ttft_cached, 3)} s`,
       },
       {
-        key: "protocol",
-        label: "Protocol",
-        sortKey: "protocol_version",
-        value: row => `v${escapeHtml(row.protocol_version)}`,
-      },
-      {
-        key: "connection_mode",
-        label: "HTTP mode",
-        sortKey: "connection_mode",
-        value: row => connectionModeLabel(row.connection_mode),
-      },
-      {
-        key: "integrity",
-        label: "Integrity",
-        sortKey: "integrity",
-        value: row => integrityCell(row),
+        key: "tps_stddev",
+        label: "tok/s stddev",
+        sortKey: "tps_stddev",
+        numeric: true,
+        value: row => fmt(row.tps_stddev, 3),
       },
       {
         key: "profile",
@@ -743,29 +732,16 @@
         value: row => maxTokensCell(row),
       },
       {
-        key: "output_tokens",
-        label: "Output tokens",
-        sortKey: "completion_tokens_mean",
-        numeric: true,
-        value: row => fmtTokenCounts(row.completion_tokens_raw),
-      },
-      {
         key: "thermal",
         label: "Thermal",
         sortKey: "thermal_state",
         value: row => conditionValue(row.thermal_state),
       },
       {
-        key: "power",
-        label: "Power",
-        sortKey: "power_source",
-        value: row => conditionValue(row.power_source),
-      },
-      {
-        key: "low_power_mode",
-        label: "Low Power",
-        sortKey: "low_power_mode",
-        value: row => conditionValue(row.low_power_mode),
+        key: "machine",
+        label: "Machine",
+        sortKey: "machine_model",
+        value: row => escapeHtml(row.machine_model),
       },
       {
         key: "engine_version",
@@ -785,12 +761,6 @@
         label: "Quant",
         sortKey: "quantization",
         value: row => escapeHtml(row.quantization),
-      },
-      {
-        key: "notes",
-        label: "Notes",
-        sortKey: "notes",
-        value: row => escapeHtml(row.notes || "-"),
       },
     ];
 
@@ -871,6 +841,7 @@
         : Number(row.throughput_max_tokens);
       const throughputMinTokens = row.throughput_min_tokens ?? null;
       const benchmarkProfile = row.benchmark_profile;
+      const timestamp = row.timestamp || "";
       const inferredStandard = isStandardProfileTokenBound(
         benchmarkProfile,
         throughputMaxTokens,
@@ -880,10 +851,8 @@
         ...row,
         _id: `row-${index}`,
         benchmark_profile: benchmarkProfile,
-        integrity: row.integrity || "unknown",
         decode_tps: row.decode_tps ?? null,
-        power_source: row.power_source ?? null,
-        low_power_mode: row.low_power_mode ?? null,
+        date: row.date || String(timestamp).slice(0, 10),
         throughput_max_tokens: throughputMaxTokens,
         throughput_min_tokens: throughputMinTokens,
         is_standard_throughput_tokens: Boolean(
@@ -1035,11 +1004,7 @@
     }
 
     function conditionBadges(row) {
-      const integrityBadges = [];
       const badges = [];
-      if (row.integrity === "sealed") {
-        integrityBadges.push(`<span class="badge badge-green">sealed</span>`);
-      }
       if (String(row.engine_version || "").toLowerCase() === "unknown") {
         badges.push(`<span class="badge badge-amber">unknown version</span>`);
       }
@@ -1051,43 +1016,31 @@
       } else if (row.thermal_state && row.thermal_state !== "nominal") {
         badges.push(`<span class="badge badge-amber">thermal ${escapeHtml(row.thermal_state)}</span>`);
       }
-      if (row.power_source === "battery") {
-        badges.push(`<span class="badge badge-red">battery</span>`);
-      }
-      if (row.low_power_mode === "on") {
-        badges.push(`<span class="badge badge-red">low power</span>`);
+      if (Number(row.warmup_failures || 0) > 0) {
+        badges.push(`<span class="badge badge-amber">warmup skipped</span>`);
       }
       if (!badges.length) {
         badges.push(`<span class="badge badge-green">clean</span>`);
       }
-      return integrityBadges.concat(badges).join("");
+      return badges.join("");
     }
 
     function detailsPanel(row) {
       const details = [
         ["Engine version", row.engine_version],
         ["Profile", profileLabel(row.benchmark_profile)],
-        ["Protocol", `v${row.protocol_version}`],
-        ["HTTP mode", connectionModeLabel(row.connection_mode)],
-        ["Integrity", conditionValue(row.integrity)],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
         ["Max tokens", row.throughput_max_tokens == null ? "unknown" : row.throughput_max_tokens],
         ["Min tokens", row.throughput_min_tokens == null ? "none" : row.throughput_min_tokens],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
-        ["Token source", row.token_count_source],
         ["Decode timing", row.decode_timing_source],
         ["Thermal", conditionValue(row.thermal_state)],
-        ["Power source", conditionValue(row.power_source)],
-        ["Low Power Mode", conditionValue(row.low_power_mode)],
         ["Machine", row.machine_model],
-        ["Post-warmup engine RSS diagnostic", row.ram_is_process_rss ? `${fmt(row.ram_peak_gb, 3)} GB` : "system fallback"],
-        ["RAM method", row.ram_measurement_method],
         ["Trials", row.trials],
         ["Warmup failures", row.warmup_failures ?? 0],
         ["Stddev tok/s", row.tps_stddev == null ? "-" : fmt(row.tps_stddev, 3)],
         ["Date", row.date],
-        ["Notes", row.notes || "-"],
       ];
 
       return `
@@ -1128,7 +1081,6 @@
           row.benchmark_profile,
           row.machine_model,
           row.quantization,
-          row.notes,
         ].join(" ").toLowerCase();
         return (!query || searchable.includes(query)) &&
           (!rawStandard.checked || row.is_standard_throughput_tokens);
@@ -1262,13 +1214,6 @@
       return `${escapeHtml(row.throughput_max_tokens)}${minTokens}${badge}`;
     }
 
-    function integrityCell(row) {
-      if (row.integrity === "sealed") {
-        return `<span class="badge badge-green">sealed</span>`;
-      }
-      return `<span class="badge badge-amber">${escapeHtml(row.integrity || "unknown")}</span>`;
-    }
-
     function isStandardProfileTokenBound(profile, maxTokens, minTokens) {
       if (minTokens != null) return false;
       if (profile === "baseline") {
@@ -1283,12 +1228,6 @@
     function profileLabel(profile) {
       if (profile === "sustained") return "Sustained";
       return "Baseline";
-    }
-
-    function connectionModeLabel(mode) {
-      if (mode === "persistent") return "persistent";
-      if (mode === "per_request") return "per request";
-      return conditionValue(mode);
     }
 
     function fmtTokenCounts(values) {

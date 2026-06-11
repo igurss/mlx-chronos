@@ -202,7 +202,9 @@ unavailable, when macOS reports a non-nominal thermal state, or when battery
 power / Low Power Mode are detected. These warnings are informational: the run
 continues. Results record power source and Low Power Mode in
 `hardware.power_source` and `hardware.low_power_mode` so benchmark conditions
-can be audited later.
+can be audited later. Public leaderboard submissions must report Low Power Mode
+as `off`; power source is recorded in the full result JSON but is not used as a
+leaderboard field.
 
 Installing `mlx-chronos[thermal]` adds the optional PyObjC Foundation bridge,
 which lets mlx-Chronos read thermal state through macOS APIs without requiring
@@ -326,7 +328,7 @@ To reproduce a result:
    trial count when comparing larger runs
 6. Check the JSON with `mlx-chronos submit --file results/local/your-result.json --dry-run`
 7. Submit only standard baseline or standard sustained results with token
-   source `usage.completion_tokens`
+   source `usage.completion_tokens` and Low Power Mode disabled
 
 Results may vary slightly across runs due to thermal state, battery/Low Power
 Mode behavior, and system load. This is expected and reflected in the stddev

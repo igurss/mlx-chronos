@@ -59,7 +59,11 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
 
     assert "load_publishable_result(path)" in text
     assert '"timestamp": meta["timestamp"]' in text
-    assert '"connection_mode": connection_mode' in text
+    assert '"protocol_version"' not in text
+    assert '"connection_mode"' not in text
+    assert '"power_source"' not in text
+    assert '"low_power_mode"' not in text
+    assert '"notes"' not in text
 
 
 def test_result_workflows_use_single_error_handler():
@@ -98,15 +102,21 @@ def test_leaderboard_compare_recency_uses_full_timestamp():
     assert "b.timestamp || b.date" in html
 
 
-def test_leaderboard_exposes_http_connection_mode():
+def test_leaderboard_hides_internal_protocol_and_condition_noise():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 
-    assert "connectionModeLabel" in html
-    assert "HTTP mode" in html
+    assert "HTTP mode" not in html
+    assert "Protocol" not in html
+    assert "Power source" not in html
+    assert 'key: "low_power_mode"' not in html
+    assert '["Low Power Mode"' not in html
+    assert "Notes" not in html
+    assert "tok/s stddev" in html
+    assert "Machine" in html
 
 
 def test_leaderboard_clean_badge_is_not_blocked_by_integrity_badge():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 
-    assert "const integrityBadges = []" in html
-    assert "return integrityBadges.concat(badges).join(\"\")" in html
+    assert "const integrityBadges = []" not in html
+    assert "return badges.join(\"\")" in html

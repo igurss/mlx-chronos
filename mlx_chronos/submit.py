@@ -24,6 +24,7 @@ DEFAULT_SUBMITTER_EMAIL = "182094468+igurss@users.noreply.github.com"
 PUBLIC_TOKEN_COUNT_SOURCE = TOKEN_COUNT_SOURCE_USAGE
 PUBLIC_PROFILE_BASELINE = "baseline"
 PUBLIC_PROFILE_SUSTAINED = "sustained"
+PUBLIC_LOW_POWER_MODE = "off"
 
 
 class SubmissionError(RuntimeError):
@@ -53,6 +54,13 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
         raise SubmissionError(
             "leaderboard submissions must use current benchmark protocol "
             f"version {BASELINE_PROTOCOL_VERSION}; got {protocol.version!r}"
+        )
+
+    low_power_mode = result.hardware.low_power_mode
+    if low_power_mode != PUBLIC_LOW_POWER_MODE:
+        raise SubmissionError(
+            "leaderboard submissions must be run with macOS Low Power Mode "
+            f"disabled; got {low_power_mode!r}"
         )
 
     throughput = protocol.throughput
