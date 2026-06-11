@@ -64,6 +64,9 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
     assert '"power_source"' not in text
     assert '"low_power_mode"' not in text
     assert '"notes"' not in text
+    assert '"is_standard_throughput_tokens"' not in text
+    assert '"throughput_max_tokens"' not in text
+    assert '"throughput_min_tokens"' not in text
 
 
 def test_result_workflows_use_single_error_handler():
@@ -80,6 +83,10 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
     assert "standardThroughputMaxTokens" in html
     assert "standardSustainedMaxTokens" in html
     assert "integrity-sealed" in html
+    assert "Standard runs" not in html
+    assert "raw-standard" not in html
+    assert "compare-standard" not in html
+    assert "custom tokens" not in html
 
 
 def test_leaderboard_html_shows_result_load_errors():
@@ -112,6 +119,7 @@ def test_leaderboard_hides_internal_protocol_and_condition_noise():
     assert 'key: "low_power_mode"' not in html
     assert '["Low Power Mode"' not in html
     assert "Notes" not in html
+    assert "Max tokens" not in html
     assert "tok/s stddev" in html
     assert "Machine" in html
     assert "compare-button" not in html

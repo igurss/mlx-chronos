@@ -567,7 +567,7 @@ def main():
     # --- submit ---
     submit_parser = subparsers.add_parser(
         "submit",
-        help="Send a validated benchmark result to the maintainer inbox",
+        help="Validate and send a public-leaderboard benchmark result",
     )
     submit_parser.add_argument(
         "--file",
@@ -600,7 +600,7 @@ def main():
     submit_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Validate the result without sending it",
+        help="Check public leaderboard eligibility without sending the result",
     )
     submit_parser.set_defaults(func=cmd_submit)
 

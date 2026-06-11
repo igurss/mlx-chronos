@@ -54,11 +54,7 @@ jobs:
                   tri = data["trials"]
                   meta = data["meta"]
                   decode_stats = met.get("decode_tokens_per_second") or {}
-                  protocol = meta["benchmark_protocol"]
-                  throughput_protocol = protocol["throughput"]
                   benchmark_profile = meta["benchmark_profile"]
-                  throughput_max_tokens = throughput_protocol["requested_max_tokens"]
-                  throughput_min_tokens = throughput_protocol.get("requested_min_tokens")
                   completion_tokens_raw = tri["completion_tokens_raw"]
 
                   index.append({
@@ -78,20 +74,6 @@ jobs:
                           "unavailable",
                       ),
                       "completion_tokens_raw": completion_tokens_raw,
-                      "throughput_max_tokens": throughput_max_tokens,
-                      "throughput_min_tokens": throughput_min_tokens,
-                      "is_standard_throughput_tokens": (
-                          (
-                              benchmark_profile == "baseline"
-                              and throughput_max_tokens == DEFAULT_THROUGHPUT_MAX_TOKENS
-                              and throughput_min_tokens is None
-                          )
-                          or (
-                              benchmark_profile == "sustained"
-                              and throughput_max_tokens == SUSTAINED_THROUGHPUT_MAX_TOKENS
-                              and throughput_min_tokens is None
-                          )
-                      ),
                       "ttft_cold": met["ttft_cold"]["mean"],
                       "ttft_cached": met["ttft_cached"]["mean"],
                       "system_ram_peak_gb": met["system_ram_peak_gb"],

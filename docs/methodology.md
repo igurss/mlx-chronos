@@ -110,13 +110,18 @@ override this with `--max-tokens` for local experiments. An optional
 throughput output respects the requested range. If an engine ignores
 `min_tokens`, the run is not treated as comparable under that requested bound.
 
-The default baseline workload is `max_tokens=100`. The result metadata
-records the requested throughput token bound in
-`meta.benchmark_protocol.throughput.requested_max_tokens`. The public
-leaderboard accepts standard baseline submissions with at least 5 trials,
-`max_tokens=100`, no requested `min_tokens`, and `usage.completion_tokens`
-token counts. It also accepts standard sustained submissions with 1 trial,
-`max_tokens=1000`, no requested `min_tokens`, and usage-based token counts.
+The default baseline workload is `max_tokens=100`. Local runs may override
+trial counts, output token bounds, profiles, cooldown, connection mode, and
+other parameters for diagnostics. These records remain useful locally, but they
+are not automatically publishable.
+
+The public leaderboard is intentionally stricter than the local runner. It
+accepts standard baseline submissions with at least 5 trials, `max_tokens=100`,
+no requested `min_tokens`, and `usage.completion_tokens` token counts. It also
+accepts standard sustained submissions with 1 trial, `max_tokens=1000`, no
+requested `min_tokens`, and usage-based token counts. macOS Low Power Mode must
+be disabled. GitHub Actions validates this policy before generating the
+leaderboard index, so every displayed row is already a public-comparable run.
 Baseline and sustained rows are kept as separate profile choices in the
 leaderboard UI.
 
@@ -188,8 +193,8 @@ RSS values.
 The result records both `metrics.ram_is_process_rss` and
 `metrics.ram_measurement_method` (`process_rss` or `system_fallback`) so the
 JSON can distinguish direct process measurements from system-memory fallbacks.
-The public leaderboard keeps this field in row details only and does not use
-process RSS as a main comparison metric.
+The public leaderboard keeps process RSS out of the row index and uses System
+RAM Peak as the comparable memory metric.
 
 ### Thermal State
 Thermal state is detected through macOS `NSProcessInfo` when the Foundation
@@ -329,6 +334,11 @@ To reproduce a result:
 6. Check the JSON with `mlx-chronos submit --file results/local/your-result.json --dry-run`
 7. Submit only standard baseline or standard sustained results with token
    source `usage.completion_tokens` and Low Power Mode disabled
+
+Custom local runs are still valid local benchmark records, but do not submit
+them to `results/submitted/`; the public validator rejects non-standard token
+bounds, requested `min_tokens`, fallback token estimates, Low Power Mode runs,
+and non-standard sustained trial counts.
 
 Results may vary slightly across runs due to thermal state, battery/Low Power
 Mode behavior, and system load. This is expected and reflected in the stddev

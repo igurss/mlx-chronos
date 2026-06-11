@@ -150,7 +150,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: minmax(240px, 1.6fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(110px, 0.5fr) auto;
+      grid-template-columns: minmax(240px, 1.6fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(110px, 0.5fr);
       gap: 14px;
       padding: 18px;
       border-bottom: 1px solid var(--line-soft);
@@ -187,28 +187,6 @@
     summary:focus-visible {
       outline: 3px solid rgba(0, 113, 227, 0.22);
       outline-offset: 2px;
-    }
-
-    .compare-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      justify-content: flex-end;
-    }
-
-    .check-control {
-      display: inline-flex;
-      gap: 8px;
-      align-items: center;
-      color: var(--muted);
-      font-size: 0.86rem;
-      white-space: nowrap;
-    }
-
-    .check-control input {
-      width: 16px;
-      height: 16px;
-      accent-color: var(--blue);
     }
 
     .result-head {
@@ -467,10 +445,6 @@
         grid-template-columns: 1fr;
       }
 
-      .compare-actions {
-        justify-content: space-between;
-      }
-
       .result-head {
         grid-template-columns: 1fr;
       }
@@ -491,8 +465,7 @@
       h1 { font-size: 2rem; }
 
       .view-tabs,
-      .header-links,
-      .compare-actions {
+      .header-links {
         width: 100%;
       }
 
@@ -549,12 +522,6 @@
             <label for="compare-memory">RAM</label>
             <select id="compare-memory"></select>
           </div>
-          <div class="compare-actions">
-            <label class="check-control">
-              <input id="compare-standard" type="checkbox" checked />
-              Standard runs
-            </label>
-          </div>
         </div>
 
         <div class="result-head">
@@ -583,17 +550,13 @@
           </table>
         </div>
         <div class="empty-state" id="compare-empty">
-          No matching benchmark results yet. Try disabling standard runs or choose a different model/spec.
+          No matching public benchmark results yet. Try a different model/spec.
         </div>
       </section>
 
       <section class="panel raw-panel" id="raw-view" aria-labelledby="tab-raw" hidden>
         <div class="raw-toolbar">
           <input id="raw-search" type="search" placeholder="Search model, engine, chip, machine" aria-label="Search raw benchmark rows" />
-          <label class="check-control">
-            <input id="raw-standard" type="checkbox" />
-            Standard runs
-          </label>
           <details class="columns-menu">
             <summary>Columns</summary>
             <div class="columns-popover" id="columns-popover"></div>
@@ -717,13 +680,6 @@
         value: row => profileLabel(row.benchmark_profile),
       },
       {
-        key: "max_tokens",
-        label: "Max tokens",
-        sortKey: "throughput_max_tokens",
-        numeric: true,
-        value: row => maxTokensCell(row),
-      },
-      {
         key: "thermal",
         label: "Thermal",
         sortKey: "thermal_state",
@@ -767,7 +723,6 @@
     const compareProfile = document.getElementById("compare-profile");
     const compareChip = document.getElementById("compare-chip");
     const compareMemory = document.getElementById("compare-memory");
-    const compareStandard = document.getElementById("compare-standard");
     const compareHead = document.getElementById("compare-head");
     const compareBody = document.getElementById("compare-body");
     const compareTitle = document.getElementById("compare-title");
@@ -776,7 +731,6 @@
     const resultCount = document.getElementById("result-count");
 
     const rawSearch = document.getElementById("raw-search");
-    const rawStandard = document.getElementById("raw-standard");
     const rawHead = document.getElementById("raw-head");
     const rawBody = document.getElementById("raw-body");
     const rawEmpty = document.getElementById("raw-empty");
@@ -813,19 +767,11 @@
         allRows = [];
       }
 
-      applyInitialCompareState();
       initializeCompareControls();
       initialCompareParamsPending = false;
       renderColumnMenu();
       renderCompare();
       renderRaw();
-    }
-
-    function applyInitialCompareState() {
-      if (!initialCompareParamsPending) return;
-      if (initialCompareParams.get("standard") === "0") {
-        compareStandard.checked = false;
-      }
     }
 
     function renderStandardTokenLabel() {
@@ -839,34 +785,19 @@
     }
 
     function normalizeRow(row, index) {
-      const throughputMaxTokens = row.throughput_max_tokens == null
-        ? null
-        : Number(row.throughput_max_tokens);
-      const throughputMinTokens = row.throughput_min_tokens ?? null;
       const benchmarkProfile = row.benchmark_profile;
       const timestamp = row.timestamp || "";
-      const inferredStandard = isStandardProfileTokenBound(
-        benchmarkProfile,
-        throughputMaxTokens,
-        throughputMinTokens,
-      );
       return {
         ...row,
         _id: `row-${index}`,
         benchmark_profile: benchmarkProfile,
         decode_tps: row.decode_tps ?? null,
         date: row.date || dateFromTimestamp(timestamp),
-        throughput_max_tokens: throughputMaxTokens,
-        throughput_min_tokens: throughputMinTokens,
-        is_standard_throughput_tokens: Boolean(
-          row.is_standard_throughput_tokens ?? inferredStandard
-        ),
       };
     }
 
     function initializeCompareControls() {
-      const rows = allRows.filter(row => row.is_standard_throughput_tokens);
-      const defaultRows = rows.length ? rows : allRows;
+      const defaultRows = allRows;
       const profileOptions = uniqueSorted(defaultRows.map(row => row.benchmark_profile));
       const preferredProfile = preferredCompareValue(
         "profile",
@@ -920,7 +851,6 @@
 
     function rowsForCompareOptions() {
       return allRows.filter(row =>
-        (!compareStandard.checked || row.is_standard_throughput_tokens) &&
         (!compareProfile.value || row.benchmark_profile === compareProfile.value) &&
         (!compareModel.value || row.model === compareModel.value)
       );
@@ -928,7 +858,6 @@
 
     function currentCompareRows() {
       return allRows.filter(row =>
-        (!compareStandard.checked || row.is_standard_throughput_tokens) &&
         row.benchmark_profile === compareProfile.value &&
         row.model === compareModel.value &&
         row.chip === compareChip.value &&
@@ -964,7 +893,7 @@
       const runTotal = rows.length;
       compareMeta.textContent = runTotal
         ? `${representatives.length} engine${representatives.length === 1 ? "" : "s"} across ${runTotal} run${runTotal === 1 ? "" : "s"}`
-        : "No submitted run matches this selection.";
+        : "No public run matches this selection.";
       resultCount.textContent = `${runTotal} result${runTotal === 1 ? "" : "s"}`;
 
       compareBody.innerHTML = representatives.map(row => `
@@ -984,7 +913,7 @@
       `).join("");
 
       compareEmpty.textContent = allRows.length
-        ? "No matching benchmark results yet. Try disabling standard runs or choose a different model/spec."
+        ? "No matching public benchmark results yet. Try a different model/spec."
         : "No benchmark results are available yet.";
       compareEmpty.style.display = representatives.length ? "none" : "block";
     }
@@ -1039,9 +968,6 @@
       if (String(row.engine_version || "").toLowerCase() === "unknown") {
         badges.push(`<span class="badge badge-amber">unknown version</span>`);
       }
-      if (!row.is_standard_throughput_tokens) {
-        badges.push(`<span class="badge badge-amber">custom tokens</span>`);
-      }
       if (String(row.thermal_state || "").startsWith("unavailable")) {
         badges.push(`<span class="badge badge-gray">thermal unknown</span>`);
       } else if (row.thermal_state && row.thermal_state !== "nominal") {
@@ -1062,8 +988,6 @@
         ["Profile", profileLabel(row.benchmark_profile)],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
-        ["Max tokens", row.throughput_max_tokens == null ? "unknown" : row.throughput_max_tokens],
-        ["Min tokens", row.throughput_min_tokens == null ? "none" : row.throughput_min_tokens],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],
@@ -1113,8 +1037,7 @@
           row.machine_model,
           row.quantization,
         ].join(" ").toLowerCase();
-        return (!query || searchable.includes(query)) &&
-          (!rawStandard.checked || row.is_standard_throughput_tokens);
+        return !query || searchable.includes(query);
       });
     }
 
@@ -1234,28 +1157,6 @@
       return `${fmt(row.system_ram_peak_gb, 2)} GB / ${fmt(row.system_ram_peak_percent, 0)}%`;
     }
 
-    function maxTokensCell(row) {
-      if (row.throughput_max_tokens == null) return "-";
-      const minTokens = row.throughput_min_tokens == null
-        ? ""
-        : ` / min ${escapeHtml(row.throughput_min_tokens)}`;
-      const badge = row.is_standard_throughput_tokens
-        ? ` <span class="badge badge-green">standard</span>`
-        : "";
-      return `${escapeHtml(row.throughput_max_tokens)}${minTokens}${badge}`;
-    }
-
-    function isStandardProfileTokenBound(profile, maxTokens, minTokens) {
-      if (minTokens != null) return false;
-      if (profile === "baseline") {
-        return standardThroughputMaxTokens != null && maxTokens === standardThroughputMaxTokens;
-      }
-      if (profile === "sustained") {
-        return standardSustainedMaxTokens != null && maxTokens === standardSustainedMaxTokens;
-      }
-      return false;
-    }
-
     function profileLabel(profile) {
       if (profile === "sustained") return "Sustained";
       return "Baseline";
@@ -1270,7 +1171,6 @@
       if (compareModel.value) params.set("model", compareModel.value);
       if (compareChip.value) params.set("chip", compareChip.value);
       if (compareMemory.value) params.set("memory", compareMemory.value);
-      if (!compareStandard.checked) params.set("standard", "0");
 
       const query = params.toString();
       const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
@@ -1353,10 +1253,6 @@
       renderCompare();
     });
     compareMemory.addEventListener("change", renderCompare);
-    compareStandard.addEventListener("change", () => {
-      initializeCompareControls();
-      renderCompare();
-    });
 
     compareBody.addEventListener("click", event => {
       const button = event.target.closest("[data-detail]");
@@ -1368,7 +1264,6 @@
     });
 
     rawSearch.addEventListener("input", renderRaw);
-    rawStandard.addEventListener("change", renderRaw);
     rawHead.addEventListener("click", event => {
       const header = event.target.closest("[data-sort]");
       if (!header) return;

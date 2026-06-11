@@ -18,6 +18,9 @@
 - Remove the early protocol v1 submitted results from the bundled leaderboard
   index so the public UI only shows results generated with the current format.
 - Remove the leaderboard HTML fallback for the old flat-array index shape.
+- Treat the leaderboard as publishable-results-only: remove standard/custom run
+  filtering from the UI and generated index, while documenting that local runs
+  may still use custom parameters.
 
 ## [0.1.3] — 2026-06-08
 

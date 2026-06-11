@@ -115,8 +115,8 @@ Compare submitted results by model, chip, and RAM:
 
 The default view compares engines for a selected model and Mac configuration.
 The raw-data view keeps the submitted rows available with optional columns for
-useful comparison metadata such as profile, token bounds, thermal state, exact
-machine model, engine version, trial count, and quantization.
+useful comparison metadata such as profile, thermal state, exact machine model,
+engine version, trial count, and quantization.
 
 ---
 
@@ -176,6 +176,18 @@ Optional thermal-state support through macOS Foundation can be installed with
 
 ---
 
+## Local Runs vs Public Leaderboard
+
+`mlx-chronos run` is intentionally flexible for local diagnostics. You can
+change trial count, profile, output token bounds, cooldown, connection mode,
+notes, and other parameters to investigate your own engines and hardware.
+Those local JSON files are still valid benchmark records.
+
+The public leaderboard is stricter. Only results that pass
+`mlx-chronos submit --dry-run` are publishable, and GitHub Actions applies the
+same policy before adding a row to the leaderboard. That keeps public rows
+comparable while leaving the local tool useful for experiments.
+
 ## Contributing Your Results
 
 1. Run `mlx-chronos run` on your Mac
@@ -193,9 +205,9 @@ Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens` and keep one of the standard profiles: baseline with
 at least 5 trials and `max_tokens=100`, or sustained with 1 trial and
 `max_tokens=1000`. Neither profile may request `min_tokens`, and macOS Low
-Power Mode must be disabled. Local custom runs can still be saved with fallback
-token estimates or custom token bounds, but those results are not accepted for
-the public leaderboard and are marked in their JSON metadata where applicable.
+Power Mode must be disabled. Custom local runs, fallback token estimates, custom
+token bounds, custom sustained trial counts, or Low Power Mode runs can still be
+saved locally, but they are not accepted into the public leaderboard.
 
 Do not edit submitted JSON by hand after the run. Public submissions include an
 `integrity` seal over the canonical result payload; changing any benchmark field
@@ -237,7 +249,7 @@ is measured, how, and why.
 - [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
 - [x] Request-throughput timing metadata and client-observed streaming decode throughput
 - [x] Phase timing metadata and lightweight continuous thermal monitoring
-- [x] Sustained benchmark profile, cooldown metadata, and standard/custom token-bound visibility in the leaderboard
+- [x] Sustained benchmark profile, cooldown metadata, and strict local-vs-public leaderboard policy
 
 ### Future
 - [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract
