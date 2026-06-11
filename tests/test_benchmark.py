@@ -376,6 +376,67 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert len({id(client) for client in clients}) == 1
 
 
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_falls_back_when_system_ram_stop_fails(
+    mock_detect,
+    mock_get_engine,
+):
+    class FailingSystemRAMTracker:
+        def __init__(self, interval=0.1):
+            self.interval = interval
+
+        def start(self):
+            return None
+
+        def stop(self):
+            raise RuntimeError("stop failed")
+
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 16.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_ttft.side_effect = [0.5, 0.2, 0.2]
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tps=20.0,
+        tokens=100,
+        elapsed=5.0,
+    )
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.benchmark.SystemRAMTracker", FailingSystemRAMTracker), \
+         patch("mlx_chronos.benchmark.ThermalStateTracker", FakeThermalStateTracker), \
+         patch("mlx_chronos.benchmark.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 16 * (1024 ** 3)
+        system_mem_info.available = 4 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        result = run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=1,
+            ram_sample_interval=0.1,
+        )
+
+    assert result["metrics"]["system_ram_peak_gb"] == 12.0
+    assert result["metrics"]["system_ram_peak_percent"] == 75.0
+    assert result["metrics"]["ram_peak_gb"] == 12.0
+    assert result["metrics"]["ram_measurement_method"] == "system_fallback"
+
+
 def test_detect_sustained_throttling_requires_thermal_signal():
     samples = [
         {"completion_tokens": 100, "elapsed_seconds": 2.0},

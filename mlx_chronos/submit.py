@@ -60,7 +60,8 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
     if low_power_mode != PUBLIC_LOW_POWER_MODE:
         raise SubmissionError(
             "leaderboard submissions must be run with macOS Low Power Mode "
-            f"disabled; got {low_power_mode!r}"
+            f"disabled; got {low_power_mode!r}. Check System Settings > "
+            "Battery, or run `pmset -g custom` and make sure lowpowermode is 0."
         )
 
     throughput = protocol.throughput

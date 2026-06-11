@@ -96,7 +96,6 @@
 
     .link-button,
     .tab-button,
-    .primary-button,
     .ghost-button {
       min-height: 38px;
       border-radius: 8px;
@@ -114,13 +113,6 @@
       border-color: var(--line);
       color: var(--text);
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    }
-
-    .primary-button {
-      background: var(--blue);
-      color: #ffffff;
-      border-color: var(--blue);
-      font-weight: 650;
     }
 
     .view-tabs {
@@ -158,7 +150,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: minmax(220px, 1.6fr) minmax(180px, 1fr) minmax(150px, 0.8fr) auto;
+      grid-template-columns: minmax(240px, 1.6fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(110px, 0.5fr) auto;
       gap: 14px;
       padding: 18px;
       border-bottom: 1px solid var(--line-soft);
@@ -506,7 +498,6 @@
 
       .tab-button,
       .link-button,
-      .primary-button,
       .ghost-button {
         flex: 1;
       }
@@ -546,7 +537,7 @@
             <label for="compare-model">Model</label>
             <select id="compare-model"></select>
           </div>
-          <div class="control">
+          <div class="control" id="compare-profile-control">
             <label for="compare-profile">Profile</label>
             <select id="compare-profile"></select>
           </div>
@@ -563,7 +554,6 @@
               <input id="compare-standard" type="checkbox" checked />
               Standard runs
             </label>
-            <button class="primary-button" id="compare-button" type="button">Compare</button>
           </div>
         </div>
 
@@ -578,14 +568,14 @@
         <div class="table-scroll">
           <table aria-label="Engine comparison">
             <thead>
-              <tr>
+              <tr id="compare-head">
                 <th>Engine</th>
                 <th>Request tok/s</th>
                 <th>Decode tok/s</th>
                 <th>TTFT cold</th>
                 <th>TTFT cached</th>
                 <th>System RAM peak</th>
-                <th>Run</th>
+                <th>Conditions</th>
                 <th></th>
               </tr>
             </thead>
@@ -633,6 +623,8 @@
     const RESULTS_INDEX = "results_index.json";
     let standardThroughputMaxTokens = null;
     let standardSustainedMaxTokens = null;
+    const initialCompareParams = new URLSearchParams(window.location.search);
+    let initialCompareParamsPending = true;
 
     const ENGINE_LABELS = {
       "omlx": "oMLX",
@@ -771,10 +763,12 @@
     let visibleOptionalColumns = new Set(["decode_tps", "ttft_cached", "profile"]);
 
     const compareModel = document.getElementById("compare-model");
+    const compareProfileControl = document.getElementById("compare-profile-control");
     const compareProfile = document.getElementById("compare-profile");
     const compareChip = document.getElementById("compare-chip");
     const compareMemory = document.getElementById("compare-memory");
     const compareStandard = document.getElementById("compare-standard");
+    const compareHead = document.getElementById("compare-head");
     const compareBody = document.getElementById("compare-body");
     const compareTitle = document.getElementById("compare-title");
     const compareMeta = document.getElementById("compare-meta");
@@ -819,10 +813,19 @@
         allRows = [];
       }
 
+      applyInitialCompareState();
       initializeCompareControls();
+      initialCompareParamsPending = false;
       renderColumnMenu();
       renderCompare();
       renderRaw();
+    }
+
+    function applyInitialCompareState() {
+      if (!initialCompareParamsPending) return;
+      if (initialCompareParams.get("standard") === "0") {
+        compareStandard.checked = false;
+      }
     }
 
     function renderStandardTokenLabel() {
@@ -852,7 +855,7 @@
         _id: `row-${index}`,
         benchmark_profile: benchmarkProfile,
         decode_tps: row.decode_tps ?? null,
-        date: row.date || String(timestamp).slice(0, 10),
+        date: row.date || dateFromTimestamp(timestamp),
         throughput_max_tokens: throughputMaxTokens,
         throughput_min_tokens: throughputMinTokens,
         is_standard_throughput_tokens: Boolean(
@@ -864,18 +867,23 @@
     function initializeCompareControls() {
       const rows = allRows.filter(row => row.is_standard_throughput_tokens);
       const defaultRows = rows.length ? rows : allRows;
-      const preferredProfile = compareProfile.value || mostCommonByEngine(defaultRows, "benchmark_profile");
+      const profileOptions = uniqueSorted(defaultRows.map(row => row.benchmark_profile));
+      const preferredProfile = preferredCompareValue(
+        "profile",
+        compareProfile.value,
+      ) || mostCommonByEngine(defaultRows, "benchmark_profile");
 
       setSelectOptions(
         compareProfile,
-        uniqueSorted(defaultRows.map(row => row.benchmark_profile)),
+        profileOptions,
         profileLabel,
         preferredProfile,
       );
+      compareProfileControl.hidden = profileOptions.length <= 1;
 
       const profileRows = defaultRows.filter(row => row.benchmark_profile === compareProfile.value);
       const defaultModel = mostCommonByEngine(profileRows, "model");
-      const preferredModel = compareModel.value || defaultModel;
+      const preferredModel = preferredCompareValue("model", compareModel.value) || defaultModel;
 
       setSelectOptions(
         compareModel,
@@ -889,19 +897,25 @@
     function updateHardwareOptions() {
       const rows = rowsForCompareOptions();
       const chips = uniqueSorted(rows.map(row => row.chip));
-      setSelectOptions(compareChip, chips, value => value, compareChip.value);
+      const preferredChip = preferredCompareValue("chip", compareChip.value);
+      setSelectOptions(compareChip, chips, value => value, preferredChip);
 
       const memoryRows = rows.filter(row => row.chip === compareChip.value);
       const memories = uniqueSorted(
         memoryRows.map(row => row.memory_gb),
         (a, b) => Number(a) - Number(b),
       );
+      const preferredMemory = preferredCompareValue("memory", compareMemory.value);
       setSelectOptions(
         compareMemory,
         memories,
         value => `${fmt(value, 0)} GB`,
-        compareMemory.value,
+        preferredMemory,
       );
+    }
+
+    function preferredCompareValue(paramName, currentValue) {
+      return currentValue || (initialCompareParamsPending ? initialCompareParams.get(paramName) : "");
     }
 
     function rowsForCompareOptions() {
@@ -924,6 +938,7 @@
 
     function renderCompare() {
       if (resultsLoadError) {
+        renderCompareHead(false);
         compareTitle.textContent = "Results unavailable";
         compareMeta.textContent = resultsLoadError;
         resultCount.textContent = "0 results";
@@ -934,8 +949,11 @@
       }
 
       const rows = currentCompareRows();
+      const showDecodeTps = rows.some(row => row.decode_tps != null);
+      renderCompareHead(showDecodeTps);
+      updateShareUrl();
       const selected = [
-        profileLabel(compareProfile.value || "baseline"),
+        ...(compareProfileControl.hidden ? [] : [profileLabel(compareProfile.value || "baseline")]),
         compareModel.value || "No model selected",
         compareChip.value || "No chip selected",
         compareMemory.value ? `${fmt(compareMemory.value, 0)} GB` : "No RAM selected",
@@ -953,7 +971,7 @@
         <tr>
           <td>${engineCell(row)}</td>
           <td><span class="metric-strong">${fmt(row.tps, 2)}</span></td>
-          <td>${fmt(row.decode_tps, 2)}</td>
+          ${showDecodeTps ? `<td>${fmt(row.decode_tps, 2)}</td>` : ""}
           <td>${fmt(row.ttft_cold, 3)} s</td>
           <td>${fmt(row.ttft_cached, 3)} s</td>
           <td>${systemRamCell(row)}</td>
@@ -961,7 +979,7 @@
           <td><button class="details-toggle" type="button" data-detail="${row._id}">Details</button></td>
         </tr>
         <tr class="details-row" id="detail-${row._id}" hidden>
-          <td colspan="8">${detailsPanel(row)}</td>
+          <td colspan="${showDecodeTps ? 8 : 7}">${detailsPanel(row)}</td>
         </tr>
       `).join("");
 
@@ -969,6 +987,19 @@
         ? "No matching benchmark results yet. Try disabling standard runs or choose a different model/spec."
         : "No benchmark results are available yet.";
       compareEmpty.style.display = representatives.length ? "none" : "block";
+    }
+
+    function renderCompareHead(showDecodeTps) {
+      compareHead.innerHTML = `
+        <th>Engine</th>
+        <th>Request tok/s</th>
+        ${showDecodeTps ? "<th>Decode tok/s</th>" : ""}
+        <th>TTFT cold</th>
+        <th>TTFT cached</th>
+        <th>System RAM peak</th>
+        <th>Conditions</th>
+        <th></th>
+      `;
     }
 
     function representativeRowsByEngine(rows) {
@@ -1017,10 +1048,10 @@
         badges.push(`<span class="badge badge-amber">thermal ${escapeHtml(row.thermal_state)}</span>`);
       }
       if (Number(row.warmup_failures || 0) > 0) {
-        badges.push(`<span class="badge badge-amber">warmup skipped</span>`);
+        badges.push(`<span class="badge badge-amber">warmup failure</span>`);
       }
       if (!badges.length) {
-        badges.push(`<span class="badge badge-green">clean</span>`);
+        badges.push(`<span class="badge badge-green">no flags</span>`);
       }
       return badges.join("");
     }
@@ -1034,7 +1065,7 @@
         ["Max tokens", row.throughput_max_tokens == null ? "unknown" : row.throughput_max_tokens],
         ["Min tokens", row.throughput_min_tokens == null ? "none" : row.throughput_min_tokens],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
-        ["Decode timing", row.decode_timing_source],
+        ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],
         ["Machine", row.machine_model],
         ["Trials", row.trials],
@@ -1230,6 +1261,37 @@
       return "Baseline";
     }
 
+    function updateShareUrl() {
+      if (initialCompareParamsPending) return;
+      const params = new URLSearchParams();
+      if (!compareProfileControl.hidden && compareProfile.value) {
+        params.set("profile", compareProfile.value);
+      }
+      if (compareModel.value) params.set("model", compareModel.value);
+      if (compareChip.value) params.set("chip", compareChip.value);
+      if (compareMemory.value) params.set("memory", compareMemory.value);
+      if (!compareStandard.checked) params.set("standard", "0");
+
+      const query = params.toString();
+      const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", nextUrl);
+    }
+
+    function dateFromTimestamp(value) {
+      const text = String(value || "");
+      const isoDate = text.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (isoDate) return isoDate[1];
+      const parsed = Date.parse(text);
+      if (Number.isNaN(parsed)) return "";
+      return new Date(parsed).toISOString().slice(0, 10);
+    }
+
+    function decodeTimingLabel(source) {
+      if (source === "client_stream") return "client stream timing";
+      if (source === "unavailable") return "not available";
+      return conditionValue(source).replaceAll("_", " ");
+    }
+
     function fmtTokenCounts(values) {
       if (!Array.isArray(values) || values.length === 0) return "-";
       if (values.every(value => value === values[0])) return `${escapeHtml(values[0])} each`;
@@ -1295,7 +1357,6 @@
       initializeCompareControls();
       renderCompare();
     });
-    document.getElementById("compare-button").addEventListener("click", renderCompare);
 
     compareBody.addEventListener("click", event => {
       const button = event.target.closest("[data-detail]");

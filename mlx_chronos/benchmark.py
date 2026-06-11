@@ -140,6 +140,30 @@ def _record_phase_duration(
         phase_timings[name] = round(time.perf_counter() - start, 3)
 
 
+def _sample_current_system_ram() -> tuple[float, float]:
+    try:
+        mem = psutil.virtual_memory()
+    except Exception:
+        return 0.0, 0.0
+    used_bytes = max(0, mem.total - mem.available)
+    percent = (used_bytes / mem.total * 100) if mem.total else 0.0
+    return used_bytes / (1024 ** 3), percent
+
+
+def _unavailable_thermal_summary() -> dict:
+    return {
+        "sample_interval_seconds": DEFAULT_THERMAL_SAMPLE_INTERVAL,
+        "source": "unavailable",
+        "start_state": "unavailable_tracker_error",
+        "end_state": "unavailable_tracker_error",
+        "worst_state": "unavailable_tracker_error",
+        "samples": 1,
+        "changed_during_run": False,
+        "non_nominal_observed": False,
+        "non_nominal_phases": [],
+    }
+
+
 def _log_thermal_monitor_warnings(summary: dict) -> None:
     source = summary.get("source")
     if source == "unavailable":
@@ -513,20 +537,44 @@ def run_benchmark(
     finally:
         thermal_tracker.set_phase("teardown")
         if ram_tracker:
-            peak_ram_gb = ram_tracker.stop()
-            logger.info(
-                "Diagnostic engine RSS sampling finished. Peak detected: "
-                f"{peak_ram_gb:.2f} GB"
-            )
+            try:
+                peak_ram_gb = ram_tracker.stop()
+                logger.info(
+                    "Diagnostic engine RSS sampling finished. Peak detected: "
+                    f"{peak_ram_gb:.2f} GB"
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Diagnostic engine RSS sampling failed during teardown: %s",
+                    exc,
+                )
+                peak_ram_gb = None
+                ram_is_process_rss = False
         else:
             ram_is_process_rss = False
 
-        system_ram_peak_gb, system_ram_peak_percent = system_ram_tracker.stop()
+        try:
+            system_ram_peak_gb, system_ram_peak_percent = system_ram_tracker.stop()
+        except Exception as exc:
+            logger.warning(
+                "System RAM sampling failed during teardown; using current "
+                "system RAM snapshot as fallback: %s",
+                exc,
+            )
+            system_ram_peak_gb, system_ram_peak_percent = _sample_current_system_ram()
         logger.info(
             "System RAM sampling finished. Peak detected: "
             f"{system_ram_peak_gb:.2f} GB ({system_ram_peak_percent:.1f}%)\n"
         )
-        thermal_summary = thermal_tracker.stop()
+        try:
+            thermal_summary = thermal_tracker.stop()
+        except Exception as exc:
+            logger.warning(
+                "Thermal sampling failed during teardown; recording unavailable "
+                "thermal summary: %s",
+                exc,
+            )
+            thermal_summary = _unavailable_thermal_summary()
         phase_timings["total_runtime"] = round(
             time.perf_counter() - total_runtime_start,
             3,

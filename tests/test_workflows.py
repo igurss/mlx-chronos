@@ -100,6 +100,7 @@ def test_leaderboard_compare_recency_uses_full_timestamp():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 
     assert "b.timestamp || b.date" in html
+    assert "dateFromTimestamp" in html
 
 
 def test_leaderboard_hides_internal_protocol_and_condition_noise():
@@ -113,6 +114,9 @@ def test_leaderboard_hides_internal_protocol_and_condition_noise():
     assert "Notes" not in html
     assert "tok/s stddev" in html
     assert "Machine" in html
+    assert "compare-button" not in html
+    assert "Conditions" in html
+    assert "updateShareUrl" in html
 
 
 def test_leaderboard_clean_badge_is_not_blocked_by_integrity_badge():
@@ -120,3 +124,6 @@ def test_leaderboard_clean_badge_is_not_blocked_by_integrity_badge():
 
     assert "const integrityBadges = []" not in html
     assert "return badges.join(\"\")" in html
+    assert "no flags" in html
+    assert "warmup skipped" not in html
+    assert "warmup failure" in html

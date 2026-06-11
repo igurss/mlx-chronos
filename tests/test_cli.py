@@ -669,14 +669,14 @@ def make_sustained_with_baseline_max_tokens(result: dict) -> None:
         ),
         (
             lambda result: result["hardware"].__setitem__("low_power_mode", "on"),
-            "Low Power Mode disabled",
+            "pmset -g custom",
         ),
         (
             lambda result: result["hardware"].__setitem__(
                 "low_power_mode",
                 "unavailable_pmset_not_found",
             ),
-            "Low Power Mode disabled",
+            "pmset -g custom",
         ),
         (
             make_sustained_with_two_trials,
