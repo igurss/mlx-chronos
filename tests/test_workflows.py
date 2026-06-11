@@ -1,8 +1,11 @@
 import json
 from pathlib import Path
 
-from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
-from mlx_chronos.constants import SUSTAINED_THROUGHPUT_MAX_TOKENS
+from mlx_chronos.constants import (
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_THROUGHPUT_MAX_TOKENS,
+)
+from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS as PROTOCOL_DEFAULT
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -47,10 +50,21 @@ def test_leaderboard_index_carries_standard_token_metadata():
     assert isinstance(data["results"], list)
 
 
+def test_protocol_reexports_default_throughput_constant():
+    assert PROTOCOL_DEFAULT == DEFAULT_THROUGHPUT_MAX_TOKENS
+
+
 def test_update_leaderboard_workflow_uses_publishable_result_policy():
     assert "load_publishable_result(path)" in workflow_text(
         "update_leaderboard.yml"
     )
+
+
+def test_result_workflows_use_single_error_handler():
+    for name in ("update_leaderboard.yml", "validate_result.yml"):
+        text = workflow_text(name)
+        assert "import SubmissionError" not in text
+        assert "except SubmissionError" not in text
 
 
 def test_leaderboard_html_does_not_hardcode_standard_token_default():
@@ -60,3 +74,18 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
     assert "standardThroughputMaxTokens" in html
     assert "standardSustainedMaxTokens" in html
     assert "integrity-sealed" in html
+
+
+def test_leaderboard_html_shows_result_load_errors():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert "resultsLoadError" in html
+    assert "Could not load benchmark results from" in html
+    assert "catch (error)" in html
+
+
+def test_leaderboard_clean_badge_is_not_blocked_by_integrity_badge():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert "const integrityBadges = []" in html
+    assert "return integrityBadges.concat(badges).join(\"\")" in html

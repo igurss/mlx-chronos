@@ -1,7 +1,9 @@
+from mlx_chronos.constants import DEFAULT_THROUGHPUT_MAX_TOKENS
+
+
 BASELINE_PROTOCOL_VERSION = "2"
 TTFT_MAX_TOKENS = 1
 WARMUP_MAX_TOKENS = 30
-DEFAULT_THROUGHPUT_MAX_TOKENS = 100
 
 # Prompt pool for cold TTFT. The fixed order is part of the benchmark protocol.
 COLD_PROMPTS = [

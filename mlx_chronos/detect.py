@@ -37,6 +37,7 @@ def get_system_profiler_hardware() -> dict[str, str]:
     return fields
 
 
+@lru_cache(maxsize=1)
 def get_chip_model() -> str:
     """Detect the Apple Silicon chip model (e.g. 'Apple M3 Ultra')."""
     try:
@@ -55,6 +56,7 @@ def get_chip_model() -> str:
     return "unknown"
 
 
+@lru_cache(maxsize=1)
 def get_machine_model() -> str:
     """Return the Mac machine identifier (e.g. 'Mac14,2')."""
     try:

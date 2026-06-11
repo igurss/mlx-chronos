@@ -794,6 +794,7 @@
     let allRows = [];
     let rawSortKey = "tps";
     let rawSortAsc = false;
+    let resultsLoadError = "";
     let visibleOptionalColumns = new Set(["decode_tps", "ttft_cached", "profile"]);
 
     const compareModel = document.getElementById("compare-model");
@@ -833,10 +834,15 @@
           : null;
         renderStandardTokenLabel();
         allRows = rows.map(normalizeRow);
-      } catch {
+        resultsLoadError = "";
+      } catch (error) {
         standardThroughputMaxTokens = null;
         standardSustainedMaxTokens = null;
         renderStandardTokenLabel();
+        const detail = error instanceof Error && error.message
+          ? error.message
+          : "unknown error";
+        resultsLoadError = `Could not load benchmark results from ${RESULTS_INDEX}: ${detail}`;
         allRows = [];
       }
 
@@ -945,6 +951,16 @@
     }
 
     function renderCompare() {
+      if (resultsLoadError) {
+        compareTitle.textContent = "Results unavailable";
+        compareMeta.textContent = resultsLoadError;
+        resultCount.textContent = "0 results";
+        compareBody.innerHTML = "";
+        compareEmpty.textContent = resultsLoadError;
+        compareEmpty.style.display = "block";
+        return;
+      }
+
       const rows = currentCompareRows();
       const selected = [
         profileLabel(compareProfile.value || "baseline"),
@@ -977,6 +993,9 @@
         </tr>
       `).join("");
 
+      compareEmpty.textContent = allRows.length
+        ? "No matching benchmark results yet. Try disabling standard runs or choose a different model/spec."
+        : "No benchmark results are available yet.";
       compareEmpty.style.display = representatives.length ? "none" : "block";
     }
 
@@ -1010,15 +1029,16 @@
     }
 
     function conditionBadges(row) {
+      const integrityBadges = [];
       const badges = [];
+      if (row.integrity === "sealed") {
+        integrityBadges.push(`<span class="badge badge-green">sealed</span>`);
+      }
       if (String(row.engine_version || "").toLowerCase() === "unknown") {
         badges.push(`<span class="badge badge-amber">unknown version</span>`);
       }
       if (!row.is_standard_throughput_tokens) {
         badges.push(`<span class="badge badge-amber">custom tokens</span>`);
-      }
-      if (row.integrity === "sealed") {
-        badges.push(`<span class="badge badge-green">sealed</span>`);
       }
       if (String(row.thermal_state || "").startsWith("unavailable")) {
         badges.push(`<span class="badge badge-gray">thermal unknown</span>`);
@@ -1034,7 +1054,7 @@
       if (!badges.length) {
         badges.push(`<span class="badge badge-green">clean</span>`);
       }
-      return badges.join("");
+      return integrityBadges.concat(badges).join("");
     }
 
     function detailsPanel(row) {
@@ -1110,6 +1130,18 @@
 
     function renderRaw() {
       const columns = visibleRawColumns();
+      if (resultsLoadError) {
+        rawHead.innerHTML = columns.map(column => `
+          <th class="sortable ${rawSortKey === column.sortKey ? "sorted" : ""}" data-sort="${escapeHtml(column.sortKey)}">
+            ${escapeHtml(column.label)}${rawSortKey === column.sortKey ? (rawSortAsc ? " up" : " down") : ""}
+          </th>
+        `).join("");
+        rawBody.innerHTML = "";
+        rawEmpty.textContent = resultsLoadError;
+        rawEmpty.style.display = "block";
+        return;
+      }
+
       const rows = rawRows().slice().sort(compareRawRows);
 
       rawHead.innerHTML = columns.map(column => `
@@ -1124,6 +1156,9 @@
         </tr>
       `).join("");
 
+      rawEmpty.textContent = allRows.length
+        ? "No rows match the current filters."
+        : "No benchmark results are available yet.";
       rawEmpty.style.display = rows.length ? "none" : "block";
     }
 

@@ -35,7 +35,7 @@ jobs:
           import subprocess
           import sys
           from pathlib import Path
-          from mlx_chronos.submit import SubmissionError, load_publishable_result
+          from mlx_chronos.submit import load_publishable_result
 
           def get_changed_files() -> list[str]:
               target_branch = os.environ.get("TARGET_BRANCH", "origin/main")
@@ -116,9 +116,6 @@ jobs:
                   load_publishable_result(path)
 
                   print(f"OK: {path.name}")
-              except SubmissionError as e:
-                  print(f"FAIL: {path.name} - {e}")
-                  errors.append(path.name)
               except Exception as e:
                   print(f"FAIL: {path.name} - {e}")
                   errors.append(path.name)

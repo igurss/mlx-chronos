@@ -5,6 +5,7 @@ import httpx
 from pydantic import ValidationError
 
 from mlx_chronos.constants import (
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
     PHASE_TIMING_TOLERANCE_SECONDS,
     PUBLIC_LEADERBOARD_MIN_TRIALS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
@@ -12,7 +13,7 @@ from mlx_chronos.constants import (
     TOKEN_COUNT_SOURCE_USAGE,
 )
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
-from mlx_chronos.protocol import BASELINE_PROTOCOL_VERSION, DEFAULT_THROUGHPUT_MAX_TOKENS
+from mlx_chronos.protocol import BASELINE_PROTOCOL_VERSION
 from mlx_chronos.schema import BenchmarkResult
 
 

@@ -20,7 +20,6 @@ from mlx_chronos.benchmark import (
 )
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
-from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
 from mlx_chronos.reporters import JSONReporter, MarkdownReporter
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
@@ -33,6 +32,7 @@ from mlx_chronos.submit import (
 )
 from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
     MAX_TRIALS,
     RECENT_BENCHMARK_WARNING_SECONDS,
 )

@@ -10,6 +10,7 @@ from typing import get_args
 from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THERMAL_SAMPLE_INTERVAL,
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
     MAX_TRIALS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
@@ -32,7 +33,6 @@ from mlx_chronos.measurements import (
 from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
-    DEFAULT_THROUGHPUT_MAX_TOKENS,
     THROUGHPUT_PROMPT,
     WARMUP_MAX_TOKENS,
     build_benchmark_protocol,

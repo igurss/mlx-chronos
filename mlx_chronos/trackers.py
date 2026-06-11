@@ -29,7 +29,7 @@ class RAMTracker:
     def __init__(
         self,
         interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
-        target_pid: int = None,
+        target_pid: int | None = None,
     ):
         self.pid = target_pid or os.getpid()
         self.interval = interval

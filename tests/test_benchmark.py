@@ -13,12 +13,11 @@ from mlx_chronos.benchmark import (
 from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
-    DEFAULT_THROUGHPUT_MAX_TOKENS,
     THROUGHPUT_PROMPT,
     TTFT_MAX_TOKENS,
     WARMUP_MAX_TOKENS,
 )
-from mlx_chronos.constants import MAX_TRIALS
+from mlx_chronos.constants import DEFAULT_THROUGHPUT_MAX_TOKENS, MAX_TRIALS
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.integrity import validate_integrity_seal
 from mlx_chronos.measurements import ThroughputMeasurement

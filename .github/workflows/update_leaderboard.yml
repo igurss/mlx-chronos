@@ -32,9 +32,11 @@ jobs:
           import sys
           from pathlib import Path
 
-          from mlx_chronos.constants import SUSTAINED_THROUGHPUT_MAX_TOKENS
-          from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS
-          from mlx_chronos.submit import SubmissionError, load_publishable_result
+          from mlx_chronos.constants import (
+              DEFAULT_THROUGHPUT_MAX_TOKENS,
+              SUSTAINED_THROUGHPUT_MAX_TOKENS,
+          )
+          from mlx_chronos.submit import load_publishable_result
 
           results_dir = Path("results/submitted")
           index = []
@@ -119,8 +121,6 @@ jobs:
                       "date": meta["timestamp"][:10],
                       "notes": meta.get("notes"),
                   })
-              except SubmissionError as e:
-                  errors.append(f"{path.name}: {e}")
               except Exception as e:
                   errors.append(f"{path.name}: {e}")
 

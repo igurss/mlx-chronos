@@ -2,6 +2,8 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from mlx_chronos.detect import (
     get_benchmark_condition_warnings,
     get_architecture,
@@ -13,6 +15,17 @@ from mlx_chronos.detect import (
     get_thermal_state,
     get_thermal_state_from_foundation,
 )
+
+
+@pytest.fixture(autouse=True)
+def clear_detect_caches():
+    get_system_profiler_hardware.cache_clear()
+    get_chip_model.cache_clear()
+    get_machine_model.cache_clear()
+    yield
+    get_system_profiler_hardware.cache_clear()
+    get_chip_model.cache_clear()
+    get_machine_model.cache_clear()
 
 
 def test_thermal_state_uses_foundation_when_available(monkeypatch):
@@ -50,8 +63,6 @@ def test_get_architecture(monkeypatch):
 
 
 def test_chip_and_machine_model_fallback_to_system_profiler(monkeypatch):
-    get_system_profiler_hardware.cache_clear()
-
     calls = []
 
     def fake_run(cmd, **kwargs):
@@ -73,7 +84,26 @@ def test_chip_and_machine_model_fallback_to_system_profiler(monkeypatch):
     assert get_machine_model() == "Mac14,2"
     assert calls.count(["system_profiler", "SPHardwareDataType"]) == 1
 
-    get_system_profiler_hardware.cache_clear()
+
+def test_chip_and_machine_model_are_cached(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd == ["sysctl", "-n", "machdep.cpu.brand_string"]:
+            return MagicMock(stdout="Apple M2\n")
+        if cmd == ["sysctl", "-n", "hw.model"]:
+            return MagicMock(stdout="Mac14,2\n")
+        return MagicMock(stdout="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    assert get_chip_model() == "Apple M2"
+    assert get_chip_model() == "Apple M2"
+    assert get_machine_model() == "Mac14,2"
+    assert get_machine_model() == "Mac14,2"
+    assert calls.count(["sysctl", "-n", "machdep.cpu.brand_string"]) == 1
+    assert calls.count(["sysctl", "-n", "hw.model"]) == 1
 
 
 def test_benchmark_condition_warnings_for_non_nominal_conditions():
