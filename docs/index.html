@@ -13,7 +13,9 @@
         savedTheme = null;
       }
       const preferredTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-      document.documentElement.dataset.theme = savedTheme || preferredTheme;
+      document.documentElement.dataset.theme = ["dark", "light"].includes(savedTheme)
+        ? savedTheme
+        : preferredTheme;
     })();
   </script>
   <style>
@@ -169,14 +171,6 @@
       opacity: 0.82;
     }
 
-    .eyebrow {
-      color: var(--blue-hot);
-      font-size: 0.86rem;
-      font-weight: 600;
-      letter-spacing: 0;
-      margin-bottom: 8px;
-    }
-
     h1 {
       font-size: clamp(2.1rem, 4vw, 4.4rem);
       line-height: 1.02;
@@ -223,6 +217,8 @@
     }
 
     .header-tools {
+      position: relative;
+      z-index: 2;
       display: flex;
       gap: 12px;
       justify-content: flex-end;
@@ -286,17 +282,15 @@
       cursor: pointer;
     }
 
-    .theme-switch input {
-      position: absolute;
-      inline-size: 1px;
-      block-size: 1px;
-      opacity: 0;
-    }
-
     .theme-word {
       color: rgba(244, 248, 255, 0.72);
       font-size: 0.74rem;
       font-weight: 760;
+    }
+
+    .theme-switch[data-theme="light"] .theme-word-light,
+    .theme-switch[data-theme="dark"] .theme-word-dark {
+      color: #ffffff;
     }
 
     .theme-track {
@@ -322,20 +316,15 @@
       transition: transform 160ms ease, background 160ms ease;
     }
 
-    .theme-switch input:checked + .theme-track {
+    .theme-switch[data-theme="dark"] .theme-track {
       background: rgba(22, 139, 255, 0.38);
       border-color: rgba(112, 189, 255, 0.58);
     }
 
-    .theme-switch input:checked + .theme-track .theme-thumb {
+    .theme-switch[data-theme="dark"] .theme-thumb {
       transform: translateX(22px);
       background: var(--blue-hot);
       box-shadow: 0 0 18px rgba(47, 152, 255, 0.76);
-    }
-
-    .theme-switch input:focus-visible + .theme-track {
-      outline: 3px solid rgba(112, 189, 255, 0.36);
-      outline-offset: 2px;
     }
 
     .chrono-mark {
@@ -343,6 +332,8 @@
       justify-self: stretch;
       min-height: 176px;
       position: relative;
+      z-index: 1;
+      pointer-events: none;
     }
 
     .gauge {
@@ -697,7 +688,7 @@
       right: 0;
       top: calc(100% + 8px);
       z-index: 3;
-      width: 260px;
+      width: min(360px, calc(100vw - 48px));
       max-height: 380px;
       overflow: auto;
       background: var(--surface);
@@ -710,16 +701,36 @@
     .column-option {
       display: flex;
       gap: 8px;
-      align-items: center;
-      min-height: 34px;
-      padding: 0 8px;
+      align-items: flex-start;
+      min-height: 44px;
+      padding: 8px;
       border-radius: 6px;
       color: var(--text);
       font-size: 0.86rem;
+      line-height: 1.3;
     }
 
     .column-option:hover {
       background: var(--surface-muted);
+    }
+
+    .column-option input {
+      margin-top: 2px;
+      flex: 0 0 auto;
+    }
+
+    .column-copy {
+      display: grid;
+      gap: 2px;
+    }
+
+    .column-name {
+      font-weight: 720;
+    }
+
+    .column-description {
+      color: var(--muted);
+      font-size: 0.76rem;
     }
 
     .sortable {
@@ -831,7 +842,6 @@
   <div class="shell">
     <header>
       <div class="hero-copy">
-        <div class="eyebrow">mlx-Chronos</div>
         <h1>
           <span class="brand-name">mlx-Chronos</span>
           <span class="headline-tail">Engine leaderboard for Apple Silicon.</span>
@@ -847,14 +857,13 @@
             <a class="link-button" href="https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md">Methodology</a>
             <a class="link-button" href="https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md">Submit</a>
           </nav>
-          <label class="theme-switch" for="theme-toggle">
-            <span class="theme-word">Light</span>
-            <input id="theme-toggle" type="checkbox" role="switch" aria-label="Use dark theme" />
+          <button class="theme-switch" id="theme-toggle" type="button" role="switch" aria-checked="false" aria-label="Toggle color theme">
+            <span class="theme-word theme-word-light" aria-hidden="true">Light</span>
             <span class="theme-track" aria-hidden="true">
               <span class="theme-thumb"></span>
             </span>
-            <span class="theme-word">Dark</span>
-          </label>
+            <span class="theme-word theme-word-dark" aria-hidden="true">Dark</span>
+          </button>
         </div>
         <div class="chrono-mark" aria-hidden="true">
           <div class="gauge">
@@ -1027,6 +1036,7 @@
       {
         key: "decode_tps",
         label: "Decode tok/s",
+        description: "Tokens per second during decode/generation only, when the engine exposes that timing.",
         sortKey: "decode_tps",
         numeric: true,
         value: row => fmt(row.decode_tps, 2),
@@ -1034,6 +1044,7 @@
       {
         key: "ttft_cached",
         label: "TTFT cached",
+        description: "First-token latency after cache priming, useful for follow-up conversational turns.",
         sortKey: "ttft_cached",
         numeric: true,
         value: row => `${fmt(row.ttft_cached, 3)} s`,
@@ -1041,6 +1052,7 @@
       {
         key: "tps_stddev",
         label: "tok/s stddev",
+        description: "Standard deviation of throughput; lower means the run was more consistent across trials.",
         sortKey: "tps_stddev",
         numeric: true,
         value: row => fmt(row.tps_stddev, 3),
@@ -1048,30 +1060,35 @@
       {
         key: "profile",
         label: "Profile",
+        description: "Publishable workload type: Baseline for short runs, Sustained for longer load tests.",
         sortKey: "benchmark_profile",
         value: row => profileLabel(row.benchmark_profile),
       },
       {
         key: "thermal",
         label: "Thermal",
+        description: "macOS thermal state captured during the run; non-nominal values can indicate throttling risk.",
         sortKey: "thermal_state",
         value: row => conditionValue(row.thermal_state),
       },
       {
         key: "machine",
         label: "Machine",
+        description: "System machine identifier, useful for separating similar chips across Mac generations.",
         sortKey: "machine_model",
         value: row => escapeHtml(row.machine_model),
       },
       {
         key: "engine_version",
         label: "Engine version",
+        description: "Inference engine version used for the run, when detectable.",
         sortKey: "engine_version",
         value: row => escapeHtml(row.engine_version),
       },
       {
         key: "trials",
         label: "Trials",
+        description: "Number of benchmark measurements aggregated into the published result.",
         sortKey: "trials",
         numeric: true,
         value: row => escapeHtml(row.trials),
@@ -1079,6 +1096,7 @@
       {
         key: "quantization",
         label: "Quant",
+        description: "Model quantization or format declared in the result, when available.",
         sortKey: "quantization",
         value: row => escapeHtml(row.quantization),
       },
@@ -1113,7 +1131,14 @@
     function setTheme(theme, persist = false) {
       const normalized = theme === "dark" ? "dark" : "light";
       document.documentElement.dataset.theme = normalized;
-      if (themeToggle) themeToggle.checked = normalized === "dark";
+      if (themeToggle) {
+        themeToggle.dataset.theme = normalized;
+        themeToggle.setAttribute("aria-checked", String(normalized === "dark"));
+        themeToggle.setAttribute(
+          "aria-label",
+          normalized === "dark" ? "Switch to light theme" : "Switch to dark theme",
+        );
+      }
       if (!persist) return;
       try {
         localStorage.setItem("mlxChronosTheme", normalized);
@@ -1401,7 +1426,10 @@
       columnsPopover.innerHTML = OPTIONAL_RAW_COLUMNS.map(column => `
         <label class="column-option">
           <input type="checkbox" value="${escapeHtml(column.key)}" ${visibleOptionalColumns.has(column.key) ? "checked" : ""} />
-          ${escapeHtml(column.label)}
+          <span class="column-copy">
+            <span class="column-name">${escapeHtml(column.label)}</span>
+            <span class="column-description">${escapeHtml(column.description)}</span>
+          </span>
         </label>
       `).join("");
     }
@@ -1673,8 +1701,11 @@
       }
       renderRaw();
     });
-    themeToggle.addEventListener("change", () => {
-      setTheme(themeToggle.checked ? "dark" : "light", true);
+    themeToggle.addEventListener("click", () => {
+      setTheme(
+        document.documentElement.dataset.theme === "dark" ? "light" : "dark",
+        true,
+      );
     });
 
     loadResults();

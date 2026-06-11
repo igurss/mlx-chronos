@@ -108,6 +108,7 @@ def test_leaderboard_has_persistent_theme_toggle():
 
     assert 'id="theme-toggle"' in html
     assert 'role="switch"' in html
+    assert 'aria-checked="false"' in html
     assert "mlxChronosTheme" in html
     assert "document.documentElement.dataset.theme" in html
 
