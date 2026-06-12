@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.1] — 2026-06-12
+
+Patch release focused on engine adapter correctness after validating `0.2.0`
+against real local servers. It does not change the result schema, public
+leaderboard policy, or internal benchmark compatibility label.
+
+### Bug Fixes
+- Recognize `omlx-server` as a valid oMLX listener process, avoiding false
+  "server is not running" errors with current oMLX releases.
+- Resolve local mlx-lm model aliases so a server started from a local model path
+  can still be benchmarked with the user-facing short model name.
+- Accept the current vllm-mlx `/health` response shape that reports
+  `status=healthy`, `ready=true`, and a loaded `model_name`, instead of
+  requiring only the older `available_models` health payload.
+- Avoid printing the cached-TTFT warning twice for the same benchmark run.
+
 ## [0.2.0] — 2026-06-12
 
 Minor release focused on making the public leaderboard stricter, cleaner, and

@@ -20,7 +20,7 @@ try:
 except PackageNotFoundError:
     _installed_version = None
 
-__version__ = _source_tree_version() or _installed_version or "0.2.0"
+__version__ = _source_tree_version() or _installed_version or "0.2.1"
 
 __all__ = ["__version__", "run_benchmark"]
 

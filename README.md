@@ -128,9 +128,9 @@ engine version, and quantization.
 
 ## Current Release
 
-`0.2.0` tightens public leaderboard comparability, adds vllm-mlx support,
-refreshes the leaderboard UI, and makes benchmark request semantics explicit in
-result metadata.
+`0.2.1` keeps the stricter `0.2` public leaderboard format and fixes engine
+adapter compatibility for oMLX, mlx-lm, and vllm-mlx discovered during
+real-server validation.
 
 ---
 
