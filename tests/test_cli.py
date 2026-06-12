@@ -8,7 +8,14 @@ from pathlib import Path
 from unittest.mock import patch
 from argparse import Namespace
 from mlx_chronos import __version__ as VERSION
-from mlx_chronos.cli import cmd_models, cmd_run, cmd_submit, cmd_validate, main
+from mlx_chronos.cli import (
+    _emit_result_warnings,
+    cmd_models,
+    cmd_run,
+    cmd_submit,
+    cmd_validate,
+    main,
+)
 from mlx_chronos.constants import (
     MAX_TRIALS,
     PUBLIC_BASELINE_TRIALS,
@@ -594,6 +601,12 @@ def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
 
     assert exc.value.code == 1
     assert "usage.completion_tokens" in capsys.readouterr().err
+
+
+def test_emit_result_warnings_does_not_duplicate_cached_ttft_warning(capsys):
+    _emit_result_warnings({"meta": {"cached_ttft_warning": True}})
+
+    assert "cached TTFT" not in capsys.readouterr().err
 
 
 def test_load_publishable_result_rejects_tampered_integrity(tmp_path):

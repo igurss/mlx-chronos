@@ -128,12 +128,6 @@ def _emit_result_warnings(result: dict) -> None:
             "thermal state changed or became non-nominal.",
             file=sys.stderr,
         )
-    if meta.get("cached_ttft_warning"):
-        print(
-            "Warning: cached TTFT is close to cold TTFT. The engine may not "
-            "have reused a prompt/KV cache for this run.",
-            file=sys.stderr,
-        )
 
 
 def cmd_run(args):
