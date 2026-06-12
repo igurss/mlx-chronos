@@ -271,9 +271,3 @@ def detect_hardware() -> dict:
         "power_source": get_power_source(),
         "low_power_mode": get_low_power_mode(),
     }
-
-
-if __name__ == "__main__":
-    import json
-    info = detect_hardware()
-    print(json.dumps(info, indent=2))

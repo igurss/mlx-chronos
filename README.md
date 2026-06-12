@@ -126,10 +126,10 @@ engine version, and quantization.
 
 ---
 
-## Current Development State
+## Current Release Preparation
 
-`main` currently identifies itself as `0.2.0.dev0` while the next stable release
-is prepared. The latest published stable release remains `0.1.3`.
+`main` is prepared as `0.2.0`. No release tag is created by this change; publish
+the release only after final review.
 
 ---
 
@@ -178,6 +178,9 @@ Optional thermal-state support through macOS Foundation can be installed with
 `MLX_CHRONOS_<ENGINE>_PORT`, for example
 `MLX_CHRONOS_OMLX_PORT=8002`, `MLX_CHRONOS_VLLM_MLX_PORT=8003`, or
 `MLX_CHRONOS_MLX_LM_PORT=8002`.
+oMLX and vllm-mlx both default to port 8000. To avoid mislabeling results,
+mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot
+be inspected, oMLX validation may fail even when `/v1/models` responds.
 
 ---
 

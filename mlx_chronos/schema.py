@@ -795,12 +795,3 @@ def dump_benchmark_result(result: BenchmarkResult) -> dict:
         if isinstance(stats, dict) and stats.get("p95") is None:
             stats.pop("p95", None)
     return data
-
-
-if __name__ == "__main__":
-    import json
-    from mlx_chronos.examples import EXAMPLE_RESULT
-
-    result = BenchmarkResult(**EXAMPLE_RESULT)
-    print(json.dumps(dump_benchmark_result(result), indent=2))
-    print("\nSchema validation: OK")

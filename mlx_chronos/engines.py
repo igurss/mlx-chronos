@@ -1070,13 +1070,3 @@ def get_engine(name: str) -> BaseEngine:
     if name not in ENGINES:
         raise ValueError(f"Unknown engine: '{name}'. Available: {list(ENGINES.keys())}")
     return ENGINES[name]()
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-
-    for name, cls in ENGINES.items():
-        engine = cls()
-        installed = engine.is_installed()
-        running = engine.is_server_running() if installed else False
-        status = "running" if running else ("installed" if installed else "not installed")
-        logger.info(f"{name:<15} {status}")

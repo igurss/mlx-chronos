@@ -89,6 +89,16 @@ def test_result_workflows_use_single_error_handler():
         assert "except SubmissionError" not in text
 
 
+def test_library_modules_do_not_expose_debug_main_blocks():
+    for path in (
+        ROOT / "mlx_chronos" / "benchmark.py",
+        ROOT / "mlx_chronos" / "detect.py",
+        ROOT / "mlx_chronos" / "engines.py",
+        ROOT / "mlx_chronos" / "schema.py",
+    ):
+        assert 'if __name__ == "__main__"' not in path.read_text(encoding="utf-8")
+
+
 def test_leaderboard_html_does_not_hardcode_standard_token_default():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 

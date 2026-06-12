@@ -271,6 +271,17 @@ If detection fails, the result records `unknown` instead of blocking the run.
 Results also set `meta.engine_version_warning=true` so local reports and
 the public leaderboard can call out the comparability risk.
 
+### Engine Server Identity Checks
+mlx-Chronos checks more than `/v1/models` for engines that can be confused with
+another server on the same port. oMLX and vllm-mlx both default to port 8000, so
+oMLX validation also checks the listening process with `lsof` and requires it to
+match the expected oMLX process name. This prevents accidentally labeling a
+vllm-mlx server as oMLX. If macOS blocks `lsof`, permissions are restricted, or
+the listener cannot be inspected, `mlx-chronos validate` / `run` may report that
+the oMLX server is not running even though `/v1/models` responds. In that case,
+verify the process on the port, adjust permissions, or move the server to a
+known port and set `MLX_CHRONOS_OMLX_PORT`.
+
 Performance is heavily impacted by memory pressure (e.g., 7GB used out of 8GB
 causes swapping and slows down inference, whereas 7GB used out of 16GB does
 not). System RAM peak helps explain performance variances between identical

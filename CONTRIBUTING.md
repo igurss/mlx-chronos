@@ -68,6 +68,10 @@ You can override a port with an environment variable such as
 `MLX_CHRONOS_VLLM_MLX_PORT=8003` or `MLX_CHRONOS_MLX_LM_PORT=8002`.
 oMLX and vllm-mlx both default to port 8000, so run only one of them on that
 port at a time, or move one server and set the matching environment variable.
+For oMLX, mlx-Chronos also checks the listening process with `lsof` to avoid
+mistaking another OpenAI-compatible server on port 8000 for oMLX. If `lsof`
+cannot inspect the listener, validation may report that oMLX is not running even
+when `/v1/models` responds.
 
 **3. Run the benchmark**
 ```bash

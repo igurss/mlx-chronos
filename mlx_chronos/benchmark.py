@@ -1,7 +1,5 @@
-import json
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
-from pathlib import Path
 import logging
 import psutil
 import time
@@ -734,23 +732,3 @@ def run_benchmark(
     # Validate against schema before returning
     validated = dump_benchmark_result(BenchmarkResult(**result))
     return seal_result(validated)
-
-
-if __name__ == "__main__":
-    from mlx_chronos.reporters import JSONReporter
-
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
-    
-    result = run_benchmark(
-        engine_name="omlx",
-        model_name="Qwen3.5-4B-OptiQ-4bit",
-        model_quantization="4bit",
-        trials=5,
-        notes="Test run — unique cold prompts per trial"
-    )
-
-    reporter = JSONReporter()
-    path = reporter.save(result, Path.cwd() / "results" / "local")
-
-    logger.info("\n--- Result ---")
-    logger.info(json.dumps(result, indent=2))

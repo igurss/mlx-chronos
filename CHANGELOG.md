@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.2.0] — 2026-06-12
 
 ### Reliability
 - Move the internal benchmark compatibility label to `3` and reuse one

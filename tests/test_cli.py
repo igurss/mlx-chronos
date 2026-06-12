@@ -3,6 +3,7 @@ import sys
 import json
 import copy
 import logging
+import re
 from pathlib import Path
 from unittest.mock import patch
 from argparse import Namespace
@@ -122,6 +123,15 @@ def test_main_version_command(capsys):
 
     assert exc.value.code == 0
     assert f"mlx-chronos {VERSION}" in capsys.readouterr().out
+
+
+def test_package_version_matches_pyproject():
+    project_root = Path(__file__).resolve().parent.parent
+    pyproject = (project_root / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+
+    assert match is not None
+    assert VERSION == match.group(1)
 
 def test_main_engines_command():
     with patch.object(sys, "argv", ["mlx-chronos", "engines"]):
