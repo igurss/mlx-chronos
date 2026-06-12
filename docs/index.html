@@ -1095,14 +1095,6 @@
         value: row => escapeHtml(row.engine_version),
       },
       {
-        key: "trials",
-        label: "Trials",
-        description: "Number of benchmark measurements aggregated into the published result.",
-        sortKey: "trials",
-        numeric: true,
-        value: row => escapeHtml(row.trials),
-      },
-      {
         key: "quantization",
         label: "Quant",
         description: "Model quantization or format declared in the result, when available.",
@@ -1414,7 +1406,6 @@
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],
         ["Machine", row.machine_model],
-        ["Trials", row.trials],
         ["Warmup failures", row.warmup_failures ?? 0],
         ["Stddev tok/s", row.tps_stddev == null ? "-" : fmt(row.tps_stddev, 3)],
         ["Date", row.date],

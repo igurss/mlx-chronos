@@ -79,7 +79,6 @@ jobs:
                       "system_ram_peak_gb": met["system_ram_peak_gb"],
                       "system_ram_peak_percent": met["system_ram_peak_percent"],
                       "thermal_state": hw["thermal_state"],
-                      "trials": tri["count"],
                       "warmup_failures": meta["warmup_failures"],
                       "chronos_version": meta["chronos_version"],
                       "timestamp": meta["timestamp"],

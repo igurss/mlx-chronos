@@ -116,11 +116,11 @@ other parameters for diagnostics. These records remain useful locally, but they
 are not automatically publishable.
 
 The public leaderboard is intentionally stricter than the local runner. It
-accepts standard baseline submissions with at least 5 trials, `max_tokens=100`,
+accepts standard baseline submissions with exactly 5 trials, `max_tokens=100`,
 no requested `min_tokens`, and `usage.completion_tokens` token counts. It also
-accepts standard sustained submissions with 1 trial, `max_tokens=1000`, no
-requested `min_tokens`, and usage-based token counts. macOS Low Power Mode must
-be disabled. GitHub Actions validates this policy before generating the
+accepts standard sustained submissions with exactly 1 trial, `max_tokens=1000`,
+no requested `min_tokens`, and usage-based token counts. macOS Low Power Mode
+must be disabled. GitHub Actions validates this policy before generating the
 leaderboard index, so every displayed row is already a public-comparable run.
 Baseline and sustained rows are kept as separate profile choices in the
 leaderboard UI.
@@ -131,7 +131,7 @@ changes the default run shape to one trial and a long throughput request:
 `max_tokens=1000`. Users can still override `--trials` or `--max-tokens`
 explicitly.
 The standard sustained profile is accepted into the public leaderboard as a
-separate profile from baseline. Sustained runs with custom trial counts,
+separate profile from baseline. Runs with custom public-profile trial counts,
 custom `max_tokens`, or requested `min_tokens` are local diagnostics only.
 
 During sustained throughput, mlx-Chronos records
@@ -329,8 +329,8 @@ To reproduce a result:
 2. Use the same model name and quantization
 3. Run on the same hardware (chip + memory)
 4. Ensure no other GPU-intensive processes are running
-5. Run `mlx-chronos run` with default trial count (5), or use the same explicit
-   trial count when comparing larger runs
+5. Run `mlx-chronos run` with the standard public trial count for the selected
+   profile: 5 for baseline or 1 for sustained
 6. Check the JSON with `mlx-chronos submit --file results/local/your-result.json --dry-run`
 7. Submit only standard baseline or standard sustained results with token
    source `usage.completion_tokens` and Low Power Mode disabled
@@ -338,7 +338,7 @@ To reproduce a result:
 Custom local runs are still valid local benchmark records, but do not submit
 them to `results/submitted/`; the public validator rejects non-standard token
 bounds, requested `min_tokens`, fallback token estimates, Low Power Mode runs,
-and non-standard sustained trial counts.
+and non-standard public-profile trial counts.
 
 Results may vary slightly across runs due to thermal state, battery/Low Power
 Mode behavior, and system load. This is expected and reflected in the stddev

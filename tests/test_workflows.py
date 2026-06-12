@@ -67,6 +67,7 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
     assert '"is_standard_throughput_tokens"' not in text
     assert '"throughput_max_tokens"' not in text
     assert '"throughput_min_tokens"' not in text
+    assert '"trials": tri["count"]' not in text
 
 
 def test_result_workflows_use_single_error_handler():
@@ -141,6 +142,8 @@ def test_leaderboard_hides_internal_protocol_and_condition_noise():
     assert "Max tokens" not in html
     assert "tok/s stddev" in html
     assert "Machine" in html
+    assert 'label: "Trials"' not in html
+    assert '["Trials"' not in html
     assert "compare-button" not in html
     assert "Conditions" in html
     assert "updateShareUrl" in html

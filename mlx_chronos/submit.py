@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from mlx_chronos.constants import (
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     PHASE_TIMING_TOLERANCE_SECONDS,
-    PUBLIC_LEADERBOARD_MIN_TRIALS,
+    PUBLIC_BASELINE_TRIALS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
     TOKEN_COUNT_SOURCE_USAGE,
@@ -84,10 +84,10 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
         )
 
     if profile == PUBLIC_PROFILE_BASELINE:
-        if result.trials.count < PUBLIC_LEADERBOARD_MIN_TRIALS:
+        if result.trials.count != PUBLIC_BASELINE_TRIALS:
             raise SubmissionError(
-                "baseline leaderboard submissions must include at least "
-                f"{PUBLIC_LEADERBOARD_MIN_TRIALS} trials; got {result.trials.count}"
+                "baseline leaderboard submissions must use the standard baseline "
+                f"trial count ({PUBLIC_BASELINE_TRIALS}); got {result.trials.count}"
             )
         if (
             requested_max_tokens is not None

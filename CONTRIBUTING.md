@@ -93,8 +93,8 @@ for your own diagnostics.
 
 Public leaderboard submissions are stricter. They must use
 `usage.completion_tokens` as the throughput token-count source and one of the
-standard profiles: `baseline` with at least 5 trials and
-`requested_max_tokens=100`, or `sustained` with 1 trial and
+standard profiles: `baseline` with exactly 5 trials and
+`requested_max_tokens=100`, or `sustained` with exactly 1 trial and
 `requested_max_tokens=1000`. Neither profile may request `min_tokens`, and
 macOS Low Power Mode must be disabled. If your JSON says
 `"token_count_source": "word_fallback"` or `"mixed"`, keep it as a local result

@@ -116,7 +116,7 @@ Compare submitted results by model, chip, and RAM:
 The default view compares engines for a selected model and Mac configuration.
 The raw-data view keeps the submitted rows available with optional columns for
 useful comparison metadata such as profile, thermal state, exact machine model,
-engine version, trial count, and quantization.
+engine version, and quantization.
 
 ---
 
@@ -203,11 +203,11 @@ comparable while leaving the local tool useful for experiments.
 
 Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens` and keep one of the standard profiles: baseline with
-at least 5 trials and `max_tokens=100`, or sustained with 1 trial and
+exactly 5 trials and `max_tokens=100`, or sustained with exactly 1 trial and
 `max_tokens=1000`. Neither profile may request `min_tokens`, and macOS Low
 Power Mode must be disabled. Custom local runs, fallback token estimates, custom
-token bounds, custom sustained trial counts, or Low Power Mode runs can still be
-saved locally, but they are not accepted into the public leaderboard.
+token bounds, custom public-profile trial counts, or Low Power Mode runs can
+still be saved locally, but they are not accepted into the public leaderboard.
 
 Do not edit submitted JSON by hand after the run. Public submissions include an
 `integrity` seal over the canonical result payload; changing any benchmark field

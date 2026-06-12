@@ -10,6 +10,7 @@ from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import cmd_models, cmd_run, cmd_submit, cmd_validate, main
 from mlx_chronos.constants import (
     MAX_TRIALS,
+    PUBLIC_BASELINE_TRIALS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
 )
@@ -622,6 +623,34 @@ def shrink_result_to_four_trials(result: dict) -> None:
     resize_result_trials(result, 4)
 
 
+def expand_result_to_six_trials(result: dict) -> None:
+    for key in (
+        "ttft_cold_raw",
+        "ttft_cached_raw",
+        "tokens_per_second_raw",
+        "throughput_elapsed_seconds_raw",
+        "decode_tokens_per_second_raw",
+        "completion_tokens_raw",
+    ):
+        result["trials"][key].append(result["trials"][key][-1])
+    if result["trials"].get("throughput_progress_samples_raw") is not None:
+        result["trials"]["throughput_progress_samples_raw"].append(
+            copy.deepcopy(result["trials"]["throughput_progress_samples_raw"][-1])
+        )
+    result["trials"]["count"] = PUBLIC_BASELINE_TRIALS + 1
+    result["metrics"]["ttft_cold"] = compute_stats(result["trials"]["ttft_cold_raw"])
+    result["metrics"]["ttft_cached"] = compute_stats(result["trials"]["ttft_cached_raw"])
+    throughput_stats = compute_stats(result["trials"]["tokens_per_second_raw"])
+    result["metrics"]["tokens_per_second"] = throughput_stats
+    result["metrics"]["request_tokens_per_second"] = throughput_stats
+    result["metrics"]["decode_tokens_per_second"] = compute_stats(
+        result["trials"]["decode_tokens_per_second_raw"]
+    )
+    extra_elapsed = result["trials"]["throughput_elapsed_seconds_raw"][-1]
+    result["meta"]["phase_timings_seconds"]["throughput"] += extra_elapsed
+    result["meta"]["phase_timings_seconds"]["total_runtime"] += extra_elapsed
+
+
 def make_standard_sustained_result(result: dict) -> None:
     resize_result_trials(result, SUSTAINED_TRIALS)
     result["meta"]["benchmark_profile"] = "sustained"
@@ -651,7 +680,11 @@ def make_sustained_with_baseline_max_tokens(result: dict) -> None:
     [
         (
             shrink_result_to_four_trials,
-            "baseline leaderboard submissions must include at least 5 trials",
+            "baseline leaderboard submissions must use the standard baseline trial count",
+        ),
+        (
+            expand_result_to_six_trials,
+            "baseline leaderboard submissions must use the standard baseline trial count",
         ),
         (
             lambda result: result["meta"]["benchmark_protocol"]["throughput"].__setitem__(
