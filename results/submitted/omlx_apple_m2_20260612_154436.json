@@ -1,0 +1,258 @@
+{
+  "hardware": {
+    "chip": "Apple M2",
+    "machine_model": "Mac14,2",
+    "memory_gb": 8.0,
+    "macos_version": "26.5.1",
+    "python_version": "3.14.5",
+    "architecture": "arm64",
+    "thermal_state": "nominal",
+    "power_source": "ac_power",
+    "low_power_mode": "off"
+  },
+  "engine": {
+    "name": "omlx",
+    "version": "0.4.3"
+  },
+  "model": {
+    "name": "Qwen3.5-4B-nvfp4",
+    "quantization": "nvfp4",
+    "source": null,
+    "revision": null,
+    "weight_hash": null,
+    "tokenizer_hash": null,
+    "chat_template_hash": null,
+    "architecture": null
+  },
+  "metrics": {
+    "ttft_cold": {
+      "mean": 0.406,
+      "stddev": 0.0,
+      "min": 0.406,
+      "max": 0.406
+    },
+    "ttft_cached": {
+      "mean": 0.418,
+      "stddev": 0.0,
+      "min": 0.418,
+      "max": 0.418
+    },
+    "tokens_per_second": {
+      "mean": 30.55,
+      "stddev": 0.0,
+      "min": 30.55,
+      "max": 30.55
+    },
+    "request_tokens_per_second": {
+      "mean": 30.55,
+      "stddev": 0.0,
+      "min": 30.55,
+      "max": 30.55
+    },
+    "decode_tokens_per_second": {
+      "mean": 31.22,
+      "stddev": 0.0,
+      "min": 31.22,
+      "max": 31.22
+    },
+    "decode_timing_source": "client_stream",
+    "ram_peak_gb": 0.791,
+    "ram_is_process_rss": true,
+    "ram_measurement_method": "process_rss",
+    "system_ram_peak_gb": 7.092,
+    "system_ram_peak_percent": 88.7,
+    "token_count_source": "usage.completion_tokens"
+  },
+  "trials": {
+    "count": 1,
+    "ttft_cold_raw": [
+      0.406
+    ],
+    "ttft_cached_raw": [
+      0.418
+    ],
+    "tokens_per_second_raw": [
+      30.55
+    ],
+    "throughput_elapsed_seconds_raw": [
+      32.733
+    ],
+    "decode_tokens_per_second_raw": [
+      31.22
+    ],
+    "completion_tokens_raw": [
+      1000
+    ],
+    "throughput_progress_samples_raw": [
+      [
+        {
+          "completion_tokens": 100,
+          "elapsed_seconds": 5.966,
+          "tokens_per_second": 16.76,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 200,
+          "elapsed_seconds": 12.034,
+          "tokens_per_second": 16.62,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 300,
+          "elapsed_seconds": 18.453,
+          "tokens_per_second": 16.26,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 400,
+          "elapsed_seconds": 25.227,
+          "tokens_per_second": 15.86,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 500,
+          "elapsed_seconds": 30.57,
+          "tokens_per_second": 16.36,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 600,
+          "elapsed_seconds": 32.732,
+          "tokens_per_second": 18.33,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 700,
+          "elapsed_seconds": 32.732,
+          "tokens_per_second": 21.39,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 800,
+          "elapsed_seconds": 32.732,
+          "tokens_per_second": 24.44,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 900,
+          "elapsed_seconds": 32.732,
+          "tokens_per_second": 27.5,
+          "token_count_source": "word_fallback"
+        },
+        {
+          "completion_tokens": 1000,
+          "elapsed_seconds": 32.733,
+          "tokens_per_second": 30.55,
+          "token_count_source": "usage.completion_tokens"
+        }
+      ]
+    ]
+  },
+  "meta": {
+    "chronos_version": "0.2.0",
+    "timestamp": "2026-06-12T15:44:36.681985Z",
+    "benchmark_profile": "sustained",
+    "ram_sample_interval_seconds": 0.05,
+    "elapsed_since_last_benchmark_seconds": 43.235,
+    "cooldown_seconds": 0.0,
+    "benchmark_protocol": {
+      "name": "sustained",
+      "version": "3",
+      "warmup": {
+        "prompts": [
+          "Describe one practical reason local inference can be useful on a laptop."
+        ],
+        "requested_max_tokens": 30,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": true,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      },
+      "ttft_cold": {
+        "prompts": [
+          "What is the capital of Australia?"
+        ],
+        "requested_max_tokens": 1,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": false,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      },
+      "ttft_cached": {
+        "prompts": [
+          "Explain the concept of unified memory in Apple Silicon in one sentence."
+        ],
+        "requested_max_tokens": 1,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": false,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      },
+      "throughput": {
+        "prompts": [
+          "Explain in detail how the attention mechanism works in transformer neural networks, including the role of queries, keys, and values."
+        ],
+        "requested_max_tokens": 1000,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": true,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      }
+    },
+    "phase_timings_seconds": {
+      "warmup": 7.736,
+      "ttft_cold": 0.406,
+      "cache_priming": 0.424,
+      "ttft_cached": 0.419,
+      "throughput": 32.733,
+      "total_runtime": 41.826
+    },
+    "thermal_monitor": {
+      "sample_interval_seconds": 1.0,
+      "source": "foundation",
+      "start_state": "nominal",
+      "end_state": "nominal",
+      "worst_state": "nominal",
+      "samples": 43,
+      "changed_during_run": false,
+      "non_nominal_observed": false,
+      "non_nominal_phases": []
+    },
+    "warmup_failures": 0,
+    "word_fallback_warning": false,
+    "engine_version_warning": false,
+    "sustained_throttling_warning": false,
+    "cached_ttft_warning": true,
+    "notes": null
+  },
+  "integrity": {
+    "schema": "mlx-chronos-integrity-v1",
+    "algorithm": "sha256-canonical-json",
+    "signed_payload": "benchmark-result-without-integrity",
+    "digest": "4e3f448c5817da8b36aa6f24407c8ea2a77d5bdc8c30a653fecef7dbbd5edc0b"
+  }
+}
