@@ -1015,6 +1015,56 @@ class MLXLMEngine(BaseEngine):
     default_port = 8080
     expected_process_names = ("mlx_lm", "mlx-lm")
 
+    def __init__(
+        self,
+        port: int | None = None,
+        model_id_cache: dict[str, str] | None = None,
+    ):
+        super().__init__(port=port)
+        self._model_id_cache = model_id_cache if model_id_cache is not None else {}
+        self._request_model_cache: dict[str, str] = {}
+
+    def _resolve_model_id(self, model: str) -> str | None:
+        if model in self._model_id_cache:
+            return self._model_id_cache[model]
+
+        try:
+            model_ids = self.list_model_ids()
+        except RuntimeError:
+            return None
+
+        matches = [
+            model_id
+            for model_id in model_ids
+            if model_id == model
+            or model_id.endswith(f"/{model}")
+            or os.path.basename(model_id.rstrip("/")) == model
+        ]
+        if len(matches) != 1:
+            return None
+
+        resolved = matches[0]
+        self._model_id_cache[model] = resolved
+        return resolved
+
+    def _request_model_name(self, model: str) -> str:
+        model_name = os.path.expanduser(super()._request_model_name(model))
+        if model_name in self._request_model_cache:
+            return self._request_model_cache[model_name]
+
+        if model_name == "default_model" or os.path.exists(model_name):
+            request_model = model_name
+        else:
+            resolved = self._resolve_model_id(model_name)
+            request_model = (
+                "default_model"
+                if resolved and os.path.exists(os.path.expanduser(resolved))
+                else resolved or model_name
+            )
+
+        self._request_model_cache[model_name] = request_model
+        return request_model
+
     def is_installed(self) -> bool:
         return importlib.util.find_spec("mlx_lm") is not None
 

@@ -791,6 +791,30 @@ def test_rapid_mlx_request_model_name_caches_expanded_local_paths(monkeypatch):
     mock_exists.assert_called_once_with("/Users/igor/models/test")
     engine._resolve_model_id.assert_not_called()
 
+
+def test_mlx_lm_request_model_name_uses_default_for_listed_local_model(monkeypatch):
+    local_model = "/Users/igor/.lmstudio/models/mlx-community/Qwen3.5-4B-nvfp4"
+    monkeypatch.setattr(
+        "mlx_chronos.engines.os.path.exists",
+        lambda value: value == local_model,
+    )
+
+    engine = MLXLMEngine()
+    engine.list_model_ids = MagicMock(return_value=[local_model])
+
+    assert engine._request_model_name("Qwen3.5-4B-nvfp4") == "default_model"
+    assert engine._model_id_cache["Qwen3.5-4B-nvfp4"] == local_model
+
+
+def test_mlx_lm_request_model_name_falls_back_for_unknown_model(monkeypatch):
+    monkeypatch.setattr("mlx_chronos.engines.os.path.exists", lambda _value: False)
+
+    engine = MLXLMEngine()
+    engine.list_model_ids = MagicMock(return_value=["/Users/igor/models/other"])
+
+    assert engine._request_model_name("missing-model") == "missing-model"
+
+
 @contextmanager
 def mock_stream_response(*args, **kwargs):
     class MockResponse:
