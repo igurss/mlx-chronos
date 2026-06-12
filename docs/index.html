@@ -968,14 +968,16 @@
     </main>
 
     <footer>
-      Results are community-submitted, integrity-sealed, and validated through GitHub Actions. Public runs use <span id="standard-token-label">the project default token bounds</span>, no requested min_tokens, and macOS Low Power Mode disabled.
+      Results are community-submitted, integrity-sealed, and validated through GitHub Actions. Public runs use <span id="standard-token-label">the project default trial counts and token bounds</span>, no requested min_tokens, and macOS Low Power Mode disabled.
     </footer>
   </div>
 
   <script>
     const RESULTS_INDEX = "results_index.json";
     let standardThroughputMaxTokens = null;
+    let standardBaselineTrials = null;
     let standardSustainedMaxTokens = null;
+    let standardSustainedTrials = null;
     const initialCompareParams = new URLSearchParams(window.location.search);
     let initialCompareParamsPending = true;
 
@@ -1153,7 +1155,7 @@
 
     async function loadResults() {
       try {
-        const response = await fetch(RESULTS_INDEX);
+        const response = await fetch(RESULTS_INDEX, { cache: "no-store" });
         if (!response.ok) throw new Error("results index unavailable");
         const payload = await response.json();
         const rows = payload.results || [];
@@ -1162,18 +1164,30 @@
         )
           ? Number(payload.metadata.standard_throughput_max_tokens)
           : null;
+        standardBaselineTrials = Number.isFinite(
+          Number(payload?.metadata?.standard_baseline_trials)
+        )
+          ? Number(payload.metadata.standard_baseline_trials)
+          : null;
         standardSustainedMaxTokens = Number.isFinite(
           Number(payload?.metadata?.standard_sustained_max_tokens)
         )
           ? Number(payload.metadata.standard_sustained_max_tokens)
           : null;
-        renderStandardTokenLabel();
+        standardSustainedTrials = Number.isFinite(
+          Number(payload?.metadata?.standard_sustained_trials)
+        )
+          ? Number(payload.metadata.standard_sustained_trials)
+          : null;
+        renderStandardPolicyLabel();
         allRows = rows.map(normalizeRow);
         resultsLoadError = "";
       } catch (error) {
         standardThroughputMaxTokens = null;
+        standardBaselineTrials = null;
         standardSustainedMaxTokens = null;
-        renderStandardTokenLabel();
+        standardSustainedTrials = null;
+        renderStandardPolicyLabel();
         const detail = error instanceof Error && error.message
           ? error.message
           : "unknown error";
@@ -1188,14 +1202,24 @@
       renderRaw();
     }
 
-    function renderStandardTokenLabel() {
+    function renderStandardPolicyLabel() {
+      const baselineTrials = standardBaselineTrials == null
+        ? "baseline 5 trials"
+        : `baseline ${formatTrialCount(standardBaselineTrials)}`;
       const baseline = standardThroughputMaxTokens == null
-        ? "baseline default"
-        : `baseline max_tokens=${standardThroughputMaxTokens}`;
+        ? `${baselineTrials} / max_tokens=100`
+        : `${baselineTrials} / max_tokens=${standardThroughputMaxTokens}`;
+      const sustainedTrials = standardSustainedTrials == null
+        ? "sustained 1 trial"
+        : `sustained ${formatTrialCount(standardSustainedTrials)}`;
       const sustained = standardSustainedMaxTokens == null
-        ? "sustained default"
-        : `sustained max_tokens=${standardSustainedMaxTokens}`;
+        ? `${sustainedTrials} / max_tokens=1000`
+        : `${sustainedTrials} / max_tokens=${standardSustainedMaxTokens}`;
       standardTokenLabel.textContent = `${baseline}; ${sustained}`;
+    }
+
+    function formatTrialCount(count) {
+      return `${count} trial${Number(count) === 1 ? "" : "s"}`;
     }
 
     function normalizeRow(row, index) {

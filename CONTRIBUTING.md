@@ -133,6 +133,24 @@ source .venv/bin/activate
 pip install -e ".[test]"
 ```
 
+### External Contributor Workflow
+
+For code or documentation changes, fork the repository, create a focused branch
+from `main`, and open a pull request back to `igurss/mlx-chronos`. Keep code
+changes separate from leaderboard result submissions so each PR has one review
+path.
+
+For leaderboard result submissions, open a PR that changes only JSON files under
+`results/submitted/`. GitHub Actions rejects mixed PRs, deleted submitted result
+files, invalid schemas, broken integrity seals, non-standard public benchmark
+profiles, fallback token counts, requested `min_tokens`, Low Power Mode runs,
+and non-standard public trial counts or token bounds.
+
+For code changes, run the relevant tests locally before opening the PR. The
+maintainer reviews code, docs, and result-submission PRs separately; benchmark
+result PRs are expected to be mechanical JSON submissions, while feature PRs
+should explain the behavior change and include tests.
+
 ### Guidelines
 
 - Follow the existing code style

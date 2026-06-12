@@ -3,7 +3,9 @@ from pathlib import Path
 
 from mlx_chronos.constants import (
     DEFAULT_THROUGHPUT_MAX_TOKENS,
+    PUBLIC_BASELINE_TRIALS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_TRIALS,
 )
 from mlx_chronos.protocol import DEFAULT_THROUGHPUT_MAX_TOKENS as PROTOCOL_DEFAULT
 
@@ -44,9 +46,11 @@ def test_leaderboard_index_carries_standard_token_metadata():
     assert data["metadata"]["standard_throughput_max_tokens"] == (
         DEFAULT_THROUGHPUT_MAX_TOKENS
     )
+    assert data["metadata"]["standard_baseline_trials"] == PUBLIC_BASELINE_TRIALS
     assert data["metadata"]["standard_sustained_max_tokens"] == (
         SUSTAINED_THROUGHPUT_MAX_TOKENS
     )
+    assert data["metadata"]["standard_sustained_trials"] == SUSTAINED_TRIALS
     assert isinstance(data["results"], list)
 
 
@@ -58,6 +62,8 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
     text = workflow_text("update_leaderboard.yml")
 
     assert "load_publishable_result(path)" in text
+    assert "PUBLIC_BASELINE_TRIALS" in text
+    assert "SUSTAINED_TRIALS" in text
     assert '"timestamp": meta["timestamp"]' in text
     assert '"protocol_version"' not in text
     assert '"connection_mode"' not in text
@@ -82,7 +88,13 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
 
     assert "const STANDARD_THROUGHPUT_MAX_TOKENS = 100" not in html
     assert "standardThroughputMaxTokens" in html
+    assert "standardBaselineTrials" in html
     assert "standardSustainedMaxTokens" in html
+    assert "standardSustainedTrials" in html
+    assert "project default trial counts and token bounds" in html
+    assert 'fetch(RESULTS_INDEX, { cache: "no-store" })' in html
+    assert "baseline 5 trials" in html
+    assert "sustained 1 trial" in html
     assert "integrity-sealed" in html
     assert "Standard runs" not in html
     assert "raw-standard" not in html

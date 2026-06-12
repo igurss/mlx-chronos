@@ -250,12 +250,12 @@ is measured, how, and why.
 - [x] Request-throughput timing metadata and client-observed streaming decode throughput
 - [x] Phase timing metadata and lightweight continuous thermal monitoring
 - [x] Sustained benchmark profile, cooldown metadata, and strict local-vs-public leaderboard policy
+- [x] Public submission trust model with lightweight anti-spoofing checks
+- [x] External contributor workflow for code PRs and leaderboard result submissions
 
 ### Future
 - [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract
 - [ ] Add tool-calling success-rate benchmarks
-- [ ] Explore anti-spoofing checks for community submissions
-- [ ] Document external contributor branch workflow when community PRs start arriving
 - [ ] Collect more results from M3, M4, and M5 systems
 
 ---

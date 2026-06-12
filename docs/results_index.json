@@ -1,7 +1,9 @@
 {
   "metadata": {
     "standard_throughput_max_tokens": 100,
-    "standard_sustained_max_tokens": 1000
+    "standard_baseline_trials": 5,
+    "standard_sustained_max_tokens": 1000,
+    "standard_sustained_trials": 1
   },
   "results": []
 }

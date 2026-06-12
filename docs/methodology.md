@@ -310,6 +310,23 @@ the claimed machine; a determined user can still forge a coherent result by
 modifying the open-source tool. The goal is to catch manual JSON edits and keep
 the public submission path honest.
 
+**Public submission trust model:** mlx-Chronos assumes public submissions are
+community-provided benchmark records, not hardware-attested measurements. The
+realistic risks are accidental local diagnostics being submitted as comparable
+rows, hand-edited JSON, stale protocol versions, fallback token estimates,
+non-standard token bounds, Low Power Mode runs, and mixed PRs that make review
+harder.
+
+The public validation path mitigates those risks with lightweight checks:
+schema validation, raw-trial consistency validation, integrity-seal validation,
+current protocol enforcement, usage-based completion-token counts, fixed public
+trial counts, standard public `max_tokens`, no requested `min_tokens`, Low
+Power Mode disabled, throughput phase timing consistency, and GitHub Actions
+checks that result-submission PRs only add or modify submitted JSON files. These
+checks improve comparability and catch accidental or casual tampering, but they
+cannot prove the submitter used the claimed machine, model weights, backend
+implementation, or an unmodified copy of the tool.
+
 ---
 
 ## What Is Not Measured (Yet)
