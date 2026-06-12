@@ -31,7 +31,7 @@ contribute to the community leaderboard.
 - **Output tokens** — Completion token counts for throughput trials
 - **System RAM peak** — Peak total Mac RAM in use during the benchmark, used as the public memory comparison metric
 - **Post-warmup engine RSS** — Legacy diagnostic peak RSS of the engine server process when available, not a comparison metric
-- **Tool calling** — Success rate *(coming in v0.2)*
+- **Tool calling** — Success rate *(future work)*
 
 ---
 
@@ -126,10 +126,11 @@ engine version, and quantization.
 
 ---
 
-## Current Release Preparation
+## Current Release
 
-`main` is prepared as `0.2.0`. No release tag is created by this change; publish
-the release only after final review.
+`0.2.0` tightens public leaderboard comparability, adds vllm-mlx support,
+refreshes the leaderboard UI, and makes benchmark request semantics explicit in
+result metadata.
 
 ---
 

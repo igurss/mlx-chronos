@@ -2,29 +2,72 @@
 
 ## [0.2.0] — 2026-06-12
 
+Minor release focused on making the public leaderboard stricter, cleaner, and
+methodologically consistent. Result JSON produced by older 0.1.x releases is
+not publishable under the 0.2 public leaderboard policy.
+
+### Compatibility
+- Treat benchmark protocol numbers as internal compatibility labels rather than
+  public protocol versions. Current publishable results use label `3`.
+- Public submissions now require the current result format, exact standard
+  protocol metadata, usage-based token counts, and standard public workloads.
+  Older submitted rows were removed from the bundled leaderboard index.
+- Local benchmark runs remain flexible: custom trials, token bounds, connection
+  mode, cooldown, and notes still produce useful local JSON, but are not
+  accepted into the public leaderboard unless they match the public policy.
+
+### Features
+- Add vllm-mlx as a supported engine, including installation checks, model
+  listing, version detection, port override support, and server identity checks.
+- Redesign the leaderboard UI with a more distinctive mlx-Chronos visual style,
+  a persistent light/dark theme toggle, fixed compare controls, cleaner raw
+  data columns, and a non-clipped column picker.
+- Add optional structured model identity fields to the schema (`source`,
+  `revision`, weight/tokenizer/chat-template hashes, and architecture) so future
+  runs can carry stronger model provenance without making those fields mandatory
+  yet.
+
 ### Reliability
-- Move the internal benchmark compatibility label to `3` and reuse one
-  persistent HTTP client across benchmark requests by default; protocol phase
-  metadata now records the HTTP connection mode.
-- Enforce public leaderboard comparability in `mlx-chronos submit` and
-  submission workflows: standard baseline runs require exactly 5 trials and
-  `max_tokens=100`; standard sustained runs require 1 trial and
-  `max_tokens=1000`; both require no requested `min_tokens` and usage-based
-  completion-token counts.
+- Reuse one persistent HTTP client across benchmark phases by default, reducing
+  per-request connection setup noise and better matching repeated local agent
+  loops. Protocol phase metadata records the connection mode.
+- Make benchmark request semantics explicit in protocol metadata: streaming
+  mode, `stream_options.include_usage`, deterministic generation parameters,
+  prompt text, and token bounds are all validated for public submissions.
+- Use distinct fixed throughput prompts to reduce same-run cache artifacts and
+  document that throughput stddev includes workload variation as well as engine
+  and machine noise.
+- Enforce public leaderboard comparability in `mlx-chronos submit` and GitHub
+  workflows: baseline requires exactly 5 trials and `max_tokens=100`; sustained
+  requires exactly 1 trial and `max_tokens=1000`; both require no requested
+  `min_tokens`, Low Power Mode off, and `usage.completion_tokens`.
 - Require publishable throughput trials to generate at least 80% of the
-  standard output limit, and compare submitted protocol metadata against the
-  exact standard protocol shape.
+  standard output limit: 80 tokens for baseline and 800 for sustained.
 - Add a tamper-evident JSON integrity seal and require it for public
   submissions through both `mlx-chronos submit` and GitHub Actions validation.
-- Require current result metadata for public submissions instead of accepting
-  missing protocol/timing/raw fields from early protocol rows.
-- Remove the early internal-label `1` submitted results from the bundled
-  leaderboard index so the public UI only shows results generated with the
-  current format.
-- Remove the leaderboard HTML fallback for the old flat-array index shape.
+- Harden submitted-result PR validation so mixed code/result PRs and deleted
+  submitted JSON files are rejected reliably.
+- Prevent accidental oMLX/vllm-mlx confusion on port 8000 by requiring oMLX's
+  listening process to match the expected engine process when validating the
+  server.
+- Keep the package version, example result metadata, and integrity digest
+  aligned with the 0.2.0 release.
+
+### Maintenance
+- Remove debug `__main__` blocks from library modules; the supported entrypoint
+  remains the `mlx-chronos` CLI.
+- Remove dead constants and hidden import chains, normalize Rapid-MLX version
+  parsing, and make reporter phase timing access more robust.
+- Keep release validation tied to `pyproject.toml` and run release tests across
+  Python 3.10 through 3.14.
+
+### Documentation
 - Treat the leaderboard as publishable-results-only: remove standard/custom run
   filtering from the UI and generated index, while documenting that local runs
   may still use custom parameters.
+- Document persistent HTTP behavior, internal protocol labels, output-token
+  requirements, oMLX listener inspection, vllm-mlx setup, and the stricter
+  local-vs-public submission model.
 
 ## [0.1.3] — 2026-06-08
 

@@ -365,10 +365,9 @@ implementation, or an unmodified copy of the tool.
 
 ## What Is Not Measured (Yet)
 
-- Tool calling success rate — planned for v0.2
-- Full thermal throttling attribution beyond the sustained-run warning —
-  planned for v0.2
-- CPU/GPU load at benchmark time — planned for v0.2
+- Tool calling success rate
+- Full thermal throttling attribution beyond the sustained-run warning
+- CPU/GPU load at benchmark time
 - Multi-turn conversation latency
 
 ---
