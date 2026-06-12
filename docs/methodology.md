@@ -65,9 +65,16 @@ prompt/KV cache for that run.
 
 ### Request Throughput (tok/s)
 Completion tokens divided by the full client-observed request time, measured
-using a fixed standard prompt defined in the project. The prompt is identical
-across all engines and all versions of mlx-Chronos to ensure comparability. Do
-not change this prompt without bumping `chronos_version`.
+using a fixed prompt pool defined in the project. Each throughput trial uses a
+different protocol prompt so same-run prefix/KV cache hits do not silently
+remove prefill work from repeated trials. Warmup uses a separate prompt for the
+same reason. The prompt order is identical across engines and all versions of
+mlx-Chronos to ensure comparability. Do not change these prompts without
+intentionally updating the protocol contract.
+
+All benchmark requests explicitly set deterministic generation parameters:
+`temperature=0.0` and `top_p=1.0`. This keeps results from depending on
+engine-specific server defaults, such as configurable sampling settings.
 
 This metric includes HTTP/client overhead, prompt prefill, and decode. It should
 be read as end-to-end request throughput, not pure decode speed. Current JSON
@@ -103,8 +110,9 @@ different usage semantics, request throughput is the safer cross-engine metric.
 If token usage is not available, decode throughput is left unavailable rather
 than estimated from word counts.
 
-Throughput trials request a fixed `max_tokens` value, 100 by default. Users can
-override this with `--max-tokens` for local experiments. An optional
+Throughput trials request a fixed `max_tokens` value, 100 by default, and use
+one fixed protocol prompt per trial. Users can override `max_tokens` with
+`--max-tokens` for local experiments. An optional
 `--min-tokens` request can be sent to engines that support it; when
 `usage.completion_tokens` is available, mlx-Chronos checks that the recorded
 throughput output respects the requested range. If an engine ignores
@@ -295,7 +303,8 @@ records the baseline protocol version, exact prompt text for warmup, cold TTFT,
 cached TTFT, and throughput, plus the requested min/max token bounds per phase.
 Protocol phase metadata also records whether the phase used streaming requests,
 whether `stream_options.include_usage` was requested, and whether HTTP
-connections were `persistent` or `per_request`. The protocol name matches the
+connections were `persistent` or `per_request`, plus requested generation
+parameters such as `temperature` and `top_p`. The protocol name matches the
 selected benchmark profile (`baseline` or `sustained`). Input token counts are
 marked as `unavailable` until mlx-Chronos can obtain them from a tokenizer or
 engine response without adding unreliable estimates.
@@ -323,11 +332,12 @@ The public validation path mitigates those risks with lightweight checks:
 schema validation, raw-trial consistency validation, integrity-seal validation,
 current protocol enforcement, usage-based completion-token counts, fixed public
 trial counts, standard public `max_tokens`, no requested `min_tokens`, Low
-Power Mode disabled, throughput phase timing consistency, and GitHub Actions
-checks that result-submission PRs only add or modify submitted JSON files. These
-checks improve comparability and catch accidental or casual tampering, but they
-cannot prove the submitter used the claimed machine, model weights, backend
-implementation, or an unmodified copy of the tool.
+Power Mode disabled, standard deterministic generation parameters, throughput
+phase timing consistency, and GitHub Actions checks that result-submission PRs
+only add or modify submitted JSON files. These checks improve comparability and
+catch accidental or casual tampering, but they cannot prove the submitter used
+the claimed machine, model weights, backend implementation, or an unmodified
+copy of the tool.
 
 ---
 

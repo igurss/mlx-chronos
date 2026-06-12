@@ -11,11 +11,14 @@ from mlx_chronos.benchmark import (
 from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
-    THROUGHPUT_PROMPT,
+    THROUGHPUT_PROMPTS,
     TTFT_MAX_TOKENS,
+    WARMUP_PROMPT,
     WARMUP_MAX_TOKENS,
 )
 from mlx_chronos.constants import (
+    BENCHMARK_REQUEST_TEMPERATURE,
+    BENCHMARK_REQUEST_TOP_P,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     MAX_TRIALS,
     SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
@@ -119,8 +122,14 @@ def test_compute_stats_adds_p95_for_large_samples():
 def test_cold_prompt_count_matches_max_trials():
     assert len(COLD_PROMPTS) == MAX_TRIALS
 
+def test_throughput_prompt_count_matches_max_trials():
+    assert len(THROUGHPUT_PROMPTS) == MAX_TRIALS
+
 def test_cold_prompts_are_unique():
     assert len(set(COLD_PROMPTS)) == len(COLD_PROMPTS)
+
+def test_throughput_prompts_are_unique():
+    assert len(set(THROUGHPUT_PROMPTS)) == len(THROUGHPUT_PROMPTS)
 
 def test_run_benchmark_rejects_trials_above_max():
     with pytest.raises(ValueError, match=f"Max trials is {MAX_TRIALS}"):
@@ -318,12 +327,16 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert protocol["ttft_cold"]["connection_mode"] == "persistent"
     assert protocol["ttft_cold"]["prompts"] == COLD_PROMPTS[:2]
     assert protocol["ttft_cold"]["requested_max_tokens"] == TTFT_MAX_TOKENS
-    assert protocol["throughput"]["prompts"] == [THROUGHPUT_PROMPT]
+    assert protocol["throughput"]["prompts"] == THROUGHPUT_PROMPTS[:2]
     assert protocol["throughput"]["requested_max_tokens"] == DEFAULT_THROUGHPUT_MAX_TOKENS
     assert protocol["throughput"]["requested_min_tokens"] is None
     assert protocol["throughput"]["request_mode"] == "streaming"
     assert protocol["throughput"]["stream_usage_requested"] is True
     assert protocol["throughput"]["connection_mode"] == "persistent"
+    assert protocol["throughput"]["generation_parameters"] == {
+        "temperature": BENCHMARK_REQUEST_TEMPERATURE,
+        "top_p": BENCHMARK_REQUEST_TOP_P,
+    }
     assert protocol["throughput"]["input_token_count_source"] == "unavailable"
 
     ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]
@@ -337,11 +350,11 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     warmup_prompts = [
         call.args[0] for call in mock_engine.measure_tokens_per_second.call_args_list
     ]
-    assert warmup_prompts == [THROUGHPUT_PROMPT] * 2
+    assert warmup_prompts == [WARMUP_PROMPT] * 2
     throughput_prompts = [
         call.args[0] for call in mock_engine.measure_throughput.call_args_list
     ]
-    assert throughput_prompts == [THROUGHPUT_PROMPT] * 2
+    assert throughput_prompts == THROUGHPUT_PROMPTS[:2]
     assert [
         call.kwargs.get("max_tokens")
         for call in mock_engine.measure_tokens_per_second.call_args_list

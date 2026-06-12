@@ -34,8 +34,9 @@ from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
     CONNECTION_MODE_PERSISTENT,
-    THROUGHPUT_PROMPT,
+    THROUGHPUT_PROMPTS,
     VALID_CONNECTION_MODES,
+    WARMUP_PROMPT,
     WARMUP_MAX_TOKENS,
     build_benchmark_protocol,
 )
@@ -412,7 +413,7 @@ def run_benchmark(
                 for _ in range(warmup_calls):
                     try:
                         engine.measure_tokens_per_second(
-                            THROUGHPUT_PROMPT,
+                            WARMUP_PROMPT,
                             model=model_name,
                             max_tokens=WARMUP_MAX_TOKENS,
                             client=http_client,
@@ -499,10 +500,11 @@ def run_benchmark(
             with _record_phase_duration(phase_timings, "throughput"):
                 logger.info("\nRunning throughput trials...")
                 for i in range(trials):
+                    throughput_prompt = THROUGHPUT_PROMPTS[i]
                     logger.info(f"  Throughput trial {i + 1}/{trials}...")
                     measurement = _validate_throughput_measurement(
                         engine.measure_throughput(
-                            THROUGHPUT_PROMPT,
+                            throughput_prompt,
                             model=model_name,
                             max_tokens=throughput_max_tokens,
                             min_tokens=throughput_min_tokens,

@@ -25,6 +25,8 @@ NonNegativeInt = Annotated[int, Field(ge=0)]
 PositiveFloat = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 PositiveInt = Annotated[int, Field(gt=0)]
 PercentFloat = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
+ProbabilityFloat = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+TemperatureFloat = Annotated[float, Field(ge=0, le=2, allow_inf_nan=False)]
 TokenCountSource = Literal[
     "usage.completion_tokens",
     "word_fallback",
@@ -361,6 +363,17 @@ class Trials(ChronosBaseModel):
         return self
 
 
+class GenerationParameters(ChronosBaseModel):
+    temperature: TemperatureFloat = Field(
+        ...,
+        description="Sampling temperature requested from the engine",
+    )
+    top_p: ProbabilityFloat = Field(
+        ...,
+        description="Nucleus sampling top_p requested from the engine",
+    )
+
+
 class BenchmarkProtocolPhase(ChronosBaseModel):
     prompts: list[str] = Field(
         ...,
@@ -386,6 +399,10 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
     connection_mode: ConnectionMode = Field(
         ...,
         description="Whether HTTP connections were reused across benchmark requests",
+    )
+    generation_parameters: GenerationParameters = Field(
+        ...,
+        description="Generation sampling parameters requested for this phase",
     )
     input_tokens: Optional[list[NonNegativeInt]] = Field(
         None,
@@ -604,6 +621,7 @@ class BenchmarkResult(ChronosBaseModel):
         self._assert_request_tps_matches_tokens_and_elapsed()
         self._assert_throughput_token_bounds()
         self._assert_progress_samples_match_final_trials()
+        self._assert_protocol_trial_alignment()
         return self
 
     def _assert_request_tps_matches_tokens_and_elapsed(self) -> None:
@@ -665,6 +683,23 @@ class BenchmarkResult(ChronosBaseModel):
                     "final throughput progress sample must match throughput "
                     f"elapsed seconds for trial {index}"
                 )
+
+    def _assert_protocol_trial_alignment(self) -> None:
+        protocol = self.meta.benchmark_protocol
+        if len(protocol.warmup.prompts) != 1:
+            raise ValueError("benchmark_protocol.warmup must contain exactly one prompt")
+        if len(protocol.ttft_cold.prompts) != self.trials.count:
+            raise ValueError(
+                "benchmark_protocol.ttft_cold prompts must match trials.count"
+            )
+        if len(protocol.ttft_cached.prompts) != 1:
+            raise ValueError(
+                "benchmark_protocol.ttft_cached must contain exactly one prompt"
+            )
+        if len(protocol.throughput.prompts) != self.trials.count:
+            raise ValueError(
+                "benchmark_protocol.throughput prompts must match trials.count"
+            )
 
     @staticmethod
     def _assert_stats_match_raw(stats: TrialStats, raw_values: list[float], label: str) -> None:

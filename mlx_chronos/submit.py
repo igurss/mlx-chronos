@@ -5,6 +5,8 @@ import httpx
 from pydantic import ValidationError
 
 from mlx_chronos.constants import (
+    BENCHMARK_REQUEST_TEMPERATURE,
+    BENCHMARK_REQUEST_TOP_P,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     PHASE_TIMING_TOLERANCE_SECONDS,
     PUBLIC_BASELINE_TRIALS,
@@ -31,6 +33,24 @@ class SubmissionError(RuntimeError):
     """Raised when a benchmark result cannot be submitted."""
 
 
+def _validate_public_generation_parameters(result: BenchmarkResult) -> None:
+    protocol = result.meta.benchmark_protocol
+    for phase_name in ("warmup", "ttft_cold", "ttft_cached", "throughput"):
+        phase = getattr(protocol, phase_name)
+        params = phase.generation_parameters
+        if (
+            params.temperature != BENCHMARK_REQUEST_TEMPERATURE
+            or params.top_p != BENCHMARK_REQUEST_TOP_P
+        ):
+            raise SubmissionError(
+                "leaderboard submissions must use standard generation "
+                f"parameters in {phase_name}: "
+                f"temperature={BENCHMARK_REQUEST_TEMPERATURE}, "
+                f"top_p={BENCHMARK_REQUEST_TOP_P}; got "
+                f"temperature={params.temperature}, top_p={params.top_p}"
+            )
+
+
 def validate_publishable_result(result: BenchmarkResult) -> None:
     """Check public leaderboard comparability constraints."""
     token_source = result.metrics.token_count_source
@@ -55,6 +75,7 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
             "leaderboard submissions must use current benchmark protocol "
             f"version {BASELINE_PROTOCOL_VERSION}; got {protocol.version!r}"
         )
+    _validate_public_generation_parameters(result)
 
     low_power_mode = result.hardware.low_power_mode
     if low_power_mode != PUBLIC_LOW_POWER_MODE:

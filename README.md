@@ -51,9 +51,12 @@ cached measurements. If cached TTFT is close to cold TTFT, new runs record a
 warning that cache reuse may not have happened.
 
 **Request throughput (tok/s)** — measures completion tokens divided by the full
-client-observed request time for a standard fixed prompt. This includes request
-overhead, prefill, and decode, so it is an end-to-end throughput metric rather
-than pure decode speed. New runs also record client-observed
+client-observed request time using fixed protocol prompts, one per trial. Warmup
+uses a separate prompt so same-run prefix/KV cache hits do not silently remove
+throughput prefill work. Requests use deterministic generation parameters
+(`temperature=0.0`, `top_p=1.0`). This includes request overhead, prefill, and
+decode, so it is an end-to-end throughput metric rather than pure decode speed.
+New runs also record client-observed
 `decode_tokens_per_second` from the streaming throughput trial when reliable
 completion-token usage is available. If an engine cannot provide usage in the
 streaming response, the run falls back to a local estimate and is marked as not
@@ -97,7 +100,7 @@ sampling interval is 50ms and can be changed with `--ram-sample-interval`.
 
 All metrics are run over multiple trials and reported with mean, stddev, min,
 and max. p95 is added only when at least 20 trials are available. The default is
-5 trials, with a maximum of 30 unique cold prompts.
+5 trials, with a maximum of 30 unique cold and throughput prompts.
 Results are saved as structured JSON in `results/local/` by default. Maintainers
 publish reviewed JSON files into `results/submitted/` after accepting them for
 the community leaderboard.

@@ -1,4 +1,8 @@
-from mlx_chronos.constants import DEFAULT_THROUGHPUT_MAX_TOKENS
+from mlx_chronos.constants import (
+    BENCHMARK_REQUEST_TEMPERATURE,
+    BENCHMARK_REQUEST_TOP_P,
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
+)
 
 
 BASELINE_PROTOCOL_VERSION = "3"
@@ -49,10 +53,141 @@ CACHED_TTFT_PROMPT = (
     "Explain the concept of unified memory in Apple Silicon in one sentence."
 )
 
-THROUGHPUT_PROMPT = (
-    "Explain in detail how the attention mechanism works in transformer "
-    "neural networks, including the role of queries, keys, and values."
+WARMUP_PROMPT = (
+    "Describe one practical reason local inference can be useful on a laptop."
 )
+
+THROUGHPUT_PROMPTS = [
+    (
+        "Explain in detail how the attention mechanism works in transformer "
+        "neural networks, including the role of queries, keys, and values."
+    ),
+    (
+        "Explain how a transformer decoder processes a user prompt from token "
+        "embedding through final text generation."
+    ),
+    (
+        "Describe the main performance tradeoffs between prompt prefill and "
+        "token-by-token decode in local language model serving."
+    ),
+    (
+        "Explain how quantization changes memory use and arithmetic behavior "
+        "when running a language model on Apple Silicon."
+    ),
+    (
+        "Describe how unified memory can affect model loading, cache growth, "
+        "and inference throughput on a Mac."
+    ),
+    (
+        "Explain the purpose of a key-value cache in autoregressive inference "
+        "and how it changes repeated token generation."
+    ),
+    (
+        "Describe how batching multiple requests can improve throughput while "
+        "sometimes increasing individual request latency."
+    ),
+    (
+        "Explain why streaming responses are useful for interactive assistants "
+        "even when total request time stays the same."
+    ),
+    (
+        "Describe how thermal pressure can alter sustained inference speed on "
+        "a passively cooled or compact computer."
+    ),
+    (
+        "Explain the difference between measuring model-internal decode speed "
+        "and client-observed request throughput."
+    ),
+    (
+        "Describe how a server scheduler can balance prefill work and decode "
+        "work when several generation requests are active."
+    ),
+    (
+        "Explain why first-token latency and total throughput can move in "
+        "different directions when an inference engine is optimized."
+    ),
+    (
+        "Describe how memory bandwidth, compute throughput, and cache locality "
+        "interact during transformer inference."
+    ),
+    (
+        "Explain the practical differences between running a model through a "
+        "CLI wrapper, an HTTP server, and a library API."
+    ),
+    (
+        "Describe why benchmark runs should record hardware, engine version, "
+        "model name, and runtime conditions with the measured numbers."
+    ),
+    (
+        "Explain how prompt length can influence prefill cost and why fixed "
+        "benchmark prompts improve comparability."
+    ),
+    (
+        "Describe the role of tokenizer behavior in reported completion token "
+        "counts and throughput calculations."
+    ),
+    (
+        "Explain why a benchmark may separate cold prompt latency from cached "
+        "prompt latency instead of reporting one latency number."
+    ),
+    (
+        "Describe how local model serving differs from cloud model serving in "
+        "resource limits, network overhead, and user privacy."
+    ),
+    (
+        "Explain how Metal acceleration helps MLX workloads execute efficiently "
+        "on Apple GPUs."
+    ),
+    (
+        "Describe why persistent HTTP connections reduce measurement noise in "
+        "a repeated local benchmark loop."
+    ),
+    (
+        "Explain how output token limits shape benchmark duration, memory use, "
+        "and the stability of throughput estimates."
+    ),
+    (
+        "Describe the difference between average throughput, standard deviation, "
+        "minimum throughput, and maximum throughput in repeated trials."
+    ),
+    (
+        "Explain why a benchmark should avoid relying on estimated word counts "
+        "when an engine can report exact completion token usage."
+    ),
+    (
+        "Describe how background system activity can interfere with local "
+        "inference measurements and how repeated trials help reveal variance."
+    ),
+    (
+        "Explain why deterministic generation settings make performance results "
+        "easier to compare across engines."
+    ),
+    (
+        "Describe how an inference server can expose OpenAI-compatible endpoints "
+        "while using a different backend implementation internally."
+    ),
+    (
+        "Explain why long sustained generation runs are useful for detecting "
+        "late-run throttling or cache behavior changes."
+    ),
+    (
+        "Describe how model size, quantization format, and available RAM combine "
+        "to influence local inference performance."
+    ),
+    (
+        "Explain how a community leaderboard can remain useful while still "
+        "allowing flexible local diagnostic benchmark runs."
+    ),
+]
+
+THROUGHPUT_PROMPT = THROUGHPUT_PROMPTS[0]
+
+
+def _generation_parameters() -> dict:
+    return {
+        "temperature": BENCHMARK_REQUEST_TEMPERATURE,
+        "top_p": BENCHMARK_REQUEST_TOP_P,
+    }
 
 
 def _protocol_phase(
@@ -70,6 +205,7 @@ def _protocol_phase(
         "request_mode": request_mode,
         "stream_usage_requested": stream_usage_requested,
         "connection_mode": connection_mode,
+        "generation_parameters": _generation_parameters(),
         "input_tokens": None,
         "input_token_count_source": "unavailable",
     }
@@ -90,7 +226,7 @@ def build_benchmark_protocol(
         "name": name,
         "version": BASELINE_PROTOCOL_VERSION,
         "warmup": _protocol_phase(
-            [THROUGHPUT_PROMPT],
+            [WARMUP_PROMPT],
             WARMUP_MAX_TOKENS,
             request_mode="streaming",
             stream_usage_requested=True,
@@ -111,7 +247,7 @@ def build_benchmark_protocol(
             connection_mode=connection_mode,
         ),
         "throughput": _protocol_phase(
-            [THROUGHPUT_PROMPT],
+            THROUGHPUT_PROMPTS[:trials],
             throughput_max_tokens,
             throughput_min_tokens,
             request_mode="streaming",

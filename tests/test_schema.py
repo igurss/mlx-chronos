@@ -183,6 +183,34 @@ def test_benchmark_protocol_is_required():
     with pytest.raises(ValidationError):
         BenchmarkResult(**data)
 
+def test_benchmark_protocol_generation_parameters_are_required():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    data["meta"]["benchmark_protocol"] = {
+        **data["meta"]["benchmark_protocol"],
+        "throughput": {
+            **data["meta"]["benchmark_protocol"]["throughput"],
+        },
+    }
+    del data["meta"]["benchmark_protocol"]["throughput"]["generation_parameters"]
+
+    with pytest.raises(ValidationError, match="generation_parameters"):
+        BenchmarkResult(**data)
+
+def test_benchmark_protocol_throughput_prompts_must_match_trials():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    data["meta"]["benchmark_protocol"] = {
+        **data["meta"]["benchmark_protocol"],
+        "throughput": {
+            **data["meta"]["benchmark_protocol"]["throughput"],
+            "prompts": data["meta"]["benchmark_protocol"]["throughput"]["prompts"][:1],
+        },
+    }
+
+    with pytest.raises(ValidationError, match="throughput prompts"):
+        BenchmarkResult(**data)
+
 def test_phase_timings_and_thermal_monitor_are_required():
     data = EXAMPLE_RESULT.copy()
     data["meta"] = data["meta"].copy()
@@ -299,12 +327,12 @@ def test_benchmark_protocol_rejects_unlabeled_input_tokens():
     invalid_data["meta"] = invalid_data["meta"].copy()
     invalid_data["meta"]["benchmark_protocol"] = {
         **invalid_data["meta"]["benchmark_protocol"],
-        "throughput": {
-            **invalid_data["meta"]["benchmark_protocol"]["throughput"],
-            "input_tokens": [20],
-            "input_token_count_source": "unavailable",
-        },
-    }
+            "throughput": {
+                **invalid_data["meta"]["benchmark_protocol"]["throughput"],
+                "input_tokens": [20, 21, 22, 23, 24],
+                "input_token_count_source": "unavailable",
+            },
+        }
 
     with pytest.raises(ValidationError, match="input_token_count_source"):
         BenchmarkResult(**invalid_data)

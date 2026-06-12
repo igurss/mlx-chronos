@@ -87,14 +87,17 @@ EXAMPLE_RESULT = {
             "version": "3",
             "warmup": {
                 "prompts": [
-                    "Explain in detail how the attention mechanism works in transformer "
-                    "neural networks, including the role of queries, keys, and values."
+                    "Describe one practical reason local inference can be useful on a laptop."
                 ],
                 "requested_max_tokens": 30,
                 "requested_min_tokens": None,
                 "request_mode": "streaming",
                 "stream_usage_requested": True,
                 "connection_mode": "persistent",
+                "generation_parameters": {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                },
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
@@ -111,6 +114,10 @@ EXAMPLE_RESULT = {
                 "request_mode": "streaming",
                 "stream_usage_requested": False,
                 "connection_mode": "persistent",
+                "generation_parameters": {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                },
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
@@ -123,19 +130,35 @@ EXAMPLE_RESULT = {
                 "request_mode": "streaming",
                 "stream_usage_requested": False,
                 "connection_mode": "persistent",
+                "generation_parameters": {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                },
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
             "throughput": {
                 "prompts": [
                     "Explain in detail how the attention mechanism works in transformer "
-                    "neural networks, including the role of queries, keys, and values."
+                    "neural networks, including the role of queries, keys, and values.",
+                    "Explain how a transformer decoder processes a user prompt from token "
+                    "embedding through final text generation.",
+                    "Describe the main performance tradeoffs between prompt prefill and "
+                    "token-by-token decode in local language model serving.",
+                    "Explain how quantization changes memory use and arithmetic behavior "
+                    "when running a language model on Apple Silicon.",
+                    "Describe how unified memory can affect model loading, cache growth, "
+                    "and inference throughput on a Mac.",
                 ],
                 "requested_max_tokens": 100,
                 "requested_min_tokens": None,
                 "request_mode": "streaming",
                 "stream_usage_requested": True,
                 "connection_mode": "persistent",
+                "generation_parameters": {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                },
                 "input_tokens": None,
                 "input_token_count_source": "unavailable",
             },
@@ -146,6 +169,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "50aa405140111b5f19602a46c16341a1893f33a34424c2c3fcfa7a63ef2dca4f",
+        "digest": "07b682315aa9ba19d3fd565da139651a56dfdf65e67c940d1f62828981e52a27",
     },
 }

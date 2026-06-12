@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from mlx_chronos.constants import VALID_ENGINE_NAMES
+from mlx_chronos.constants import (
+    BENCHMARK_REQUEST_TEMPERATURE,
+    BENCHMARK_REQUEST_TOP_P,
+    VALID_ENGINE_NAMES,
+)
 from mlx_chronos.engines import (
     ENGINES,
     OMLXEngine,
@@ -373,6 +377,8 @@ def test_measure_tokens_per_second_includes_optional_min_tokens(mock_stream):
     assert payload["max_tokens"] == 100
     assert payload["min_tokens"] == 80
     assert payload["stream"] is True
+    assert payload["temperature"] == BENCHMARK_REQUEST_TEMPERATURE
+    assert payload["top_p"] == BENCHMARK_REQUEST_TOP_P
     assert payload["stream_options"] == {"include_usage": True}
 
 @patch("httpx.stream")
@@ -498,6 +504,8 @@ def test_validate_completion_request(mock_post):
     assert payload["model"] == "org/test-model"
     assert payload["max_tokens"] == 1
     assert payload["stream"] is False
+    assert payload["temperature"] == BENCHMARK_REQUEST_TEMPERATURE
+    assert payload["top_p"] == BENCHMARK_REQUEST_TOP_P
 
 @patch("httpx.post")
 def test_validate_completion_request_reports_status_model_and_body(mock_post):

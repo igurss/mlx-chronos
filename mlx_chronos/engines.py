@@ -12,6 +12,8 @@ import psutil
 from abc import ABC, abstractmethod
 
 from mlx_chronos.constants import (
+    BENCHMARK_REQUEST_TEMPERATURE,
+    BENCHMARK_REQUEST_TOP_P,
     ENGINE_NAME_MLX_LM,
     ENGINE_NAME_OLLAMA,
     ENGINE_NAME_OMLX,
@@ -99,6 +101,8 @@ class BaseEngine(ABC):
             "model": self._request_model_name(model),
             "max_tokens": max_tokens,
             "stream": stream,
+            "temperature": BENCHMARK_REQUEST_TEMPERATURE,
+            "top_p": BENCHMARK_REQUEST_TOP_P,
         }
         if min_tokens is not None:
             payload["min_tokens"] = min_tokens

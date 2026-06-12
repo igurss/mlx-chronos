@@ -17,6 +17,7 @@ from mlx_chronos.constants import (
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.examples import EXAMPLE_RESULT
 from mlx_chronos.integrity import seal_result
+from mlx_chronos.protocol import COLD_PROMPTS, THROUGHPUT_PROMPTS
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.submit import SubmissionError, load_publishable_result, submit_result_file
@@ -608,6 +609,10 @@ def resize_result_trials(result: dict, count: int) -> None:
         result["trials"]["throughput_progress_samples_raw"] = result["trials"][
             "throughput_progress_samples_raw"
         ][:count]
+    result["meta"]["benchmark_protocol"]["ttft_cold"]["prompts"] = COLD_PROMPTS[:count]
+    result["meta"]["benchmark_protocol"]["throughput"]["prompts"] = (
+        THROUGHPUT_PROMPTS[:count]
+    )
     result["trials"]["count"] = count
     result["metrics"]["ttft_cold"] = compute_stats(result["trials"]["ttft_cold_raw"])
     result["metrics"]["ttft_cached"] = compute_stats(result["trials"]["ttft_cached_raw"])
@@ -637,6 +642,12 @@ def expand_result_to_six_trials(result: dict) -> None:
         result["trials"]["throughput_progress_samples_raw"].append(
             copy.deepcopy(result["trials"]["throughput_progress_samples_raw"][-1])
         )
+    result["meta"]["benchmark_protocol"]["ttft_cold"]["prompts"] = (
+        COLD_PROMPTS[: PUBLIC_BASELINE_TRIALS + 1]
+    )
+    result["meta"]["benchmark_protocol"]["throughput"]["prompts"] = (
+        THROUGHPUT_PROMPTS[: PUBLIC_BASELINE_TRIALS + 1]
+    )
     result["trials"]["count"] = PUBLIC_BASELINE_TRIALS + 1
     result["metrics"]["ttft_cold"] = compute_stats(result["trials"]["ttft_cold_raw"])
     result["metrics"]["ttft_cached"] = compute_stats(result["trials"]["ttft_cached_raw"])
@@ -699,6 +710,12 @@ def make_sustained_with_baseline_max_tokens(result: dict) -> None:
                 80,
             ),
             "must not request throughput min_tokens",
+        ),
+        (
+            lambda result: result["meta"]["benchmark_protocol"]["throughput"][
+                "generation_parameters"
+            ].__setitem__("temperature", 0.7),
+            "standard generation parameters",
         ),
         (
             lambda result: result["hardware"].__setitem__("low_power_mode", "on"),

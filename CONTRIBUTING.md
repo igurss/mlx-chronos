@@ -111,9 +111,11 @@ until the engine can return a real completion-token count. New local fallback
 results also set `meta.word_fallback_warning` to make that limitation explicit.
 
 New result files include benchmark protocol metadata with the exact prompts and
-requested token bounds. Keep those fields unchanged when submitting results;
-they are used to make runs reproducible and easier to compare. Current protocol
-v3 results use streaming throughput requests with a persistent HTTP client.
+requested token bounds and generation parameters. Keep those fields unchanged
+when submitting results; they are used to make runs reproducible and easier to
+compare. Current protocol v3 results use streaming throughput requests with a
+persistent HTTP client and deterministic generation parameters
+(`temperature=0.0`, `top_p=1.0`).
 The standard leaderboard workloads are baseline `requested_max_tokens=100` and
 sustained `requested_max_tokens=1000`, both without a requested `min_tokens`;
 non-standard token-bound runs are useful locally but are not accepted as public
