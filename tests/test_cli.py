@@ -669,6 +669,19 @@ def make_standard_sustained_result(result: dict) -> None:
     result["meta"]["benchmark_protocol"]["throughput"][
         "requested_max_tokens"
     ] = SUSTAINED_THROUGHPUT_MAX_TOKENS
+    set_completion_tokens(result, SUSTAINED_THROUGHPUT_MAX_TOKENS)
+
+
+def set_completion_tokens(result: dict, tokens: int) -> None:
+    count = result["trials"]["count"]
+    result["trials"]["completion_tokens_raw"] = [tokens] * count
+    result["trials"]["tokens_per_second_raw"] = [
+        round(tokens / elapsed, 2)
+        for elapsed in result["trials"]["throughput_elapsed_seconds_raw"]
+    ]
+    throughput_stats = compute_stats(result["trials"]["tokens_per_second_raw"])
+    result["metrics"]["tokens_per_second"] = throughput_stats
+    result["metrics"]["request_tokens_per_second"] = throughput_stats
 
 
 def make_sustained_with_two_trials(result: dict) -> None:
@@ -716,6 +729,30 @@ def make_sustained_with_baseline_max_tokens(result: dict) -> None:
                 "generation_parameters"
             ].__setitem__("temperature", 0.7),
             "standard generation parameters",
+        ),
+        (
+            lambda result: result["meta"]["benchmark_protocol"]["throughput"].__setitem__(
+                "connection_mode",
+                "per_request",
+            ),
+            "benchmark_protocol.throughput.connection_mode",
+        ),
+        (
+            lambda result: result["meta"]["benchmark_protocol"]["throughput"][
+                "prompts"
+            ].__setitem__(0, "Altered throughput prompt."),
+            "benchmark_protocol.throughput.prompts",
+        ),
+        (
+            lambda result: result["meta"]["benchmark_protocol"]["ttft_cold"].__setitem__(
+                "stream_usage_requested",
+                True,
+            ),
+            "benchmark_protocol.ttft_cold.stream_usage_requested",
+        ),
+        (
+            lambda result: set_completion_tokens(result, 79),
+            "at least 80% of the standard throughput max_tokens",
         ),
         (
             lambda result: result["hardware"].__setitem__("low_power_mode", "on"),

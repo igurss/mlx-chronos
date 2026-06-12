@@ -41,12 +41,12 @@ HTTP request and stops when the OpenAI-compatible stream yields the first valid
 content/reasoning/text delta. It is not a direct measurement of an engine's
 internal prefill or decode boundary.
 
-Starting with protocol v3, benchmark runs use one persistent `httpx.Client`
-across warmup, TTFT, and throughput requests by default. This lets the HTTP
-client reuse keep-alive connections when the engine supports them, reducing
-per-request TCP/HTTP setup noise and better matching repeated agent-loop usage.
-Older protocol v2 runs used independent per-request calls, so their TTFT may
-include more connection setup overhead.
+Current benchmark runs use one persistent `httpx.Client` across warmup, TTFT,
+and throughput requests by default. This lets the HTTP client reuse keep-alive
+connections when the engine supports them, reducing per-request TCP/HTTP setup
+noise and better matching repeated agent-loop usage. Earlier result formats
+used independent per-request calls, so their TTFT may include more connection
+setup overhead.
 
 Different engines and proxy layers may buffer streamed output differently. Some
 emit role-only chunks before text, some batch small deltas, and some may delay
@@ -71,6 +71,10 @@ remove prefill work from repeated trials. Warmup uses a separate prompt for the
 same reason. The prompt order is identical across engines and all versions of
 mlx-Chronos to ensure comparability. Do not change these prompts without
 intentionally updating the protocol contract.
+The prompts are not identical in tokenized length across every tokenizer, so
+throughput stddev includes workload variation in addition to machine and engine
+variation. This is a benchmark-suite average, not a pure engine-stability
+number.
 
 All benchmark requests explicitly set deterministic generation parameters:
 `temperature=0.0` and `top_p=1.0`. This keeps results from depending on
@@ -128,10 +132,11 @@ accepts standard baseline submissions with exactly 5 trials, `max_tokens=100`,
 no requested `min_tokens`, and `usage.completion_tokens` token counts. It also
 accepts standard sustained submissions with exactly 1 trial, `max_tokens=1000`,
 no requested `min_tokens`, and usage-based token counts. macOS Low Power Mode
-must be disabled. GitHub Actions validates this policy before generating the
-leaderboard index, so every displayed row is already a public-comparable run.
-Baseline and sustained rows are kept as separate profile choices in the
-leaderboard UI.
+must be disabled. Every throughput trial must generate at least 80% of the
+standard token limit: 80 tokens for baseline, 800 tokens for sustained. GitHub
+Actions validates this policy before generating the leaderboard index, so every
+displayed row is already a public-comparable run. Baseline and sustained rows
+are kept as separate profile choices in the leaderboard UI.
 
 ### Sustained Throughput Profile
 `mlx-chronos run --profile sustained` keeps the same benchmark phases but
@@ -299,8 +304,8 @@ for small sample sizes where it collapses toward the observed maximum and adds
 little information.
 
 **Protocol metadata:** results include `meta.benchmark_protocol`, which
-records the baseline protocol version, exact prompt text for warmup, cold TTFT,
-cached TTFT, and throughput, plus the requested min/max token bounds per phase.
+records the internal compatibility label, exact prompt text for warmup, cold
+TTFT, cached TTFT, and throughput, plus the requested min/max token bounds per phase.
 Protocol phase metadata also records whether the phase used streaming requests,
 whether `stream_options.include_usage` was requested, and whether HTTP
 connections were `persistent` or `per_request`, plus requested generation
@@ -308,6 +313,11 @@ parameters such as `temperature` and `top_p`. The protocol name matches the
 selected benchmark profile (`baseline` or `sustained`). Input token counts are
 marked as `unavailable` until mlx-Chronos can obtain them from a tokenizer or
 engine response without adding unreliable estimates.
+
+The small numeric labels stored in result JSON, such as `1`, `2`, or `3`, are
+internal compatibility markers for validators. They are not public protocol
+release versions. Documentation should describe the measurement behavior
+directly and only mention these labels when explaining compatibility checks.
 
 **Phase timing and thermal metadata:** results include
 `meta.phase_timings_seconds` and `meta.thermal_monitor` so readers can see how
@@ -324,20 +334,21 @@ the public submission path honest.
 **Public submission trust model:** mlx-Chronos assumes public submissions are
 community-provided benchmark records, not hardware-attested measurements. The
 realistic risks are accidental local diagnostics being submitted as comparable
-rows, hand-edited JSON, stale protocol versions, fallback token estimates,
+rows, hand-edited JSON, stale internal labels, fallback token estimates,
 non-standard token bounds, Low Power Mode runs, and mixed PRs that make review
 harder.
 
 The public validation path mitigates those risks with lightweight checks:
 schema validation, raw-trial consistency validation, integrity-seal validation,
-current protocol enforcement, usage-based completion-token counts, fixed public
-trial counts, standard public `max_tokens`, no requested `min_tokens`, Low
+current internal-label enforcement, exact standard protocol metadata,
+usage-based completion-token counts, fixed public trial counts, standard public
+`max_tokens`, no requested `min_tokens`, minimum generated output length, Low
 Power Mode disabled, standard deterministic generation parameters, throughput
 phase timing consistency, and GitHub Actions checks that result-submission PRs
 only add or modify submitted JSON files. These checks improve comparability and
 catch accidental or casual tampering, but they cannot prove the submitter used
-the claimed machine, model weights, backend implementation, or an unmodified
-copy of the tool.
+the claimed machine, model weights, tokenizer, chat template, backend
+implementation, or an unmodified copy of the tool.
 
 ---
 

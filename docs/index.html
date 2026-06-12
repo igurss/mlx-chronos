@@ -979,6 +979,7 @@
     let standardBaselineTrials = null;
     let standardSustainedMaxTokens = null;
     let standardSustainedTrials = null;
+    let minimumCompletionTokenRatio = null;
     const initialCompareParams = new URLSearchParams(window.location.search);
     let initialCompareParamsPending = true;
 
@@ -1181,6 +1182,11 @@
         )
           ? Number(payload.metadata.standard_sustained_trials)
           : null;
+        minimumCompletionTokenRatio = Number.isFinite(
+          Number(payload?.metadata?.minimum_completion_token_ratio)
+        )
+          ? Number(payload.metadata.minimum_completion_token_ratio)
+          : null;
         renderStandardPolicyLabel();
         allRows = rows.map(normalizeRow);
         resultsLoadError = "";
@@ -1189,6 +1195,7 @@
         standardBaselineTrials = null;
         standardSustainedMaxTokens = null;
         standardSustainedTrials = null;
+        minimumCompletionTokenRatio = null;
         renderStandardPolicyLabel();
         const detail = error instanceof Error && error.message
           ? error.message
@@ -1217,7 +1224,10 @@
       const sustained = standardSustainedMaxTokens == null
         ? `${sustainedTrials} / max_tokens=1000`
         : `${sustainedTrials} / max_tokens=${standardSustainedMaxTokens}`;
-      standardTokenLabel.textContent = `${baseline}; ${sustained}`;
+      const minimumCompletion = minimumCompletionTokenRatio == null
+        ? "at least 80% generated output"
+        : `at least ${Math.round(minimumCompletionTokenRatio * 100)}% generated output`;
+      standardTokenLabel.textContent = `${baseline}; ${sustained}; ${minimumCompletion}`;
     }
 
     function formatTrialCount(count) {

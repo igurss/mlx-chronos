@@ -538,6 +538,26 @@ def test_validate_completion_request_rejects_invalid_shape(mock_post):
 
 
 @patch("httpx.get")
+@patch.object(OMLXEngine, "get_server_pid", return_value=12345)
+def test_omlx_server_running_requires_matching_listener_pid(mock_pid, mock_get):
+    models_response = MagicMock(status_code=200)
+    mock_get.return_value = models_response
+
+    assert OMLXEngine().is_server_running() is True
+    mock_pid.assert_called_once()
+
+
+@patch("httpx.get")
+@patch.object(OMLXEngine, "get_server_pid", return_value=None)
+def test_omlx_server_running_rejects_wrong_server_on_port(mock_pid, mock_get):
+    models_response = MagicMock(status_code=200)
+    mock_get.return_value = models_response
+
+    assert OMLXEngine().is_server_running() is False
+    mock_pid.assert_called_once()
+
+
+@patch("httpx.get")
 def test_ollama_server_running_requires_ollama_identity(mock_get):
     models_response = MagicMock(status_code=200)
     version_response = MagicMock(status_code=200)

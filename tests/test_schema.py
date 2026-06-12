@@ -543,6 +543,25 @@ def test_quantization_is_normalized():
     result = BenchmarkResult(**data)
     assert result.model.quantization == "4bit"
 
+
+def test_model_accepts_optional_identity_metadata():
+    data = EXAMPLE_RESULT.copy()
+    data["model"] = {
+        **data["model"],
+        "source": "mlx-community/example",
+        "revision": "abc123",
+        "weight_hash": "sha256:weights",
+        "tokenizer_hash": "sha256:tokenizer",
+        "chat_template_hash": "sha256:template",
+        "architecture": "qwen3",
+    }
+
+    result = BenchmarkResult(**data)
+
+    assert result.model.source == "mlx-community/example"
+    assert result.model.revision == "abc123"
+    assert result.model.architecture == "qwen3"
+
 def test_uncommon_quantization_is_allowed():
     data = EXAMPLE_RESULT.copy()
     data["model"] = data["model"].copy()

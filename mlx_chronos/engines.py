@@ -845,6 +845,9 @@ class OMLXEngine(BaseEngine):
     def is_installed(self) -> bool:
         return shutil.which("omlx") is not None
 
+    def _server_identity_matches(self) -> bool:
+        return self.get_server_pid() is not None
+
     def get_version(self) -> str:
         version_commands = [
             ["omlx", "--version"],

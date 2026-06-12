@@ -3,7 +3,8 @@
     "standard_throughput_max_tokens": 100,
     "standard_baseline_trials": 5,
     "standard_sustained_max_tokens": 1000,
-    "standard_sustained_trials": 1
+    "standard_sustained_trials": 1,
+    "minimum_completion_token_ratio": 0.8
   },
   "results": []
 }

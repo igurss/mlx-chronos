@@ -35,6 +35,7 @@ jobs:
           from mlx_chronos.constants import (
               DEFAULT_THROUGHPUT_MAX_TOKENS,
               PUBLIC_BASELINE_TRIALS,
+              PUBLIC_MIN_COMPLETION_TOKEN_RATIO,
               SUSTAINED_THROUGHPUT_MAX_TOKENS,
               SUSTAINED_TRIALS,
           )
@@ -104,6 +105,9 @@ jobs:
                       SUSTAINED_THROUGHPUT_MAX_TOKENS
                   ),
                   "standard_sustained_trials": SUSTAINED_TRIALS,
+                  "minimum_completion_token_ratio": (
+                      PUBLIC_MIN_COMPLETION_TOKEN_RATIO
+                  ),
               },
               "results": index,
           }

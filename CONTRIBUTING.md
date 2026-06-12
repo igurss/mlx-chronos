@@ -105,7 +105,9 @@ Public leaderboard submissions are stricter. They must use
 standard profiles: `baseline` with exactly 5 trials and
 `requested_max_tokens=100`, or `sustained` with exactly 1 trial and
 `requested_max_tokens=1000`. Neither profile may request `min_tokens`, and
-macOS Low Power Mode must be disabled. If your JSON says
+macOS Low Power Mode must be disabled. Each throughput trial must generate at
+least 80% of the standard token limit: 80 tokens for baseline, 800 tokens for
+sustained. If your JSON says
 `"token_count_source": "word_fallback"` or `"mixed"`, keep it as a local result
 until the engine can return a real completion-token count. New local fallback
 results also set `meta.word_fallback_warning` to make that limitation explicit.
@@ -113,9 +115,12 @@ results also set `meta.word_fallback_warning` to make that limitation explicit.
 New result files include benchmark protocol metadata with the exact prompts and
 requested token bounds and generation parameters. Keep those fields unchanged
 when submitting results; they are used to make runs reproducible and easier to
-compare. Current protocol v3 results use streaming throughput requests with a
+compare. Current publishable results use streaming throughput requests with a
 persistent HTTP client and deterministic generation parameters
 (`temperature=0.0`, `top_p=1.0`).
+The small protocol labels stored in JSON, such as `1`, `2`, or `3`, are internal
+compatibility markers used by validators; they are not public protocol release
+versions.
 The standard leaderboard workloads are baseline `requested_max_tokens=100` and
 sustained `requested_max_tokens=1000`, both without a requested `min_tokens`;
 non-standard token-bound runs are useful locally but are not accepted as public
@@ -155,7 +160,7 @@ For leaderboard result submissions, open a PR that changes only JSON files under
 `results/submitted/`. GitHub Actions rejects mixed PRs, deleted submitted result
 files, invalid schemas, broken integrity seals, non-standard public benchmark
 profiles, fallback token counts, requested `min_tokens`, Low Power Mode runs,
-and non-standard public trial counts or token bounds.
+short-output runs, and non-standard public trial counts or token bounds.
 
 For code changes, run the relevant tests locally before opening the PR. The
 maintainer reviews code, docs, and result-submission PRs separately; benchmark

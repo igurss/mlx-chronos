@@ -3,20 +3,24 @@
 ## Unreleased
 
 ### Reliability
-- Bump the baseline benchmark protocol to v3 and reuse one persistent HTTP
-  client across benchmark requests by default; protocol phase metadata now
-  records the HTTP connection mode.
+- Move the internal benchmark compatibility label to `3` and reuse one
+  persistent HTTP client across benchmark requests by default; protocol phase
+  metadata now records the HTTP connection mode.
 - Enforce public leaderboard comparability in `mlx-chronos submit` and
-  submission workflows: standard baseline runs require at least 5 trials and
+  submission workflows: standard baseline runs require exactly 5 trials and
   `max_tokens=100`; standard sustained runs require 1 trial and
   `max_tokens=1000`; both require no requested `min_tokens` and usage-based
   completion-token counts.
+- Require publishable throughput trials to generate at least 80% of the
+  standard output limit, and compare submitted protocol metadata against the
+  exact standard protocol shape.
 - Add a tamper-evident JSON integrity seal and require it for public
   submissions through both `mlx-chronos submit` and GitHub Actions validation.
 - Require current result metadata for public submissions instead of accepting
   missing protocol/timing/raw fields from early protocol rows.
-- Remove the early protocol v1 submitted results from the bundled leaderboard
-  index so the public UI only shows results generated with the current format.
+- Remove the early internal-label `1` submitted results from the bundled
+  leaderboard index so the public UI only shows results generated with the
+  current format.
 - Remove the leaderboard HTML fallback for the old flat-array index shape.
 - Treat the leaderboard as publishable-results-only: remove standard/custom run
   filtering from the UI and generated index, while documenting that local runs
@@ -119,8 +123,8 @@ clearer local result warnings since `0.1.1`.
   for runs with at least 20 trials.
 - Add phase timing metadata and lightweight continuous thermal monitoring to
   new benchmark results.
-- Bump the baseline benchmark protocol to v2 for streaming throughput trials
-  with usage metadata.
+- Set the internal benchmark compatibility label to `2` for streaming
+  throughput trials with usage metadata.
 - Add a `--profile sustained` benchmark mode for one longer throughput trial
   with progress samples for late-run degradation checks.
 - Add `--cooldown-seconds` and elapsed-since-prior-result metadata to make
@@ -160,9 +164,9 @@ clearer local result warnings since `0.1.1`.
 - Keep example result metadata aligned with the `0.1.2` release version/date.
 
 ### Compatibility
-- Protocol v1 throughput used non-streaming requests; protocol v2 throughput
-  uses streaming requests. Existing v1 leaderboard rows remain valid, but their
-  throughput workload is not identical to new v2 rows.
+- Internal-label `1` throughput used non-streaming requests; internal-label `2`
+  throughput uses streaming requests. Existing label `1` leaderboard rows remain
+  valid, but their throughput workload is not identical to newer rows.
 
 ## [0.1.1] — 2026-06-01
 

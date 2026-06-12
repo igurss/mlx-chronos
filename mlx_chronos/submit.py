@@ -10,13 +10,18 @@ from mlx_chronos.constants import (
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     PHASE_TIMING_TOLERANCE_SECONDS,
     PUBLIC_BASELINE_TRIALS,
+    PUBLIC_MIN_COMPLETION_TOKEN_RATIO,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
     TOKEN_COUNT_SOURCE_USAGE,
 )
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
-from mlx_chronos.protocol import BASELINE_PROTOCOL_VERSION
-from mlx_chronos.schema import BenchmarkResult
+from mlx_chronos.protocol import (
+    BASELINE_PROTOCOL_VERSION,
+    CONNECTION_MODE_PERSISTENT,
+    build_benchmark_protocol,
+)
+from mlx_chronos.schema import BenchmarkProtocol, BenchmarkResult
 
 
 SUBMIT_ENDPOINT_ENV = "MLX_CHRONOS_SUBMIT_ENDPOINT"
@@ -51,6 +56,97 @@ def _validate_public_generation_parameters(result: BenchmarkResult) -> None:
             )
 
 
+def _first_protocol_difference(
+    expected: object,
+    actual: object,
+    path: str = "benchmark_protocol",
+) -> str | None:
+    if isinstance(expected, dict) and isinstance(actual, dict):
+        expected_keys = set(expected)
+        actual_keys = set(actual)
+        if expected_keys != actual_keys:
+            missing = sorted(expected_keys - actual_keys)
+            extra = sorted(actual_keys - expected_keys)
+            details = []
+            if missing:
+                details.append(f"missing={missing}")
+            if extra:
+                details.append(f"extra={extra}")
+            return f"{path} keys differ ({', '.join(details)})"
+        for key in sorted(expected):
+            difference = _first_protocol_difference(
+                expected[key],
+                actual[key],
+                f"{path}.{key}",
+            )
+            if difference:
+                return difference
+        return None
+
+    if isinstance(expected, list) and isinstance(actual, list):
+        if len(expected) != len(actual):
+            return f"{path} length expected {len(expected)}, got {len(actual)}"
+        for index, (expected_item, actual_item) in enumerate(zip(expected, actual)):
+            difference = _first_protocol_difference(
+                expected_item,
+                actual_item,
+                f"{path}[{index}]",
+            )
+            if difference:
+                return difference
+        return None
+
+    if expected != actual:
+        return f"{path} expected {expected!r}, got {actual!r}"
+    return None
+
+
+def _expected_public_profile_shape(profile: str) -> tuple[int, int]:
+    if profile == PUBLIC_PROFILE_BASELINE:
+        return PUBLIC_BASELINE_TRIALS, DEFAULT_THROUGHPUT_MAX_TOKENS
+    return SUSTAINED_TRIALS, SUSTAINED_THROUGHPUT_MAX_TOKENS
+
+
+def _validate_public_protocol(result: BenchmarkResult) -> None:
+    expected_trials, expected_max_tokens = _expected_public_profile_shape(
+        result.meta.benchmark_profile
+    )
+    expected_protocol = BenchmarkProtocol.model_validate(
+        build_benchmark_protocol(
+            expected_trials,
+            expected_max_tokens,
+            None,
+            name=result.meta.benchmark_profile,
+            connection_mode=CONNECTION_MODE_PERSISTENT,
+        )
+    ).model_dump(mode="json")
+    actual_protocol = result.meta.benchmark_protocol.model_dump(mode="json")
+
+    difference = _first_protocol_difference(expected_protocol, actual_protocol)
+    if difference:
+        raise SubmissionError(
+            "leaderboard submissions must match the standard benchmark "
+            f"protocol exactly; {difference}"
+        )
+
+
+def _validate_public_completion_tokens(
+    result: BenchmarkResult,
+    expected_max_tokens: int,
+) -> None:
+    minimum_tokens = int(expected_max_tokens * PUBLIC_MIN_COMPLETION_TOKEN_RATIO)
+    if minimum_tokens < 1:
+        minimum_tokens = 1
+    for index, tokens in enumerate(result.trials.completion_tokens_raw, start=1):
+        if tokens < minimum_tokens:
+            raise SubmissionError(
+                "leaderboard submissions must generate at least "
+                f"{PUBLIC_MIN_COMPLETION_TOKEN_RATIO:.0%} of the standard "
+                f"throughput max_tokens on every trial (trial {index}: "
+                f"minimum {minimum_tokens}, got {tokens})"
+            )
+
+
 def validate_publishable_result(result: BenchmarkResult) -> None:
     """Check public leaderboard comparability constraints."""
     token_source = result.metrics.token_count_source
@@ -69,11 +165,13 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
             f"got {profile!r}"
         )
 
+    expected_trials, expected_max_tokens = _expected_public_profile_shape(profile)
+
     protocol = result.meta.benchmark_protocol
     if protocol.version != BASELINE_PROTOCOL_VERSION:
         raise SubmissionError(
-            "leaderboard submissions must use current benchmark protocol "
-            f"version {BASELINE_PROTOCOL_VERSION}; got {protocol.version!r}"
+            "leaderboard submissions must use the current internal protocol "
+            f"label {BASELINE_PROTOCOL_VERSION!r}; got {protocol.version!r}"
         )
     _validate_public_generation_parameters(result)
 
@@ -105,33 +203,34 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
         )
 
     if profile == PUBLIC_PROFILE_BASELINE:
-        if result.trials.count != PUBLIC_BASELINE_TRIALS:
+        if result.trials.count != expected_trials:
             raise SubmissionError(
                 "baseline leaderboard submissions must use the standard baseline "
-                f"trial count ({PUBLIC_BASELINE_TRIALS}); got {result.trials.count}"
+                f"trial count ({expected_trials}); got {result.trials.count}"
             )
         if (
             requested_max_tokens is not None
-            and requested_max_tokens != DEFAULT_THROUGHPUT_MAX_TOKENS
+            and requested_max_tokens != expected_max_tokens
         ):
             raise SubmissionError(
                 "baseline leaderboard submissions must use standard throughput "
-                f"max_tokens={DEFAULT_THROUGHPUT_MAX_TOKENS}; got "
+                f"max_tokens={expected_max_tokens}; got "
                 f"{requested_max_tokens}"
             )
-        return
-
-    if result.trials.count != SUSTAINED_TRIALS:
+    elif result.trials.count != expected_trials:
         raise SubmissionError(
             "sustained leaderboard submissions must use the standard sustained "
-            f"trial count ({SUSTAINED_TRIALS}); got {result.trials.count}"
+            f"trial count ({expected_trials}); got {result.trials.count}"
         )
-    if requested_max_tokens != SUSTAINED_THROUGHPUT_MAX_TOKENS:
+    elif requested_max_tokens != expected_max_tokens:
         raise SubmissionError(
             "sustained leaderboard submissions must use standard sustained "
-            f"max_tokens={SUSTAINED_THROUGHPUT_MAX_TOKENS}; got "
+            f"max_tokens={expected_max_tokens}; got "
             f"{requested_max_tokens}"
         )
+
+    _validate_public_completion_tokens(result, expected_max_tokens)
+    _validate_public_protocol(result)
 
 
 def load_publishable_result(path: Path) -> tuple[bytes, BenchmarkResult]:

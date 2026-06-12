@@ -56,6 +56,8 @@ uses a separate prompt so same-run prefix/KV cache hits do not silently remove
 throughput prefill work. Requests use deterministic generation parameters
 (`temperature=0.0`, `top_p=1.0`). This includes request overhead, prefill, and
 decode, so it is an end-to-end throughput metric rather than pure decode speed.
+Throughput prompts intentionally vary to reduce cache artifacts, so per-run
+stddev includes normal workload variation as well as system and engine noise.
 New runs also record client-observed
 `decode_tokens_per_second` from the streaming throughput trial when reliable
 completion-token usage is available. If an engine cannot provide usage in the
@@ -124,12 +126,10 @@ engine version, and quantization.
 
 ---
 
-## Current Release
+## Current Development State
 
-`0.1.3` is a compatibility-preserving patch release over `0.1.2`. It tightens
-throughput timing, sustained-run warnings, release checks, and submission
-validation, clarifies System RAM Peak as the comparable memory metric, and
-keeps Engine RSS as a diagnostic field in the raw result details.
+`main` currently identifies itself as `0.2.0.dev0` while the next stable release
+is prepared. The latest published stable release remains `0.1.3`.
 
 ---
 
@@ -193,6 +193,12 @@ The public leaderboard is stricter. Only results that pass
 same policy before adding a row to the leaderboard. That keeps public rows
 comparable while leaving the local tool useful for experiments.
 
+Result JSON contains an internal benchmark-protocol label used by validators to
+detect incompatible result formats. Treat labels such as `1`, `2`, and `3` as
+implementation compatibility markers, not public protocol release versions.
+User-facing documentation describes the measurement behavior instead of asking
+contributors to reason about those labels.
+
 ## Contributing Your Results
 
 1. Run `mlx-chronos run` on your Mac
@@ -210,9 +216,12 @@ Leaderboard submissions must report throughput using the engine response's
 `usage.completion_tokens` and keep one of the standard profiles: baseline with
 exactly 5 trials and `max_tokens=100`, or sustained with exactly 1 trial and
 `max_tokens=1000`. Neither profile may request `min_tokens`, and macOS Low
-Power Mode must be disabled. Custom local runs, fallback token estimates, custom
-token bounds, custom public-profile trial counts, or Low Power Mode runs can
-still be saved locally, but they are not accepted into the public leaderboard.
+Power Mode must be disabled. Each throughput trial must also generate at least
+80% of the standard token limit: 80 tokens for baseline, 800 tokens for
+sustained. Custom local runs, fallback token estimates, custom token bounds,
+custom public-profile trial counts, short-output runs, or Low Power Mode runs
+can still be saved locally, but they are not accepted into the public
+leaderboard.
 
 Do not edit submitted JSON by hand after the run. Public submissions include an
 `integrity` seal over the canonical result payload; changing any benchmark field
@@ -248,7 +257,6 @@ is measured, how, and why.
 - [x] GitHub Pages leaderboard with model/chip/RAM engine comparison and configurable raw-data columns
 - [x] JSON and Markdown result export
 - [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
-- [x] Published seed Apple M2 and M1 Max sample results for the public leaderboard
 - [x] Warnings for battery mode, Low Power Mode, non-nominal thermal state, and unavailable thermal state
 - [x] Integration tests against mock OpenAI-compatible servers
 - [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs

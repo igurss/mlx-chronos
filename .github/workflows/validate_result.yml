@@ -47,8 +47,6 @@ jobs:
                           "--name-only",
                           target_branch,
                           "HEAD",
-                          "--",
-                          "results/submitted",
                       ],
                       capture_output=True,
                       text=True,

@@ -60,7 +60,7 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Trials:** 5" in content
     assert "**Token count source:** usage.completion_tokens" in content
     assert "**Integrity:** mlx-chronos-integrity-v1" in content
-    assert "**Protocol:** baseline v3" in content
+    assert "**Protocol label:** baseline 3" in content
     assert "**Throughput token bounds:** max 100, min none" in content
     assert "**HTTP connection mode:** persistent" in content
     assert "**Total runtime:** 38.1 s" in content

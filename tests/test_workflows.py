@@ -4,6 +4,7 @@ from pathlib import Path
 from mlx_chronos.constants import (
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     PUBLIC_BASELINE_TRIALS,
+    PUBLIC_MIN_COMPLETION_TOKEN_RATIO,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
 )
@@ -38,6 +39,7 @@ def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
     assert "must not delete submitted " in text
     assert "result files:" in text
     assert "load_publishable_result(path)" in text
+    assert '"results/submitted",' not in text
 
 
 def test_leaderboard_index_carries_standard_token_metadata():
@@ -51,6 +53,9 @@ def test_leaderboard_index_carries_standard_token_metadata():
         SUSTAINED_THROUGHPUT_MAX_TOKENS
     )
     assert data["metadata"]["standard_sustained_trials"] == SUSTAINED_TRIALS
+    assert data["metadata"]["minimum_completion_token_ratio"] == (
+        PUBLIC_MIN_COMPLETION_TOKEN_RATIO
+    )
     assert isinstance(data["results"], list)
 
 
@@ -63,6 +68,7 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
 
     assert "load_publishable_result(path)" in text
     assert "PUBLIC_BASELINE_TRIALS" in text
+    assert "PUBLIC_MIN_COMPLETION_TOKEN_RATIO" in text
     assert "SUSTAINED_TRIALS" in text
     assert '"timestamp": meta["timestamp"]' in text
     assert '"protocol_version"' not in text
@@ -91,6 +97,7 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
     assert "standardBaselineTrials" in html
     assert "standardSustainedMaxTokens" in html
     assert "standardSustainedTrials" in html
+    assert "minimumCompletionTokenRatio" in html
     assert "project default trial counts and token bounds" in html
     assert 'fetch(RESULTS_INDEX, { cache: "no-store" })' in html
     assert "baseline 5 trials" in html

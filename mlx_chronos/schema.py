@@ -152,6 +152,30 @@ class Engine(ChronosBaseModel):
 class Model(ChronosBaseModel):
     name: str = Field(..., description="Model name (e.g. 'Qwen3.5-9B')")
     quantization: str = Field(..., description="Quantization format (e.g. '4bit', '8bit')")
+    source: Optional[str] = Field(
+        None,
+        description="Optional model source or repository identifier",
+    )
+    revision: Optional[str] = Field(
+        None,
+        description="Optional model source revision, commit, or tag",
+    )
+    weight_hash: Optional[str] = Field(
+        None,
+        description="Optional hash identifying the model weight files",
+    )
+    tokenizer_hash: Optional[str] = Field(
+        None,
+        description="Optional hash identifying tokenizer files",
+    )
+    chat_template_hash: Optional[str] = Field(
+        None,
+        description="Optional hash identifying the chat template",
+    )
+    architecture: Optional[str] = Field(
+        None,
+        description="Optional model architecture identifier",
+    )
 
     @field_validator("name")
     @classmethod
@@ -179,6 +203,21 @@ class Model(ChronosBaseModel):
             "bfloat16": "bf16",
         }
         return aliases.get(normalized, normalized)
+
+    @field_validator(
+        "source",
+        "revision",
+        "weight_hash",
+        "tokenizer_hash",
+        "chat_template_hash",
+        "architecture",
+    )
+    @classmethod
+    def normalize_optional_identity_field(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 class TrialStats(ChronosBaseModel):
@@ -443,7 +482,11 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
 
 class BenchmarkProtocol(ChronosBaseModel):
     name: BenchmarkProfile = Field(..., description="Benchmark protocol name")
-    version: str = Field(..., min_length=1, description="Benchmark protocol version")
+    version: str = Field(
+        ...,
+        min_length=1,
+        description="Internal benchmark protocol compatibility label",
+    )
     warmup: BenchmarkProtocolPhase
     ttft_cold: BenchmarkProtocolPhase
     ttft_cached: BenchmarkProtocolPhase

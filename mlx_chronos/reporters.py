@@ -99,8 +99,8 @@ class MarkdownReporter(BaseReporter):
         protocol = meta.get("benchmark_protocol") or {}
         if protocol:
             md += (
-                f"- **Protocol:** {self._format_optional(protocol.get('name'))} "
-                f"v{self._format_optional(protocol.get('version'))}\n"
+                f"- **Protocol label:** {self._format_optional(protocol.get('name'))} "
+                f"{self._format_optional(protocol.get('version'))}\n"
             )
             throughput_protocol = protocol.get("throughput") or {}
             if throughput_protocol:

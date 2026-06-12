@@ -16,6 +16,9 @@ class LocalOMLXEngine(OMLXEngine):
     def base_url(self) -> str:
         return self._base_url
 
+    def _server_identity_matches(self) -> bool:
+        return True
+
 
 @contextmanager
 def openai_mock_server(
