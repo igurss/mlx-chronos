@@ -171,6 +171,15 @@ def test_process_match_accepts_vllm_mlx_python_module(monkeypatch):
     assert VLLMMLXEngine()._process_matches_engine(12345) is True
 
 
+def test_process_match_accepts_omlx_server_entrypoint(monkeypatch):
+    fake_process = MagicMock()
+    fake_process.name.return_value = "python3.11"
+    fake_process.cmdline.return_value = ["omlx-server", "", "", "", "", ""]
+    monkeypatch.setattr("mlx_chronos.engines.psutil.Process", lambda _pid: fake_process)
+
+    assert OMLXEngine()._process_matches_engine(12345) is True
+
+
 def test_process_match_rejects_engine_name_only_in_path(monkeypatch):
     fake_process = MagicMock()
     fake_process.name.return_value = "python"

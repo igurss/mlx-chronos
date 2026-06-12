@@ -840,7 +840,7 @@ class BaseEngine(ABC):
 class OMLXEngine(BaseEngine):
     name = ENGINE_NAME_OMLX
     default_port = 8000
-    expected_process_names = ("omlx",)
+    expected_process_names = ("omlx", "omlx-server")
 
     def is_installed(self) -> bool:
         return shutil.which("omlx") is not None
