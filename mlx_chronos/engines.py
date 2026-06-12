@@ -973,11 +973,19 @@ class VLLMMLXEngine(BaseEngine):
         except Exception:
             return False
 
+        if not isinstance(data, dict):
+            return False
+        if data.get("model_loaded") is not True:
+            return False
+        if data.get("model_type") not in {"llm", "mllm"}:
+            return False
+        if isinstance(data.get("available_models"), list):
+            return True
         return (
-            isinstance(data, dict)
-            and isinstance(data.get("available_models"), list)
-            and isinstance(data.get("model_loaded"), bool)
-            and data.get("model_type") in {"llm", "mllm"}
+            data.get("status") == "healthy"
+            and data.get("ready") is True
+            and isinstance(data.get("model_name"), str)
+            and bool(data["model_name"].strip())
         )
 
     def get_version(self) -> str:

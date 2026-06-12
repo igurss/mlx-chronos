@@ -601,6 +601,23 @@ def test_vllm_mlx_server_running_requires_health_identity(mock_get):
 
 
 @patch("httpx.get")
+def test_vllm_mlx_server_running_accepts_ready_health_identity(mock_get):
+    models_response = MagicMock(status_code=200)
+    health_response = MagicMock(status_code=200)
+    health_response.json.return_value = {
+        "status": "healthy",
+        "ready": True,
+        "model_loaded": True,
+        "model_name": "Qwen3.5-4B-nvfp4",
+        "model_type": "llm",
+        "engine_type": "batched",
+    }
+    mock_get.side_effect = [models_response, health_response]
+
+    assert VLLMMLXEngine().is_server_running() is True
+
+
+@patch("httpx.get")
 def test_vllm_mlx_server_running_rejects_wrong_server_on_port(mock_get):
     models_response = MagicMock(status_code=200)
     health_response = MagicMock(status_code=200)
