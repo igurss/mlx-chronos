@@ -21,6 +21,7 @@ contribute to the community leaderboard.
 - [Ollama](https://github.com/ollama/ollama) (MLX backend)
 - [oMLX](https://github.com/jundot/omlx)
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
+- [vllm-mlx](https://github.com/raullenchai/vllm-mlx)
 - [mlx-lm (Apple MLX)](https://github.com/ml-explore/mlx-lm)
 
 **Metrics measured:**
@@ -172,7 +173,8 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Des
 Optional thermal-state support through macOS Foundation can be installed with
 `pip install "mlx-chronos[thermal]"`. Engine ports can be overridden with
 `MLX_CHRONOS_<ENGINE>_PORT`, for example
-`MLX_CHRONOS_OMLX_PORT=8002` or `MLX_CHRONOS_MLX_LM_PORT=8002`.
+`MLX_CHRONOS_OMLX_PORT=8002`, `MLX_CHRONOS_VLLM_MLX_PORT=8003`, or
+`MLX_CHRONOS_MLX_LM_PORT=8002`.
 
 ---
 
@@ -233,7 +235,7 @@ is measured, how, and why.
 
 ### Completed
 - [x] Core benchmark runner with repeated trials, warmup, cache priming, and phase-separated metrics
-- [x] Engine support for oMLX, Rapid-MLX, mlx-lm, and Ollama
+- [x] Engine support for oMLX, Rapid-MLX, vllm-mlx, mlx-lm, and Ollama
 - [x] Hardware detection for chip, machine model, memory, macOS, Python, architecture, and thermal state
 - [x] Strict JSON schema validation with raw-trial consistency checks
 - [x] Continuous system RAM peak sampling, with post-warmup engine RSS kept as a diagnostic field

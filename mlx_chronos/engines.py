@@ -16,6 +16,7 @@ from mlx_chronos.constants import (
     ENGINE_NAME_OLLAMA,
     ENGINE_NAME_OMLX,
     ENGINE_NAME_RAPID_MLX,
+    ENGINE_NAME_VLLM_MLX,
     ERROR_RESPONSE_BODY_LIMIT,
     TOKEN_COUNT_SOURCE_USAGE,
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
@@ -943,6 +944,63 @@ class RapidMLXEngine(BaseEngine):
             return "unknown"
 
 
+# ─── vLLM-MLX ────────────────────────────────────────────────────────────────
+
+class VLLMMLXEngine(BaseEngine):
+    name = ENGINE_NAME_VLLM_MLX
+    default_port = 8000
+    expected_process_names = ("vllm-mlx", "vllm_mlx")
+
+    def is_installed(self) -> bool:
+        return (
+            shutil.which("vllm-mlx") is not None
+            or importlib.util.find_spec("vllm_mlx") is not None
+        )
+
+    def _server_identity_matches(self) -> bool:
+        try:
+            response = httpx.get(f"{self.root_url()}/health", timeout=2.0)
+            if response.status_code != 200:
+                return False
+            data = response.json()
+        except Exception:
+            return False
+
+        return (
+            isinstance(data, dict)
+            and isinstance(data.get("available_models"), list)
+            and isinstance(data.get("model_loaded"), bool)
+            and data.get("model_type") in {"llm", "mllm"}
+        )
+
+    def get_version(self) -> str:
+        try:
+            return importlib.metadata.version("vllm-mlx")
+        except Exception:
+            pass
+
+        try:
+            import vllm_mlx
+
+            version = getattr(vllm_mlx, "__version__", None)
+            if isinstance(version, str) and version.strip():
+                return version.strip()
+        except Exception:
+            pass
+
+        http_version = self._get_version_from_models_endpoint(
+            version_keys=(
+                "vllm_mlx_version",
+                "engine_version",
+                "server_version",
+                "version",
+            )
+        )
+        if http_version:
+            return self._parse_version_output(http_version) or http_version
+        return "unknown"
+
+
 # ─── mlx-lm ───────────────────────────────────────────────────────────────────
 
 class MLXLMEngine(BaseEngine):
@@ -996,6 +1054,7 @@ class OllamaEngine(BaseEngine):
 ENGINES = {
     ENGINE_NAME_OMLX: OMLXEngine,
     ENGINE_NAME_RAPID_MLX: RapidMLXEngine,
+    ENGINE_NAME_VLLM_MLX: VLLMMLXEngine,
     ENGINE_NAME_MLX_LM: MLXLMEngine,
     ENGINE_NAME_OLLAMA: OllamaEngine,
 }

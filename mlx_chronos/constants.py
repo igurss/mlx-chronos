@@ -18,6 +18,7 @@ ERROR_RESPONSE_BODY_LIMIT = 500
 
 ENGINE_NAME_OMLX = "omlx"
 ENGINE_NAME_RAPID_MLX = "rapid-mlx"
+ENGINE_NAME_VLLM_MLX = "vllm-mlx"
 ENGINE_NAME_MLX_LM = "mlx-lm"
 ENGINE_NAME_OLLAMA = "ollama"
 # Keep in sync with engines.ENGINES and schema.EngineName. constants.py is kept
@@ -25,6 +26,7 @@ ENGINE_NAME_OLLAMA = "ollama"
 VALID_ENGINE_NAMES = {
     ENGINE_NAME_OMLX,
     ENGINE_NAME_RAPID_MLX,
+    ENGINE_NAME_VLLM_MLX,
     ENGINE_NAME_MLX_LM,
     ENGINE_NAME_OLLAMA,
 }

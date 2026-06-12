@@ -249,6 +249,8 @@ Engine versions are recorded in `engine.version` when local detection succeeds:
   `omlx serve --help` fallback for older installs. If those fail, mlx-Chronos
   also checks `/v1/models` for explicit engine/server version metadata.
 - Rapid-MLX: `rapid-mlx version`.
+- vllm-mlx: installed Python package metadata for `vllm-mlx`, with package
+  `__version__` and `/v1/models` metadata fallbacks.
 - mlx-lm: installed Python package metadata for `mlx-lm`.
 - Ollama: `ollama --version`.
 

@@ -14,6 +14,7 @@ There are two ways to contribute: submitting benchmark results and improving the
   - [Ollama](https://github.com/ollama/ollama) (MLX backend)
   - [oMLX](https://github.com/jundot/omlx)
   - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
+  - [vllm-mlx](https://github.com/raullenchai/vllm-mlx)
   - [mlx-lm](https://github.com/ml-explore/mlx-lm)
 - Python 3.10+
 
@@ -38,6 +39,11 @@ For Rapid-MLX:
 rapid-mlx --no-telemetry serve /path/to/model --port 8001
 ```
 
+For vllm-mlx:
+```bash
+vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
+```
+
 For mlx-lm:
 ```bash
 mlx_lm.server --model /path/to/model --port 8080
@@ -54,11 +60,14 @@ mlx-Chronos checks these default OpenAI-compatible endpoints:
 |--------|-------------|
 | oMLX | `http://localhost:8000/v1` |
 | Rapid-MLX | `http://localhost:8001/v1` |
+| vllm-mlx | `http://localhost:8000/v1` |
 | mlx-lm | `http://localhost:8080/v1` |
 | Ollama | `http://localhost:11434/v1` |
 
 You can override a port with an environment variable such as
-`MLX_CHRONOS_MLX_LM_PORT=8002`.
+`MLX_CHRONOS_VLLM_MLX_PORT=8003` or `MLX_CHRONOS_MLX_LM_PORT=8002`.
+oMLX and vllm-mlx both default to port 8000, so run only one of them on that
+port at a time, or move one server and set the matching environment variable.
 
 **3. Run the benchmark**
 ```bash

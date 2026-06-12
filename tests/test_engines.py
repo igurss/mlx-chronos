@@ -8,7 +8,13 @@ import pytest
 
 from mlx_chronos.constants import VALID_ENGINE_NAMES
 from mlx_chronos.engines import (
-    ENGINES, OMLXEngine, MLXLMEngine, RapidMLXEngine, OllamaEngine, get_engine
+    ENGINES,
+    OMLXEngine,
+    MLXLMEngine,
+    RapidMLXEngine,
+    VLLMMLXEngine,
+    OllamaEngine,
+    get_engine,
 )
 from mlx_chronos.measurements import ThroughputMeasurement
 
@@ -114,8 +120,20 @@ def test_mlx_lm_install_check_does_not_import_mlx_lm(monkeypatch):
     assert MLXLMEngine().is_installed() is False
     assert called.get("name") == "mlx_lm"
 
+def test_vllm_mlx_install_check_accepts_cli(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda command: "/usr/bin/vllm-mlx")
+
+    assert VLLMMLXEngine().is_installed() is True
+
+def test_vllm_mlx_install_check_accepts_package(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda command: None)
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: object())
+
+    assert VLLMMLXEngine().is_installed() is True
+
 def test_get_engine():
     assert isinstance(get_engine("omlx"), OMLXEngine)
+    assert isinstance(get_engine("vllm-mlx"), VLLMMLXEngine)
     with pytest.raises(ValueError, match="Unknown engine: 'fake'"):
         get_engine("fake")
 
@@ -139,6 +157,14 @@ def test_process_match_accepts_engine_specific_python_module(monkeypatch):
     monkeypatch.setattr("mlx_chronos.engines.psutil.Process", lambda _pid: fake_process)
 
     assert RapidMLXEngine()._process_matches_engine(12345) is True
+
+def test_process_match_accepts_vllm_mlx_python_module(monkeypatch):
+    fake_process = MagicMock()
+    fake_process.name.return_value = "python"
+    fake_process.cmdline.return_value = ["python", "-m", "vllm_mlx.cli", "serve"]
+    monkeypatch.setattr("mlx_chronos.engines.psutil.Process", lambda _pid: fake_process)
+
+    assert VLLMMLXEngine()._process_matches_engine(12345) is True
 
 
 def test_process_match_rejects_engine_name_only_in_path(monkeypatch):
@@ -522,9 +548,38 @@ def test_ollama_server_running_rejects_wrong_server_on_port(mock_get):
     assert OllamaEngine().is_server_running() is False
 
 
+@patch("httpx.get")
+def test_vllm_mlx_server_running_requires_health_identity(mock_get):
+    models_response = MagicMock(status_code=200)
+    health_response = MagicMock(status_code=200)
+    health_response.json.return_value = {
+        "status": "healthy",
+        "model_loaded": True,
+        "available_models": ["org/test-model"],
+        "model_type": "llm",
+    }
+    mock_get.side_effect = [models_response, health_response]
+
+    assert VLLMMLXEngine().is_server_running() is True
+
+
+@patch("httpx.get")
+def test_vllm_mlx_server_running_rejects_wrong_server_on_port(mock_get):
+    models_response = MagicMock(status_code=200)
+    health_response = MagicMock(status_code=200)
+    health_response.json.return_value = {"status": "healthy"}
+    mock_get.side_effect = [models_response, health_response]
+
+    assert VLLMMLXEngine().is_server_running() is False
+
+
 def test_engine_port_env_override(monkeypatch):
     monkeypatch.setenv("MLX_CHRONOS_MLX_LM_PORT", "8090")
     assert MLXLMEngine().port == 8090
+
+def test_vllm_mlx_port_env_override(monkeypatch):
+    monkeypatch.setenv("MLX_CHRONOS_VLLM_MLX_PORT", "8004")
+    assert VLLMMLXEngine().port == 8004
 
 def test_engine_invalid_port_env_uses_default(monkeypatch):
     monkeypatch.setenv("MLX_CHRONOS_MLX_LM_PORT", "invalid")
@@ -599,6 +654,30 @@ def test_ollama_get_version(mock_run):
 
     engine = OllamaEngine()
     assert engine.get_version() == "0.24.0"
+
+@patch("importlib.metadata.version", return_value="0.4.0rc1")
+def test_vllm_mlx_get_version_uses_package_metadata(mock_version):
+    assert VLLMMLXEngine().get_version() == "0.4.0rc1"
+    mock_version.assert_called_once_with("vllm-mlx")
+
+@patch("httpx.get")
+@patch("importlib.metadata.version", side_effect=Exception("missing"))
+def test_vllm_mlx_get_version_falls_back_to_models_metadata(
+    mock_version,
+    mock_get,
+    monkeypatch,
+):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "vllm_mlx", None)
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "data": [{"metadata": {"vllm_mlx_version": "0.4.1"}}]
+    }
+    mock_get.return_value = mock_response
+
+    assert VLLMMLXEngine().get_version() == "0.4.1"
+    mock_version.assert_called_once_with("vllm-mlx")
 
 @patch("subprocess.run")
 def test_rapid_mlx_get_version_uses_timeout(mock_run):
