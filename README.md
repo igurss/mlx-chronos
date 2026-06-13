@@ -21,7 +21,7 @@ contribute to the community leaderboard.
 - [Ollama](https://github.com/ollama/ollama) (MLX backend)
 - [oMLX](https://github.com/jundot/omlx)
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
-- [vllm-mlx](https://github.com/raullenchai/vllm-mlx)
+- [vllm-mlx](https://github.com/waybarrios/vllm-mlx)
 - [mlx-lm (Apple MLX)](https://github.com/ml-explore/mlx-lm)
 
 **Metrics measured:**
