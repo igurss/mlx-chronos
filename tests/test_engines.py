@@ -418,8 +418,27 @@ def test_measure_throughput_retries_without_stream_usage_when_unsupported(mock_s
 @patch("httpx.stream", side_effect=httpx.TimeoutException("timed out"))
 def test_measure_tokens_per_second_wraps_http_errors(mock_stream):
     engine = OMLXEngine()
-    with pytest.raises(RuntimeError, match="engine=omlx; action=measure throughput"):
-        engine.measure_tokens_per_second("test prompt", "default", 100)
+    with patch("mlx_chronos.http_retry.time.sleep"):
+        with pytest.raises(RuntimeError, match="engine=omlx; action=measure throughput"):
+            engine.measure_tokens_per_second("test prompt", "default", 100)
+    assert mock_stream.call_count == 3
+
+
+@patch("httpx.stream")
+def test_measure_tokens_per_second_retries_stream_setup_failure(mock_stream):
+    mock_stream.side_effect = [
+        httpx.ConnectError("connection reset"),
+        stream_response(completion_stream(content="hello", completion_tokens=150)),
+    ]
+
+    engine = OMLXEngine()
+    with patch("mlx_chronos.http_retry.time.sleep") as mock_sleep, \
+         patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
+        measurement = engine.measure_throughput("test prompt", "default", 100)
+
+    assert measurement.request_tokens_per_second == 100.0
+    assert mock_stream.call_count == 2
+    mock_sleep.assert_called_once()
 
 @patch("httpx.stream")
 def test_measure_tokens_per_second_reports_status_model_and_body(mock_stream):
@@ -463,6 +482,22 @@ def test_list_model_ids(mock_get):
     mock_get.return_value = mock_response
 
     assert OMLXEngine().list_model_ids() == ["org/test-model"]
+
+
+@patch("httpx.get")
+def test_list_model_ids_retries_transient_failure(mock_get):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"data": [{"id": "org/test-model"}]}
+    mock_get.side_effect = [
+        httpx.ConnectError("connection reset"),
+        mock_response,
+    ]
+
+    with patch("mlx_chronos.http_retry.time.sleep") as mock_sleep:
+        assert OMLXEngine().list_model_ids() == ["org/test-model"]
+
+    assert mock_get.call_count == 2
+    mock_sleep.assert_called_once()
 
 @patch("httpx.get")
 def test_list_model_ids_reports_status_url_and_body(mock_get):

@@ -1,8 +1,36 @@
 import json
+import os
 import re
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from datetime import datetime, timezone
+
+
+def _write_text_atomic(output_path: Path, content: str) -> None:
+    """Write text through a same-directory temp file and atomic replace."""
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=output_path.parent,
+            prefix=f".{output_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+            tmp_file.write(content)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+        os.replace(tmp_path, output_path)
+    except Exception:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+        raise
 
 class BaseReporter(ABC):
     """Abstract base class for benchmark reporters."""
@@ -62,9 +90,7 @@ class JSONReporter(BaseReporter):
         filename = f"{self._generate_base_filename(result)}.json"
         output_path = results_dir / filename
         
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2)
-            f.write("\n")
+        _write_text_atomic(output_path, json.dumps(result, indent=2) + "\n")
             
         return output_path
 
@@ -286,7 +312,6 @@ class MarkdownReporter(BaseReporter):
         if notes:
             md += f"\n## Notes\n{notes}\n"
         
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(md)
+        _write_text_atomic(output_path, md)
             
         return output_path

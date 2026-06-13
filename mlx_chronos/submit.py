@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 
 import httpx
@@ -16,6 +17,7 @@ from mlx_chronos.constants import (
     TOKEN_COUNT_SOURCE_USAGE,
 )
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
+from mlx_chronos.http_retry import request_with_retry
 from mlx_chronos.protocol import (
     BASELINE_PROTOCOL_VERSION,
     CONNECTION_MODE_PERSISTENT,
@@ -32,6 +34,7 @@ PUBLIC_TOKEN_COUNT_SOURCE = TOKEN_COUNT_SOURCE_USAGE
 PUBLIC_PROFILE_BASELINE = "baseline"
 PUBLIC_PROFILE_SUSTAINED = "sustained"
 PUBLIC_LOW_POWER_MODE = "off"
+logger = logging.getLogger("mlx_chronos")
 
 
 class SubmissionError(RuntimeError):
@@ -301,12 +304,16 @@ def submit_result_file(
     }
 
     try:
-        response = httpx.post(
-            endpoint,
-            data=data,
-            files=files,
-            timeout=timeout,
-            follow_redirects=True,
+        response = request_with_retry(
+            lambda: httpx.post(
+                endpoint,
+                data=data,
+                files=files,
+                timeout=timeout,
+                follow_redirects=True,
+            ),
+            action="submit result",
+            logger=logger,
         )
     except httpx.HTTPError as exc:
         raise SubmissionError(f"submission request failed: {exc}") from exc

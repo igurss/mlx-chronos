@@ -3,7 +3,12 @@ import copy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from mlx_chronos.reporters import JSONReporter, MarkdownReporter, BaseReporter
+from mlx_chronos.reporters import (
+    JSONReporter,
+    MarkdownReporter,
+    BaseReporter,
+    _write_text_atomic,
+)
 from mlx_chronos.examples import EXAMPLE_RESULT
 
 class DummyReporter(BaseReporter):
@@ -44,6 +49,16 @@ def test_json_reporter_save(tmp_path):
     with open(output_path) as f:
         data = json.load(f)
     assert data["engine"]["name"] == "omlx"
+
+
+def test_write_text_atomic_replaces_existing_file(tmp_path):
+    output_path = tmp_path / "result.json"
+    output_path.write_text("old", encoding="utf-8")
+
+    _write_text_atomic(output_path, "new\n")
+
+    assert output_path.read_text(encoding="utf-8") == "new\n"
+    assert list(tmp_path.glob("*.tmp")) == []
 
 def test_markdown_reporter_save(tmp_path):
     reporter = MarkdownReporter()

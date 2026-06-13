@@ -28,6 +28,7 @@ from mlx_chronos.measurements import (
     DECODE_TIMING_UNAVAILABLE,
     ThroughputMeasurement,
 )
+from mlx_chronos.http_retry import request_with_retry, stream_with_retry
 
 logger = logging.getLogger("mlx_chronos")
 
@@ -80,6 +81,27 @@ class BaseEngine(ABC):
     def http_client(self) -> httpx.Client:
         """Return a reusable HTTP client for benchmark request loops."""
         return httpx.Client()
+
+    def _http_get(self, url: str, *, timeout: float, action: str) -> httpx.Response:
+        return request_with_retry(
+            lambda: httpx.get(url, timeout=timeout),
+            action=f"{self.name} {action}",
+            logger=logger,
+        )
+
+    def _http_post(
+        self,
+        url: str,
+        *,
+        json_payload: dict,
+        timeout: float,
+        action: str,
+    ) -> httpx.Response:
+        return request_with_retry(
+            lambda: httpx.post(url, json=json_payload, timeout=timeout),
+            action=f"{self.name} {action}",
+            logger=logger,
+        )
 
     def endpoint(self) -> str:
         """API endpoint used by the engine."""
@@ -206,7 +228,11 @@ class BaseEngine(ABC):
 
     def is_server_running(self) -> bool:
         try:
-            r = httpx.get(f"{self.base_url()}/models", timeout=2.0)
+            r = self._http_get(
+                f"{self.base_url()}/models",
+                timeout=2.0,
+                action="server check",
+            )
             return r.status_code == 200 and self._server_identity_matches()
         except Exception:
             return False
@@ -219,7 +245,7 @@ class BaseEngine(ABC):
         url = f"{self.base_url()}/models"
         action = "list models"
         try:
-            r = httpx.get(url, timeout=5.0)
+            r = self._http_get(url, timeout=5.0, action=action)
             r.raise_for_status()
             data = r.json()
         except httpx.HTTPError as exc:
@@ -292,7 +318,12 @@ class BaseEngine(ABC):
         request_model = str(payload["model"])
         action = "validate completion"
         try:
-            r = httpx.post(url, json=payload, timeout=30.0)
+            r = self._http_post(
+                url,
+                json_payload=payload,
+                timeout=30.0,
+                action=action,
+            )
             r.raise_for_status()
             data = r.json()
         except httpx.HTTPError as exc:
@@ -517,7 +548,7 @@ class BaseEngine(ABC):
         """Try to read an engine/server version from /v1/models metadata."""
         url = f"{self.base_url()}/models"
         try:
-            response = httpx.get(url, timeout=2.0)
+            response = self._http_get(url, timeout=2.0, action="version lookup")
             response.raise_for_status()
             data = response.json()
         except Exception:
@@ -560,9 +591,15 @@ class BaseEngine(ABC):
         url: str,
         **kwargs,
     ):
-        if client is not None:
-            return client.stream(method, url, **kwargs)
-        return httpx.stream(method, url, **kwargs)
+        return stream_with_retry(
+            lambda: (
+                client.stream(method, url, **kwargs)
+                if client is not None
+                else httpx.stream(method, url, **kwargs)
+            ),
+            action=f"{self.name} stream {method} {url}",
+            logger=logger,
+        )
 
     def measure_ttft(
         self,
@@ -966,7 +1003,11 @@ class VLLMMLXEngine(BaseEngine):
 
     def _server_identity_matches(self) -> bool:
         try:
-            response = httpx.get(f"{self.root_url()}/health", timeout=2.0)
+            response = self._http_get(
+                f"{self.root_url()}/health",
+                timeout=2.0,
+                action="health identity check",
+            )
             if response.status_code != 200:
                 return False
             data = response.json()
@@ -1095,7 +1136,11 @@ class OllamaEngine(BaseEngine):
 
     def _server_identity_matches(self) -> bool:
         try:
-            response = httpx.get(f"{self.root_url()}/api/version", timeout=2.0)
+            response = self._http_get(
+                f"{self.root_url()}/api/version",
+                timeout=2.0,
+                action="version identity check",
+            )
             if response.status_code != 200:
                 return False
             data = response.json()
