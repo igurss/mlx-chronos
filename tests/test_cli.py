@@ -5,8 +5,11 @@ import copy
 import logging
 import re
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from argparse import Namespace
+
+import httpx
+
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import (
     _emit_result_warnings,
@@ -370,6 +373,45 @@ def test_cmd_run_format_all_calls_reporters():
         mock_json.return_value.save.assert_called_once_with(EXAMPLE_RESULT, expected_dir)
         mock_md.return_value.save.assert_called_once_with(EXAMPLE_RESULT, expected_dir)
 
+
+def test_cmd_run_preflight_validates_model_before_benchmark():
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=100,
+        min_tokens=None,
+        format="json",
+        output_dir=None,
+        connection_mode="persistent",
+        preflight=True,
+    )
+    mock_engine = MagicMock()
+    mock_engine.is_installed.return_value = True
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+    mock_engine.list_model_ids.return_value = ["Qwen3.5-4B-OptiQ-4bit"]
+    mock_engine.resolve_listed_model_id.return_value = "Qwen3.5-4B-OptiQ-4bit"
+    mock_engine.validate_completion_request.return_value = "Qwen3.5-4B-OptiQ-4bit"
+
+    with patch("mlx_chronos.cli.get_engine", return_value=mock_engine), \
+         patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT) as mock_run, \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
+         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+        mock_json.return_value.save.return_value = Path("results/local/test.json")
+
+        cmd_run(args)
+
+    mock_engine.validate_completion_request.assert_called_once_with(
+        "Qwen3.5-4B-OptiQ-4bit"
+    )
+    mock_run.assert_called_once()
+
 def test_cmd_run_warns_when_previous_result_is_recent(caplog):
     args = Namespace(
         engine="omlx",
@@ -507,6 +549,22 @@ def test_submit_result_file_reuses_prevalidated_result(mock_post, tmp_path):
     assert filename == "result.json"
     assert content == raw
     assert content_type == "application/json"
+
+
+@patch("mlx_chronos.submit.httpx.post")
+def test_submit_result_file_retries_transient_failure(mock_post, tmp_path):
+    result_path = write_result(tmp_path / "result.json")
+    mock_success = MagicMock(status_code=200, text="ok")
+    mock_post.side_effect = [
+        httpx.ConnectError("connection reset"),
+        mock_success,
+    ]
+
+    with patch("mlx_chronos.http_retry.time.sleep") as mock_sleep:
+        submit_result_file(result_path, "https://example.test/form")
+
+    assert mock_post.call_count == 2
+    mock_sleep.assert_called_once()
 
 def test_cmd_submit_dry_run_validates_without_endpoint(tmp_path):
     result_path = write_result(tmp_path / "result.json")

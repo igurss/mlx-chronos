@@ -164,6 +164,9 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --profile sustaine
 # Optional: enforce a pause after a recent run in the same output directory
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
 
+# Optional: fail fast with an extra model access probe before the measured run
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
+
 # Optional: write both JSON and Markdown outputs
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all
 
@@ -182,6 +185,8 @@ Optional thermal-state support through macOS Foundation can be installed with
 oMLX and vllm-mlx both default to port 8000. To avoid mislabeling results,
 mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot
 be inspected, oMLX validation may fail even when `/v1/models` responds.
+The cached-TTFT warning threshold can be overridden for local diagnostics with
+`MLX_CHRONOS_CACHED_TTFT_RATIO`; the default is `0.8`.
 
 ---
 

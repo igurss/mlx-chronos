@@ -62,6 +62,8 @@ all engines implement identical KV-cache or prefix-cache behavior.
 Results set `meta.cached_ttft_warning=true` when cached TTFT is close to
 cold TTFT, because that pattern may indicate that the engine did not reuse a
 prompt/KV cache for that run.
+For local diagnostics, `MLX_CHRONOS_CACHED_TTFT_RATIO` can override the warning
+ratio. This changes only the warning threshold, not measured values.
 
 ### Request Throughput (tok/s)
 Completion tokens divided by the full client-observed request time, measured
@@ -188,9 +190,10 @@ warmup through the recorded benchmark phases, then reported as the observed RSS
 peak. This diagnostic RSS sampler intentionally starts after warmup, while
 system RAM starts before warmup so model loading and cache pressure are
 included in the public memory metric.
-Child processes are resolved when RSS sampling starts and then reused during
-sampling to avoid repeatedly scanning the process tree during latency-sensitive
-phases.
+Child processes are resolved when RSS sampling starts and refreshed
+periodically during long runs, using a conservative interval, so late-spawned
+workers can be included without repeatedly scanning the process tree during
+latency-sensitive phases.
 
 **Important:** this metric is diagnostic. It is not a public comparison metric.
 It is best read as process overhead for the server, API layer, and runtime. It
@@ -302,6 +305,10 @@ chips and models.
 
 **Warmup:** two unrecorded calls using the throughput prompt are made before
 any measurement. This reduces noise from model loading and JIT compilation.
+`mlx-chronos run --preflight` can send an extra model access request before the
+measured benchmark to fail fast on model errors. That request is intentionally
+not part of the standard benchmark protocol and should be treated as a local
+diagnostic aid.
 
 **Phase order:** mlx-Chronos measures cold TTFT trials first, primes the fixed
 cached prompt once, measures cached TTFT trials consecutively, and then measures

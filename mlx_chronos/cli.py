@@ -130,6 +130,32 @@ def _emit_result_warnings(result: dict) -> None:
         )
 
 
+def _run_model_preflight(engine_name: str, model: str) -> None:
+    """Run an opt-in model access probe before the measured benchmark."""
+    logger.info("Running preflight model access check...")
+    engine = get_engine(engine_name)
+    if not engine.is_installed():
+        raise RuntimeError(f"Engine '{engine_name}' is not installed.")
+    if not engine.is_server_running():
+        raise RuntimeError(
+            f"Engine '{engine_name}' server is not running at {engine.base_url()}."
+        )
+
+    model_ids = engine.list_model_ids()
+    resolved_model = engine.resolve_listed_model_id(model, model_ids)
+    if resolved_model is None:
+        logger.warning(
+            "  Warning: %s was not found in /models; trying a completion request.",
+            model,
+        )
+    else:
+        logger.info("  Model listed: %s", resolved_model)
+
+    request_model = engine.validate_completion_request(model)
+    logger.info("  Completion request accepted as: %s", request_model)
+    logger.info("")
+
+
 def cmd_run(args):
     """Run a benchmark session."""
     profile, trials, max_tokens = _resolve_profile_defaults(args)
@@ -181,6 +207,13 @@ def cmd_run(args):
                 "--cooldown-seconds to enforce a pause.",
                 elapsed_since_last,
             )
+
+    if getattr(args, "preflight", False):
+        try:
+            _run_model_preflight(args.engine, args.model)
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
 
     progress_sample_interval_tokens = (
         SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS
@@ -510,6 +543,15 @@ def main():
             "HTTP connection behavior for benchmark requests. persistent reuses "
             "one client across the run; per_request opens requests independently "
             "(default: persistent)."
+        ),
+    )
+    run_parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help=(
+            "Run an extra model access check before the measured benchmark. "
+            "This can fail fast on model errors, but the extra request is not "
+            "part of the benchmark protocol."
         ),
     )
     run_parser.add_argument(
