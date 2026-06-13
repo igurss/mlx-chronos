@@ -1,132 +1,51 @@
-# mlx-Chronos ⏱️
+# mlx-Chronos
 
-> Benchmark suite and community leaderboard for local LLM inference on Apple Silicon.  
-> Run it. Share your results. Compare across hardware.
+> Benchmark suite and community leaderboard for local LLM inference on Apple Silicon.
+> Run a reproducible benchmark, save a sealed JSON result, and compare engines across Macs.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/igurss/mlx-chronos/blob/main/LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://python.org)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1_|_M2_|_M3_|_M4_|_M5-black?logo=apple)](https://apple.com)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 
----
+## Contents
 
-## What is mlx-Chronos?
-
-mlx-Chronos is a standardized benchmarking tool for local LLM inference engines
-on Apple Silicon. It automatically detects your hardware, runs a consistent set
-of tests across installed engines, and produces a structured JSON result you can
-contribute to the community leaderboard.
-
-**Supported engines:**
-- [Ollama](https://github.com/ollama/ollama) (MLX backend)
-- [oMLX](https://github.com/jundot/omlx)
-- [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
-- [vllm-mlx](https://github.com/waybarrios/vllm-mlx)
-- [mlx-lm (Apple MLX)](https://github.com/ml-explore/mlx-lm)
-
-**Metrics measured:**
-- **TTFT** — Time to First Token (cold and cached, with statistics)
-- **tok/s** — Client-observed request throughput (mean, stddev, min, max across trials)
-- **Sustained tok/s** — Optional long throughput profile for heat buildup and late-run degradation checks
-- **Output tokens** — Completion token counts for throughput trials
-- **System RAM peak** — Peak total Mac RAM in use during the benchmark, used as the public memory comparison metric
-- **Post-warmup engine RSS** — Legacy diagnostic peak RSS of the engine server process when available, not a comparison metric
-- **Tool calling** — Success rate *(future work)*
+- [Overview](#overview)
+- [Supported Engines](#supported-engines)
+- [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
+- [Configuration](#configuration)
+- [Benchmark Protocol](#benchmark-protocol)
+- [Leaderboard Rules](#leaderboard-rules)
+- [Submit Results](#submit-results)
+- [Roadmap](#roadmap)
 
 ---
 
-## How It Works
+## Overview
 
-When you run mlx-Chronos, it executes a fixed benchmark protocol against the
-running engine:
+`mlx-chronos` is a standardized benchmark tool for local LLM inference engines
+on Apple Silicon. It detects your Mac, runs a fixed benchmark protocol against
+an OpenAI-compatible engine endpoint, and writes structured result files for
+local analysis or public leaderboard submission.
 
-**Cold TTFT** — sends a prompt to the model and measures the time from request
-to first non-empty streamed token, including whitespace-only text tokens. Each
-trial uses a unique prompt inside the run to avoid same-run cache hits.
+The public leaderboard is available at
+[igurss.github.io/mlx-chronos](https://igurss.github.io/mlx-chronos).
 
-**Cached TTFT** — sends the same fixed prompt on every cached trial. A priming
-call loads it into cache first, then cached trials run consecutively. This
-measures cache performance without interleaving unrelated prompts between
-cached measurements. If cached TTFT is close to cold TTFT, new runs record a
-warning that cache reuse may not have happened.
+### What It Measures
 
-**Request throughput (tok/s)** — measures completion tokens divided by the full
-client-observed request time using fixed protocol prompts, one per trial. Warmup
-uses a separate prompt so same-run prefix/KV cache hits do not silently remove
-throughput prefill work. Requests use deterministic generation parameters
-(`temperature=0.0`, `top_p=1.0`). This includes request overhead, prefill, and
-decode, so it is an end-to-end throughput metric rather than pure decode speed.
-Throughput prompts intentionally vary to reduce cache artifacts, so per-run
-stddev includes normal workload variation as well as system and engine noise.
-New runs also record client-observed
-`decode_tokens_per_second` from the streaming throughput trial when reliable
-completion-token usage is available. If an engine cannot provide usage in the
-streaming response, the run falls back to a local estimate and is marked as not
-leaderboard-comparable. Throughput uses a fixed
-requested `max_tokens` value by default, and optional output token bounds can be
-requested with `--max-tokens` / `--min-tokens` for local experiments.
+| Metric | Meaning | Public comparison use |
+| --- | --- | --- |
+| TTFT cold | Time from request start to first non-empty streamed token with cache-avoiding prompts | Yes |
+| TTFT cached | Time to first token after a cache-priming call with the same prompt | Yes |
+| Request throughput | Completion tokens divided by full client-observed request time | Yes, when engine token usage is reliable |
+| Sustained throughput | Optional long throughput run for heat buildup and late-run degradation | Yes, under the sustained profile |
+| System RAM peak | Peak total Mac RAM in use during the benchmark | Yes |
+| Engine RSS | Post-warmup RSS of the engine server process when identifiable | Diagnostic only |
+| Thermal state | Start, end, worst state, samples, and affected benchmark phases when available | Context metadata |
+| Tool calling | Planned future success-rate benchmark | Not yet available |
 
-**System RAM peak** — continuously samples total Mac RAM usage from before
-warmup through the recorded benchmark phases and reports the observed peak in
-GB and percent. This is the public leaderboard memory metric because it answers
-the practical question of how much memory pressure the run placed on the Mac.
-
-**Thermal monitor** — records phase timings plus a lightweight thermal summary
-during the run when macOS thermal state is available through Foundation/PyObjC.
-New JSON results include start/end/worst thermal state, sample count, and phases
-where non-nominal thermal state was observed. Without PyObjC/Foundation, the
-continuous monitor is unavailable even if a one-shot pre-run thermal state can
-be read through `powermetrics`.
-
-**Sustained profile** — `--profile sustained` runs a single long throughput
-trial with `max_tokens=1000` by default and records progress samples every 100
-generated output units. Intermediate samples are estimates when the stream only
-reports exact token usage at the end. These samples make late-run throughput
-drops easier to spot. When a sustained run also observes a thermal-state change
-or non-nominal thermal state, mlx-Chronos records a sustained throttling warning
-in result metadata. The warning compares early and late progress-window
-averages, not a single first/last sample.
-
-**Cooldown tracking** — before each run, mlx-Chronos checks the latest prior
-JSON result in the same output directory. The elapsed time is saved as
-`meta.elapsed_since_last_benchmark_seconds`; `--cooldown-seconds` can enforce a
-pause before starting a new run. The default recent-run warning threshold is a
-300-second heuristic.
-
-**Post-warmup engine RSS diagnostic** — records the resident memory of the
-engine server process after warmup, through the recorded benchmark phases, when
-the process can be identified. This is retained for debugging only: it is not
-total model memory and not a public comparison metric, because macOS/Metal
-unified-memory accounting can vary across environments. The default RAM
-sampling interval is 50ms and can be changed with `--ram-sample-interval`.
-
-All metrics are run over multiple trials and reported with mean, stddev, min,
-and max. p95 is added only when at least 20 trials are available. The default is
-5 trials, with a maximum of 30 unique cold and throughput prompts.
-Results are saved as structured JSON in `results/local/` by default. Maintainers
-publish reviewed JSON files into `results/submitted/` after accepting them for
-the community leaderboard.
-Result JSON records benchmark protocol metadata, including exact prompt text
-and requested token bounds, so runs can be reproduced without digging through
-source code. New public submissions must also carry a tamper-evident integrity
-seal that GitHub Actions verifies before a row can enter the leaderboard.
-
----
-
-## Community Leaderboard
-
-Compare submitted results by model, chip, and RAM:
-
-**[→ igurss.github.io/mlx-chronos](https://igurss.github.io/mlx-chronos)**
-
-The default view compares engines for a selected model and Mac configuration.
-The raw-data view keeps the submitted rows available with optional columns for
-useful comparison metadata such as profile, thermal state, exact machine model,
-engine version, and quantization.
-
----
-
-## Current Release
+### Current Release
 
 `0.2.1` keeps the stricter `0.2` public leaderboard format and fixes engine
 adapter compatibility for oMLX, mlx-lm, and vllm-mlx discovered during
@@ -134,134 +53,264 @@ real-server validation.
 
 ---
 
-## Quick Start
+## Supported Engines
 
-```bash
-# Install
-pip install mlx-chronos
+| Engine | Project | Notes |
+| --- | --- | --- |
+| Ollama | [ollama/ollama](https://github.com/ollama/ollama) | MLX backend |
+| oMLX | [jundot/omlx](https://github.com/jundot/omlx) | OpenAI-compatible server |
+| Rapid-MLX | [raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX) | OpenAI-compatible server |
+| vllm-mlx | [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx) | OpenAI-compatible server |
+| mlx-lm | [ml-explore/mlx-lm](https://github.com/ml-explore/mlx-lm) | Apple MLX |
 
-# Confirm installed version
-mlx-chronos --version
-
-# Check PyPI and upgrade in the current Python environment
-mlx-chronos upgrade
-
-# Check available engines
-mlx-chronos engines
-
-# List models exposed by a running engine server
-mlx-chronos models --engine omlx
-
-# Validate setup before a run
-mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
-
-# Run benchmark (JSON by default)
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
-
-# Optional: request throughput output token bounds
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --max-tokens 100 --min-tokens 80
-
-# Optional: sustained profile for a longer heat/throttling-sensitive run
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --profile sustained
-
-# Optional: enforce a pause after a recent run in the same output directory
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
-
-# Optional: fail fast with an extra model access probe before the measured run
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
-
-# Optional: write both JSON and Markdown outputs
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all
-
-# Optional: choose a custom output directory
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Desktop/benchmarks
-```
-
-> **Note:** the engine server must be running before you launch mlx-chronos.
-> See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for setup instructions.
-
-Optional thermal-state support through macOS Foundation can be installed with
-`pip install "mlx-chronos[thermal]"`. Engine ports can be overridden with
-`MLX_CHRONOS_<ENGINE>_PORT`, for example
-`MLX_CHRONOS_OMLX_PORT=8002`, `MLX_CHRONOS_VLLM_MLX_PORT=8003`, or
-`MLX_CHRONOS_MLX_LM_PORT=8002`.
-oMLX and vllm-mlx both default to port 8000. To avoid mislabeling results,
-mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot
-be inspected, oMLX validation may fail even when `/v1/models` responds.
-The cached-TTFT warning threshold can be overridden for local diagnostics with
-`MLX_CHRONOS_CACHED_TTFT_RATIO`; the default is `0.8`.
-When `mlx-chronos` runs in an interactive terminal, it also performs a
-best-effort background PyPI version check. If a newer release is available, it
-prints a short notice recommending `mlx-chronos upgrade`. Set
-`MLX_CHRONOS_DISABLE_UPDATE_CHECK=1` to disable this automatic check.
+> **Note**
+> The engine server must already be running before `mlx-chronos run`,
+> `mlx-chronos models`, or `mlx-chronos validate` can query it.
+> See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
+> for engine setup details.
 
 ---
 
-## Local Runs vs Public Leaderboard
+## Quick Start
 
-`mlx-chronos run` is intentionally flexible for local diagnostics. You can
-change trial count, profile, output token bounds, cooldown, connection mode,
-notes, and other parameters to investigate your own engines and hardware.
-Those local JSON files are still valid benchmark records.
+### 1. Install
 
-The public leaderboard is stricter. Only results that pass
-`mlx-chronos submit --dry-run` are publishable, and GitHub Actions applies the
-same policy before adding a row to the leaderboard. That keeps public rows
-comparable while leaving the local tool useful for experiments.
+```bash
+pip install mlx-chronos
+```
 
-Result JSON contains an internal benchmark-protocol label used by validators to
-detect incompatible result formats. Treat labels such as `1`, `2`, and `3` as
-implementation compatibility markers, not public protocol release versions.
-User-facing documentation describes the measurement behavior instead of asking
-contributors to reason about those labels.
+Optional thermal-state support through macOS Foundation/PyObjC:
 
-## Contributing Your Results
+```bash
+pip install "mlx-chronos[thermal]"
+```
 
-1. Run `mlx-chronos run` on your Mac
-2. A JSON file is generated in `results/local/` (use `--format all` for a Markdown summary too)
-3. Check the result:
+### 2. Check Version and Updates
+
+```bash
+mlx-chronos --version
+mlx-chronos upgrade
+```
+
+When run in an interactive terminal, `mlx-chronos` performs a best-effort
+background PyPI version check. If a newer release is available, it prints a
+short notice recommending:
+
+```bash
+mlx-chronos upgrade
+```
+
+Set `MLX_CHRONOS_DISABLE_UPDATE_CHECK=1` to disable the automatic check.
+
+### 3. Inspect Your Engine
+
+```bash
+mlx-chronos engines
+mlx-chronos models --engine omlx
+mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
+```
+
+### 4. Run a Benchmark
+
+```bash
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
+```
+
+Results are written to `results/local/` by default.
+
+### 5. Useful Run Options
+
+```bash
+# Write both JSON and Markdown outputs
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all
+
+# Choose a custom output directory
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --output-dir ~/Desktop/benchmarks
+
+# Request throughput output token bounds for local experiments
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --max-tokens 100 --min-tokens 80
+
+# Run the longer heat/throttling-sensitive sustained profile
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --profile sustained
+
+# Enforce cooldown after a recent run in the same output directory
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
+
+# Fail fast with an extra model access probe before measured work starts
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
+```
+
+---
+
+## CLI Reference
+
+| Command | Purpose |
+| --- | --- |
+| `mlx-chronos --version` | Print the installed package version |
+| `mlx-chronos upgrade` | Check PyPI and upgrade the current Python environment if a newer release exists |
+| `mlx-chronos engines` | List supported engines and local installed/running status |
+| `mlx-chronos models --engine <name>` | List model IDs exposed by a running engine server |
+| `mlx-chronos validate --engine <name> --model <model>` | Validate hardware, engine, server, and optional model access |
+| `mlx-chronos run --engine <name> --model <model>` | Run a benchmark and save local result files |
+| `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |
+| `mlx-chronos submit --file <result.json>` | Send a validated result to the maintainer inbox |
+
+---
+
+## Configuration
+
+| Setting | Example | What it changes |
+| --- | --- | --- |
+| `MLX_CHRONOS_<ENGINE>_PORT` | `MLX_CHRONOS_OMLX_PORT=8002` | Overrides an engine server port |
+| `MLX_CHRONOS_CACHED_TTFT_RATIO` | `MLX_CHRONOS_CACHED_TTFT_RATIO=0.8` | Sets the cached-TTFT warning threshold |
+| `MLX_CHRONOS_DISABLE_UPDATE_CHECK` | `MLX_CHRONOS_DISABLE_UPDATE_CHECK=1` | Disables automatic background update checks |
+| `MLX_CHRONOS_SUBMIT_ENDPOINT` | `https://example.test/form` | Overrides the maintainer inbox endpoint |
+
+Default engine ports:
+
+| Engine | Default port |
+| --- | --- |
+| oMLX | `8000` |
+| vllm-mlx | `8000` |
+| mlx-lm | `8002` |
+
+oMLX and vllm-mlx both default to port `8000`. To avoid mislabeling results,
+mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot
+be inspected, oMLX validation may fail even when `/v1/models` responds.
+
+---
+
+## Benchmark Protocol
+
+`mlx-chronos run` executes a fixed protocol against the running engine. The JSON
+result records exact prompt text, token bounds, benchmark profile, timing
+metadata, hardware metadata, and an integrity seal.
+
+### Measurement Flow
+
+| Phase | What happens |
+| --- | --- |
+| Hardware detection | Captures chip, machine model, memory, macOS, Python, architecture, battery state, Low Power Mode, and thermal context when available |
+| Warmup | Uses a separate prompt so same-run prefix/KV cache hits do not remove throughput prefill work |
+| Cold TTFT | Uses unique prompts inside the run to avoid same-run cache hits |
+| Cached TTFT | Primes one fixed prompt, then measures consecutive cached trials |
+| Throughput | Uses fixed protocol prompts and deterministic generation parameters |
+| RAM and thermal tracking | Samples system RAM, diagnostic engine RSS, phase timings, and thermal state where available |
+| Result sealing | Adds a tamper-evident integrity seal for public-submission validation |
+
+### Important Details
+
+- Requests use deterministic generation parameters: `temperature=0.0` and
+  `top_p=1.0`.
+- Throughput is end-to-end request throughput, not pure decode speed. It
+  includes request overhead, prefill, and decode.
+- Throughput prompts intentionally vary to reduce cache artifacts, so run
+  standard deviation includes workload variation plus system and engine noise.
+- If an engine cannot provide reliable `usage.completion_tokens`, the run falls
+  back to a local estimate and is marked as not leaderboard-comparable.
+- p95 is reported only when at least 20 trials are available.
+- The default baseline run uses 5 trials. The maximum prompt pool supports 30
+  unique cold and throughput prompts.
+
+### Sustained Profile
+
+`--profile sustained` runs one long throughput trial with `max_tokens=1000` by
+default and records progress samples every 100 generated output units.
+Intermediate samples are estimates when the stream only reports exact token
+usage at the end.
+
+If the sustained run observes a thermal-state change or non-nominal thermal
+state, result metadata includes a sustained throttling warning. The warning
+compares early and late progress-window averages, not a single first/last
+sample.
+
+### Cooldown Metadata
+
+Before each run, mlx-Chronos checks the latest prior JSON result in the same
+output directory. The elapsed time is saved as
+`meta.elapsed_since_last_benchmark_seconds`.
+
+Use `--cooldown-seconds` to enforce a pause before starting another run. The
+default recent-run warning threshold is 300 seconds.
+
+For a fuller explanation, see
+[docs/methodology.md](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md).
+
+---
+
+## Leaderboard Rules
+
+Local runs are intentionally flexible. You can change trial count, profile,
+output token bounds, cooldown, connection mode, notes, and other parameters for
+your own diagnostics.
+
+Public leaderboard submissions are stricter so rows remain comparable.
+
+### Publishable Profiles
+
+| Profile | Trials | `max_tokens` | Minimum generated output | `min_tokens` |
+| --- | ---: | ---: | ---: | --- |
+| Baseline | 5 | 100 | 80 tokens | Not allowed |
+| Sustained | 1 | 1000 | 800 tokens | Not allowed |
+
+### Public Submission Requirements
+
+- Throughput must use the engine response's `usage.completion_tokens`.
+- macOS Low Power Mode must be disabled.
+- The JSON must pass `mlx-chronos submit --dry-run`.
+- The result must include a valid integrity seal.
+- Custom token bounds, fallback token estimates, custom public-profile trial
+  counts, short-output runs, and Low Power Mode runs are valid local records but
+  are not accepted into the public leaderboard.
+
+Result JSON also contains internal benchmark-protocol labels used by validators
+to detect incompatible result formats. Treat labels such as `1`, `2`, and `3`
+as implementation compatibility markers, not public protocol release versions.
+
+---
+
+## Submit Results
+
+### Pull Request Workflow
+
+1. Run `mlx-chronos run` on your Mac.
+2. Find the generated JSON in `results/local/`.
+3. Validate it locally:
+
    ```bash
    mlx-chronos submit --file results/local/your-result.json --dry-run
    ```
-4. Copy the checked JSON into `results/submitted/` with a clear filename
-5. Open a pull request with only that JSON file changed
-6. GitHub Actions labels the PR as `result-submission`, validates the schema and
-   integrity seal, and the maintainer reviews it before merge
 
-Leaderboard submissions must report throughput using the engine response's
-`usage.completion_tokens` and keep one of the standard profiles: baseline with
-exactly 5 trials and `max_tokens=100`, or sustained with exactly 1 trial and
-`max_tokens=1000`. Neither profile may request `min_tokens`, and macOS Low
-Power Mode must be disabled. Each throughput trial must also generate at least
-80% of the standard token limit: 80 tokens for baseline, 800 tokens for
-sustained. Custom local runs, fallback token estimates, custom token bounds,
-custom public-profile trial counts, short-output runs, or Low Power Mode runs
-can still be saved locally, but they are not accepted into the public
-leaderboard.
+4. Copy the checked JSON into `results/submitted/` with a clear filename.
+5. Open a pull request with only that JSON file changed.
+6. GitHub Actions labels the PR as `result-submission`, validates schema and
+   integrity, and the maintainer reviews it before merge.
 
-Do not edit submitted JSON by hand after the run. Public submissions include an
-`integrity` seal over the canonical result payload; changing any benchmark field
-invalidates that seal and the submission validator will reject the file.
+> **Warning**
+> Do not edit submitted JSON by hand after the run. Public submissions include
+> an `integrity` seal over the canonical result payload; changing any benchmark
+> field invalidates that seal.
 
-If opening a PR is inconvenient, `mlx-chronos submit --file ...` still sends the
-validated JSON to the maintainer inbox as a fallback. Maintainers can override
-the inbox endpoint with `--endpoint` or the `MLX_CHRONOS_SUBMIT_ENDPOINT`
-environment variable.
+### Inbox Fallback
 
-See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md) for detailed instructions.
+If opening a PR is inconvenient, send a validated result directly:
 
----
+```bash
+mlx-chronos submit --file results/local/your-result.json
+```
 
-## Benchmark Methodology
+Maintainers can override the inbox endpoint with `--endpoint` or
+`MLX_CHRONOS_SUBMIT_ENDPOINT`.
 
-See [docs/methodology.md](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md) for a full explanation of what
-is measured, how, and why.
+See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
+for detailed contributor instructions.
 
 ---
 
 ## Roadmap
 
 ### Completed
+
 - [x] Core benchmark runner with repeated trials, warmup, cache priming, and phase-separated metrics
 - [x] Engine support for oMLX, Rapid-MLX, vllm-mlx, mlx-lm, and Ollama
 - [x] Hardware detection for chip, machine model, memory, macOS, Python, architecture, and thermal state
@@ -281,8 +330,10 @@ is measured, how, and why.
 - [x] Sustained benchmark profile, cooldown metadata, and strict local-vs-public leaderboard policy
 - [x] Public submission trust model with lightweight anti-spoofing checks
 - [x] External contributor workflow for code PRs and leaderboard result submissions
+- [x] CLI update notifications and `mlx-chronos upgrade`
 
 ### Future
+
 - [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract
 - [ ] Add tool-calling success-rate benchmarks
 - [ ] Collect more results from M3, M4, and M5 systems
@@ -291,4 +342,4 @@ is measured, how, and why.
 
 ## License
 
-Apache 2.0 — see [LICENSE](https://github.com/igurss/mlx-chronos/blob/main/LICENSE)
+Apache 2.0. See [LICENSE](https://github.com/igurss/mlx-chronos/blob/main/LICENSE).
