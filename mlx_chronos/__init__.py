@@ -25,7 +25,7 @@ __version__ = _source_tree_version() or _installed_version or "0.2.1"
 __all__ = ["__version__", "run_benchmark"]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     if name == "run_benchmark":
         from .benchmark import run_benchmark
 

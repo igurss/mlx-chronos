@@ -53,6 +53,8 @@ jobs:
         run: |
           python -m mlx_chronos.cli --help
           python -m mlx_chronos.cli --version
+          python -m mlx_chronos.cli validate --help
+          python -m mlx_chronos.cli models --help
           python -m mlx_chronos.cli engines
           python -m mlx_chronos.detect
 

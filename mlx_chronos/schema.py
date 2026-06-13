@@ -384,13 +384,11 @@ class Trials(ChronosBaseModel):
             self.ttft_cold_raw,
             self.ttft_cached_raw,
             self.tokens_per_second_raw,
+            self.throughput_elapsed_seconds_raw,
+            self.completion_tokens_raw,
         ]
-        if self.throughput_elapsed_seconds_raw is not None:
-            raw_lists.append(self.throughput_elapsed_seconds_raw)
         if self.decode_tokens_per_second_raw is not None:
             raw_lists.append(self.decode_tokens_per_second_raw)
-        if self.completion_tokens_raw is not None:
-            raw_lists.append(self.completion_tokens_raw)
         if self.throughput_progress_samples_raw is not None:
             raw_lists.append(self.throughput_progress_samples_raw)
         lengths = {

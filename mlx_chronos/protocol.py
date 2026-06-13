@@ -179,10 +179,6 @@ THROUGHPUT_PROMPTS = [
         "allowing flexible local diagnostic benchmark runs."
     ),
 ]
-
-THROUGHPUT_PROMPT = THROUGHPUT_PROMPTS[0]
-
-
 def _generation_parameters() -> dict:
     return {
         "temperature": BENCHMARK_REQUEST_TEMPERATURE,
