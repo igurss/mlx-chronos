@@ -7,6 +7,8 @@ import psutil
 from mlx_chronos.constants import DEFAULT_RAM_SAMPLE_INTERVAL
 from mlx_chronos.detect import get_thermal_state_from_foundation
 
+DEFAULT_CHILD_PROCESS_REFRESH_INTERVAL = 30.0
+
 
 THERMAL_STATE_ORDER = {
     "nominal": 0,
@@ -30,12 +32,17 @@ class RAMTracker:
         self,
         interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
         target_pid: int | None = None,
+        child_refresh_interval: float | None = DEFAULT_CHILD_PROCESS_REFRESH_INTERVAL,
     ):
-        self.pid = target_pid or os.getpid()
+        self.pid = target_pid if target_pid is not None else os.getpid()
         self.interval = interval
+        if child_refresh_interval is not None and child_refresh_interval <= 0:
+            raise ValueError("child_refresh_interval must be greater than 0 when set")
+        self.child_refresh_interval = child_refresh_interval
         self._process = psutil.Process(self.pid)
         self._child_processes: list[psutil.Process] = []
         self._children_refreshed = False
+        self._last_child_refresh_at = 0.0
         self.peak_ram_bytes = 0
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
@@ -47,10 +54,21 @@ class RAMTracker:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             self._child_processes = []
         self._children_refreshed = True
+        self._last_child_refresh_at = time.monotonic()
+
+    def _should_refresh_child_processes(self) -> bool:
+        if not self._children_refreshed:
+            return True
+        if self.child_refresh_interval is None:
+            return False
+        return (
+            time.monotonic() - self._last_child_refresh_at
+            >= self.child_refresh_interval
+        )
 
     def _sample_rss(self) -> int:
         rss_bytes = self._process.memory_info().rss
-        if not self._children_refreshed:
+        if self._should_refresh_child_processes():
             self._refresh_child_processes()
         for child in self._child_processes:
             try:
@@ -60,7 +78,7 @@ class RAMTracker:
         return rss_bytes
 
     def _monitor(self):
-        while not self._stop_event.is_set():
+        while not self._stop_event.wait(self.interval):
             try:
                 current_ram = self._sample_rss()
                 with self._lock:
@@ -73,9 +91,7 @@ class RAMTracker:
                     break
                 if not is_running:
                     break
-                time.sleep(self.interval)
                 continue
-            time.sleep(self.interval)
 
     def start(self):
         """Run the sampling."""
@@ -114,16 +130,21 @@ class SystemRAMTracker:
         return used_bytes, percent
 
     def _monitor(self):
-        while not self._stop_event.is_set():
-            used_bytes, percent = self._sample_system_ram()
-            with self._lock:
-                if used_bytes > self.peak_used_bytes:
-                    self.peak_used_bytes = used_bytes
-                    self.peak_percent = percent
-            time.sleep(self.interval)
+        while not self._stop_event.wait(self.interval):
+            try:
+                used_bytes, percent = self._sample_system_ram()
+                with self._lock:
+                    if used_bytes > self.peak_used_bytes:
+                        self.peak_used_bytes = used_bytes
+                        self.peak_percent = percent
+            except Exception:
+                pass
 
     def start(self):
-        self.peak_used_bytes, self.peak_percent = self._sample_system_ram()
+        try:
+            self.peak_used_bytes, self.peak_percent = self._sample_system_ram()
+        except Exception:
+            self.peak_used_bytes, self.peak_percent = 0, 0.0
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._monitor, daemon=True)
         self._thread.start()
@@ -175,7 +196,8 @@ class ThermalStateTracker:
             self._phase = phase
 
     def start(self):
-        self._samples = []
+        with self._lock:
+            self._samples = []
         self._stop_event.clear()
         self._record_sample()
         self._thread = threading.Thread(target=self._monitor, daemon=True)

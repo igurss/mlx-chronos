@@ -4,8 +4,11 @@ from unittest.mock import MagicMock, patch
 from mlx_chronos.benchmark import (
     BENCHMARK_PROFILE_BASELINE,
     BENCHMARK_PROFILE_SUSTAINED,
+    CACHED_TTFT_WARNING_RATIO_ENV,
     VALID_BENCHMARK_PROFILES,
+    _cached_ttft_warning_ratio,
     _detect_sustained_throttling,
+    _edge_average,
     run_benchmark,
 )
 from mlx_chronos.protocol import (
@@ -150,6 +153,25 @@ def test_run_benchmark_rejects_invalid_connection_mode():
             connection_mode="pooled",
         )
 
+
+def test_cached_ttft_warning_ratio_env_override(monkeypatch):
+    monkeypatch.setenv(CACHED_TTFT_WARNING_RATIO_ENV, "0.4")
+
+    assert _cached_ttft_warning_ratio() == 0.4
+
+
+def test_cached_ttft_warning_ratio_invalid_env_uses_default(monkeypatch):
+    monkeypatch.setenv(CACHED_TTFT_WARNING_RATIO_ENV, "invalid")
+
+    assert _cached_ttft_warning_ratio() == 0.8
+
+
+def test_edge_average_handles_short_inputs_defensively():
+    assert _edge_average([]) == 0.0
+    assert _edge_average([10.0]) == 0.0
+    assert _edge_average([10.0], from_end=True) == 0.0
+
+
 def test_ram_tracker():
     with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls:
         mock_process = MagicMock()
@@ -163,6 +185,13 @@ def test_ram_tracker():
         tracker.peak_ram_bytes = tracker._sample_rss()
         
     assert tracker.peak_ram_bytes == 1024 ** 3
+
+
+def test_ram_tracker_preserves_explicit_zero_pid():
+    with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls:
+        RAMTracker(interval=0.1, target_pid=0)
+
+    mock_process_cls.assert_called_once_with(0)
 
 
 def test_ram_tracker_caches_child_processes_between_samples():
@@ -188,6 +217,43 @@ def test_ram_tracker_caches_child_processes_between_samples():
     assert mock_process.children.call_count == 1
 
 
+def test_ram_tracker_periodically_refreshes_child_processes():
+    with patch("mlx_chronos.trackers.psutil.Process") as mock_process_cls:
+        mock_process = MagicMock()
+        parent_mem_info = MagicMock()
+        parent_mem_info.rss = 1024 ** 3
+        mock_process.memory_info.return_value = parent_mem_info
+
+        first_child = MagicMock()
+        first_child_mem = MagicMock()
+        first_child_mem.rss = 512 * 1024 ** 2
+        first_child.memory_info.return_value = first_child_mem
+
+        second_child = MagicMock()
+        second_child_mem = MagicMock()
+        second_child_mem.rss = 768 * 1024 ** 2
+        second_child.memory_info.return_value = second_child_mem
+
+        mock_process.children.side_effect = [[first_child], [second_child]]
+        mock_process_cls.return_value = mock_process
+
+        tracker = RAMTracker(
+            interval=0.1,
+            target_pid=12345,
+            child_refresh_interval=30.0,
+        )
+        with patch(
+            "mlx_chronos.trackers.time.monotonic",
+            side_effect=[0.0, 31.0, 31.0],
+        ):
+            first_sample = tracker._sample_rss()
+            second_sample = tracker._sample_rss()
+
+    assert first_sample == int(1.5 * 1024 ** 3)
+    assert second_sample == int(1.75 * 1024 ** 3)
+    assert mock_process.children.call_count == 2
+
+
 def test_system_ram_tracker():
     with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
         mem_info = MagicMock()
@@ -200,6 +266,19 @@ def test_system_ram_tracker():
 
     assert used_bytes == 6 * (1024 ** 3)
     assert percent == 75.0
+
+
+def test_system_ram_tracker_start_survives_sampling_error():
+    with patch(
+        "mlx_chronos.trackers.psutil.virtual_memory",
+        side_effect=RuntimeError("temporary failure"),
+    ):
+        tracker = SystemRAMTracker(interval=0.001)
+        tracker.start()
+        peak_gb, peak_percent = tracker.stop()
+
+    assert peak_gb == 0.0
+    assert peak_percent == 0.0
 
 def test_thermal_state_tracker_summarizes_non_nominal_phases():
     states = iter(["nominal", "fair", "serious"])

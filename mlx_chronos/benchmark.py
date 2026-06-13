@@ -1,6 +1,7 @@
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 import logging
+import os
 import psutil
 import time
 from typing import get_args
@@ -65,6 +66,32 @@ SUSTAINED_THROTTLING_DROP_RATIO = 0.85
 SUSTAINED_THROTTLING_MIN_INTERVALS = 4
 SUSTAINED_THROTTLING_EDGE_INTERVALS = 2
 CACHED_TTFT_WARNING_RATIO = 0.8
+CACHED_TTFT_WARNING_RATIO_ENV = "MLX_CHRONOS_CACHED_TTFT_RATIO"
+
+
+def _cached_ttft_warning_ratio() -> float:
+    raw_ratio = os.getenv(CACHED_TTFT_WARNING_RATIO_ENV)
+    if raw_ratio is None:
+        return CACHED_TTFT_WARNING_RATIO
+    try:
+        ratio = float(raw_ratio)
+    except ValueError:
+        logger.warning(
+            "Invalid %s=%r; using default %.2f.",
+            CACHED_TTFT_WARNING_RATIO_ENV,
+            raw_ratio,
+            CACHED_TTFT_WARNING_RATIO,
+        )
+        return CACHED_TTFT_WARNING_RATIO
+    if 0 < ratio <= 1:
+        return ratio
+    logger.warning(
+        "Invalid %s=%r; expected a number in (0, 1]; using default %.2f.",
+        CACHED_TTFT_WARNING_RATIO_ENV,
+        raw_ratio,
+        CACHED_TTFT_WARNING_RATIO,
+    )
+    return CACHED_TTFT_WARNING_RATIO
 
 
 def _normalize_token_count_source(source: object) -> str:
@@ -210,6 +237,8 @@ def _throughput_interval_rates(samples: list[dict]) -> list[float]:
 
 def _edge_average(values: list[float], from_end: bool = False) -> float:
     window = min(SUSTAINED_THROTTLING_EDGE_INTERVALS, len(values) // 2)
+    if window <= 0:
+        return 0.0
     selected = values[-window:] if from_end else values[:window]
     return sum(selected) / len(selected)
 
@@ -599,7 +628,7 @@ def run_benchmark(
     cached_ttft_warning = (
         ttft_cold_stats["mean"] > 0
         and ttft_cached_stats["mean"]
-        >= ttft_cold_stats["mean"] * CACHED_TTFT_WARNING_RATIO
+        >= ttft_cold_stats["mean"] * _cached_ttft_warning_ratio()
     )
     if cached_ttft_warning:
         logger.warning(
@@ -643,7 +672,7 @@ def run_benchmark(
             DECODE_TIMING_CLIENT_STREAM,
         }:
             decode_tps_stats = compute_stats(decode_tps_trials)
-            decode_timing_source = unique_decode_sources.pop()
+            decode_timing_source = next(iter(unique_decode_sources))
         else:
             logger.warning(
                 "Decode throughput sources were mixed or unavailable; "
