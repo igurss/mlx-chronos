@@ -1,147 +1,206 @@
 # Contributing to mlx-Chronos
 
-Thank you for your interest in contributing to mlx-Chronos.
-There are two ways to contribute: submitting benchmark results and improving the codebase.
+Thanks for helping improve mlx-Chronos. Contributions usually fall into two
+paths: submitting benchmark results or improving the project itself.
+
+## Contents
+
+- [Ways to Contribute](#ways-to-contribute)
+- [Submit Benchmark Results](#submit-benchmark-results)
+- [Contribute Code or Docs](#contribute-code-or-docs)
+- [Open an Issue](#open-an-issue)
+- [Code of Conduct](#code-of-conduct)
 
 ---
 
-## Submitting Your Benchmark Results
+## Ways to Contribute
 
-### Prerequisites
+| Contribution | Best path | Keep separate from |
+| --- | --- | --- |
+| Public benchmark result | Pull request with JSON under `results/submitted/` | Code or docs changes |
+| Code fix | Focused pull request from a fork or branch | Leaderboard result files |
+| Documentation update | Focused pull request | Benchmark result files |
+| Feature idea | Issue first, then implementation PR | Unrelated refactors |
+| Bug report | Issue with reproduction details | Speculative fixes |
 
-- A Mac with Apple Silicon (M1, M2, M3, M4, or M5)
-- At least one supported engine installed and running:
-  - [Ollama](https://github.com/ollama/ollama) (MLX backend)
-  - [oMLX](https://github.com/jundot/omlx)
-  - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
-  - [vllm-mlx](https://github.com/raullenchai/vllm-mlx)
-  - [mlx-lm](https://github.com/ml-explore/mlx-lm)
-- Python 3.10+
+Mixed PRs are harder to validate and review. Keep each PR focused on one
+result submission, one fix, or one feature.
 
-### Steps
+---
 
-**1. Install mlx-Chronos**
+## Submit Benchmark Results
+
+### Requirements
+
+| Requirement | Details |
+| --- | --- |
+| Hardware | Apple Silicon Mac: M1, M2, M3, M4, or M5 |
+| Python | Python 3.10 or newer |
+| Engine | One supported engine installed and running |
+| Power mode | Low Power Mode must be off for public leaderboard rows |
+| Token counts | Public rows must use `usage.completion_tokens` |
+
+Supported engines:
+
+- [Ollama](https://github.com/ollama/ollama) with the MLX backend
+- [oMLX](https://github.com/jundot/omlx)
+- [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
+- [vllm-mlx](https://github.com/waybarrios/vllm-mlx)
+- [mlx-lm](https://github.com/ml-explore/mlx-lm)
+
+### 1. Install mlx-Chronos
+
 ```bash
 pip install mlx-chronos
 ```
 
-**2. Start your engine server**
+Optional thermal-state support:
 
-Use the server command for your engine and model. Examples:
-
-For oMLX:
 ```bash
+pip install "mlx-chronos[thermal]"
+```
+
+### 2. Start an Engine Server
+
+Use the server command for your engine and model.
+
+```bash
+# oMLX
 omlx serve --model-dir ~/models
-```
 
-For Rapid-MLX:
-```bash
+# Rapid-MLX
 rapid-mlx --no-telemetry serve /path/to/model --port 8001
-```
 
-For vllm-mlx:
-```bash
+# vllm-mlx
 vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
-```
 
-For mlx-lm:
-```bash
+# mlx-lm
 mlx_lm.server --model /path/to/model --port 8080
-```
 
-For Ollama:
-```bash
+# Ollama
 ollama serve
 ```
 
-mlx-Chronos checks these default OpenAI-compatible endpoints:
+Default OpenAI-compatible endpoints:
 
 | Engine | Default URL |
-|--------|-------------|
+| --- | --- |
 | oMLX | `http://localhost:8000/v1` |
 | Rapid-MLX | `http://localhost:8001/v1` |
 | vllm-mlx | `http://localhost:8000/v1` |
 | mlx-lm | `http://localhost:8080/v1` |
 | Ollama | `http://localhost:11434/v1` |
 
-You can override a port with an environment variable such as
-`MLX_CHRONOS_VLLM_MLX_PORT=8003` or `MLX_CHRONOS_MLX_LM_PORT=8002`.
-oMLX and vllm-mlx both default to port 8000, so run only one of them on that
-port at a time, or move one server and set the matching environment variable.
-For oMLX, mlx-Chronos also checks the listening process with `lsof` to avoid
-mistaking another OpenAI-compatible server on port 8000 for oMLX. If `lsof`
-cannot inspect the listener, validation may report that oMLX is not running even
-when `/v1/models` responds.
+Override ports with environment variables:
 
-**3. Run the benchmark**
 ```bash
-mlx-chronos engines                          # check engine status
-mlx-chronos validate --engine omlx \
-  --model "Qwen3.5-4B-OptiQ-4bit"
+MLX_CHRONOS_VLLM_MLX_PORT=8003
+MLX_CHRONOS_MLX_LM_PORT=8002
+```
+
+> **Port note**
+> oMLX and vllm-mlx both default to port `8000`. Run only one of them on that
+> port at a time, or move one server and set the matching
+> `MLX_CHRONOS_<ENGINE>_PORT` variable.
+
+For oMLX, mlx-Chronos also checks the listening process with `lsof` so a
+different OpenAI-compatible server on port `8000` is not mislabeled as oMLX. If
+`lsof` cannot inspect the listener, validation may report that oMLX is not
+running even when `/v1/models` responds.
+
+### 3. Validate the Setup
+
+```bash
+mlx-chronos engines
+mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
+```
+
+`validate` checks hardware, engine availability, server reachability, model
+listing, and an optional tiny completion request.
+
+### 4. Run the Benchmark
+
+```bash
 mlx-chronos run --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \
   --trials 5
 ```
 
-**4. Submit your result**
+The result JSON is written to `results/local/`. Use `--format all` if you also
+want a Markdown summary for local reading.
+
+Local runs may use custom trial counts, token bounds, profiles, cooldown,
+connection mode, and notes. Keep non-standard runs in `results/local/` for your
+own diagnostics.
+
+### 5. Check Public Eligibility
+
 ```bash
 mlx-chronos submit --file results/local/your-result.json --dry-run
 ```
 
-This validates the JSON locally without sending it. To submit the result for the
-public leaderboard, copy the checked JSON into `results/submitted/` with a clear
-filename and open a pull request that changes only that JSON file. GitHub
-Actions will label the PR as `result-submission`, validate the file, and keep
-submission PRs easy to filter from code changes.
+This validates the JSON locally without sending it anywhere.
 
-If opening a PR is inconvenient, the maintainer inbox remains available as a
-fallback:
+Public leaderboard submissions must pass this check and meet one of the
+standard profiles:
+
+| Profile | Trials | `requested_max_tokens` | Minimum generated output | `min_tokens` |
+| --- | ---: | ---: | ---: | --- |
+| Baseline | 5 | 100 | 80 tokens | Not allowed |
+| Sustained | 1 | 1000 | 800 tokens | Not allowed |
+
+Additional public requirements:
+
+- `metrics.token_count_source` must be `usage.completion_tokens`.
+- `hardware.low_power_mode` must be `off`.
+- Benchmark protocol metadata must remain unchanged.
+- Generation parameters must remain deterministic: `temperature=0.0`,
+  `top_p=1.0`.
+- Throughput timing fields and raw trial arrays must not be edited by hand.
+
+If your JSON says `"token_count_source": "word_fallback"` or `"mixed"`, keep it
+as a local result until the engine can return real completion-token usage. New
+fallback results also set `meta.word_fallback_warning`.
+
+The small protocol labels stored in JSON, such as `1`, `2`, or `3`, are
+internal compatibility markers used by validators. They are not public protocol
+release versions.
+
+### 6. Open a Result PR
+
+1. Copy the checked JSON into `results/submitted/` with a clear filename.
+2. Open a pull request that changes only that JSON file.
+3. GitHub Actions labels the PR as `result-submission`.
+4. CI validates schema, raw trials, integrity seal, public-profile rules, and
+   PR scope.
+5. A maintainer reviews the result before merge.
+
+> **Do not edit result JSON by hand**
+> Public submissions include an `integrity` seal over the canonical result
+> payload. Changing benchmark fields invalidates the seal and CI rejects the
+> file.
+
+### Inbox Fallback
+
+If opening a PR is inconvenient, send a validated result to the maintainer
+inbox:
+
 ```bash
 mlx-chronos submit --file results/local/your-result.json
 ```
 
-Local benchmark runs can use custom trial counts, token bounds, profiles,
-cooldown, connection mode, and notes. Keep those results in `results/local/`
-for your own diagnostics.
-
-Public leaderboard submissions are stricter. They must use
-`usage.completion_tokens` as the throughput token-count source and one of the
-standard profiles: `baseline` with exactly 5 trials and
-`requested_max_tokens=100`, or `sustained` with exactly 1 trial and
-`requested_max_tokens=1000`. Neither profile may request `min_tokens`, and
-macOS Low Power Mode must be disabled. Each throughput trial must generate at
-least 80% of the standard token limit: 80 tokens for baseline, 800 tokens for
-sustained. If your JSON says
-`"token_count_source": "word_fallback"` or `"mixed"`, keep it as a local result
-until the engine can return a real completion-token count. New local fallback
-results also set `meta.word_fallback_warning` to make that limitation explicit.
-
-New result files include benchmark protocol metadata with the exact prompts and
-requested token bounds and generation parameters. Keep those fields unchanged
-when submitting results; they are used to make runs reproducible and easier to
-compare. Current publishable results use streaming throughput requests with a
-persistent HTTP client and deterministic generation parameters
-(`temperature=0.0`, `top_p=1.0`).
-The small protocol labels stored in JSON, such as `1`, `2`, or `3`, are internal
-compatibility markers used by validators; they are not public protocol release
-versions.
-The standard leaderboard workloads are baseline `requested_max_tokens=100` and
-sustained `requested_max_tokens=1000`, both without a requested `min_tokens`;
-non-standard token-bound runs are useful locally but are not accepted as public
-leaderboard submissions.
-
-New results also distinguish request throughput from decode throughput. Do not
-edit `tokens_per_second`, `request_tokens_per_second`,
-`decode_tokens_per_second`, or the raw trial arrays by hand.
+Maintainers can override the inbox endpoint with `--endpoint` or
+`MLX_CHRONOS_SUBMIT_ENDPOINT`.
 
 ### Result File Format
 
-Results must follow the schema defined in `mlx_chronos/schema.py`.
-See `docs/methodology.md` for a full explanation of each field.
+Results must follow the schema in `mlx_chronos/schema.py`.
+See [docs/methodology.md](docs/methodology.md) for field-level measurement
+details.
 
 ---
 
-## Contributing Code
+## Contribute Code or Docs
 
 ### Setup
 
@@ -153,36 +212,46 @@ source .venv/bin/activate
 pip install -e ".[test]"
 ```
 
-### External Contributor Workflow
+### Workflow
 
-For code or documentation changes, fork the repository, create a focused branch
-from `main`, and open a pull request back to `igurss/mlx-chronos`. Keep code
-changes separate from leaderboard result submissions so each PR has one review
-path.
+1. Fork the repository or create a focused branch from `main`.
+2. Keep code/docs changes separate from leaderboard JSON submissions.
+3. Make the smallest change that solves the issue.
+4. Add or update tests when behavior changes.
+5. Run the relevant tests locally.
+6. Open a pull request back to `igurss/mlx-chronos`.
 
-For leaderboard result submissions, open a PR that changes only JSON files under
-`results/submitted/`. GitHub Actions rejects mixed PRs, deleted submitted result
-files, invalid schemas, broken integrity seals, non-standard public benchmark
-profiles, fallback token counts, requested `min_tokens`, Low Power Mode runs,
-short-output runs, and non-standard public trial counts or token bounds.
+### Test Command
 
-For code changes, run the relevant tests locally before opening the PR. The
-maintainer reviews code, docs, and result-submission PRs separately; benchmark
-result PRs are expected to be mechanical JSON submissions, while feature PRs
-should explain the behavior change and include tests.
+```bash
+python -m pytest
+```
+
+For targeted work, run the smallest relevant subset first, then the full suite
+before opening the PR when practical.
 
 ### Guidelines
 
-- Follow the existing code style
-- Add docstrings or comments only where they clarify non-obvious behavior
-- Test your changes before opening a PR
-- Reference the relevant Issue in your commit message (e.g. `feat: add engine (#3)`)
-- Keep PRs focused — one feature or fix per PR
+- Follow the existing code style.
+- Prefer focused changes over broad refactors.
+- Add comments only where they clarify non-obvious behavior.
+- Include tests for behavior changes, regressions, and schema validation.
+- Reference the relevant issue in the PR or commit when one exists, for example
+  `feat: add engine support (#3)`.
+- Explain user-visible behavior changes in the PR description.
 
-### Opening an Issue
+GitHub Actions rejects mixed PRs, deleted submitted result files, invalid
+schemas, broken integrity seals, non-standard public benchmark profiles,
+fallback token counts, requested `min_tokens`, Low Power Mode runs,
+short-output runs, and non-standard public trial counts or token bounds.
 
-Before opening a PR for a new feature, open an Issue first to discuss it.
-Bug reports and feature requests are welcome.
+---
+
+## Open an Issue
+
+Open an issue before starting a larger feature or protocol change. Bug reports
+and small fixes are also welcome; include the engine, model, command, logs, and
+environment details needed to reproduce the problem.
 
 ---
 
