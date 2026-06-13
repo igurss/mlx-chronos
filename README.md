@@ -143,6 +143,9 @@ pip install mlx-chronos
 # Confirm installed version
 mlx-chronos --version
 
+# Check PyPI and upgrade in the current Python environment
+mlx-chronos upgrade
+
 # Check available engines
 mlx-chronos engines
 
@@ -187,6 +190,10 @@ mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot
 be inspected, oMLX validation may fail even when `/v1/models` responds.
 The cached-TTFT warning threshold can be overridden for local diagnostics with
 `MLX_CHRONOS_CACHED_TTFT_RATIO`; the default is `0.8`.
+When `mlx-chronos` runs in an interactive terminal, it also performs a
+best-effort background PyPI version check. If a newer release is available, it
+prints a short notice recommending `mlx-chronos upgrade`. Set
+`MLX_CHRONOS_DISABLE_UPDATE_CHECK=1` to disable this automatic check.
 
 ---
 

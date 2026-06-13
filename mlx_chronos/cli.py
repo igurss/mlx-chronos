@@ -4,6 +4,7 @@ import logging
 import os
 import json
 import time
+import subprocess
 
 from pathlib import Path
 from datetime import datetime, timezone
@@ -28,6 +29,13 @@ from mlx_chronos.submit import (
     load_publishable_result,
     submit_result_file,
 )
+from mlx_chronos.updates import (
+    DEFAULT_UPDATE_CHECK_TIMEOUT,
+    PROJECT_NAME,
+    check_for_update,
+    start_background_update_check,
+    update_check_disabled,
+)
 from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
@@ -40,6 +48,21 @@ from mlx_chronos.constants import (
 
 
 logger = logging.getLogger("mlx_chronos")
+
+
+def _should_start_update_check(command: str | None, stream=None) -> bool:
+    if command == "upgrade" or update_check_disabled():
+        return False
+    output = sys.stderr if stream is None else stream
+    try:
+        return bool(output.isatty())
+    except Exception:
+        return False
+
+
+def _maybe_start_update_check(command: str | None) -> None:
+    if _should_start_update_check(command):
+        start_background_update_check()
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -436,6 +459,50 @@ def cmd_submit(args):
     logger.info("Submission sent.")
 
 
+def cmd_upgrade(args):
+    """Upgrade mlx-chronos from PyPI when a newer release is available."""
+    if args.timeout <= 0:
+        print("Error: --timeout must be greater than 0.", file=sys.stderr)
+        raise SystemExit(2)
+
+    result = check_for_update(timeout=args.timeout)
+    if result.error:
+        print(
+            f"Error: could not check for {PROJECT_NAME} updates: {result.error}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    if not result.update_available or result.latest_version is None:
+        logger.info("%s is already up to date (%s).", PROJECT_NAME, VERSION)
+        return
+
+    logger.info(
+        "Updating %s from %s to %s using this Python environment...",
+        PROJECT_NAME,
+        VERSION,
+        result.latest_version,
+    )
+    command = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        PROJECT_NAME,
+    ]
+    try:
+        completed = subprocess.run(command, check=False)
+    except OSError as exc:
+        print(f"Error: failed to start pip: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    if completed.returncode != 0:
+        raise SystemExit(completed.returncode)
+
+    logger.info("Upgrade complete. Run `%s --version` to confirm.", PROJECT_NAME)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
@@ -640,8 +707,25 @@ def main():
     )
     submit_parser.set_defaults(func=cmd_submit)
 
+    # --- upgrade ---
+    upgrade_parser = subparsers.add_parser(
+        "upgrade",
+        help="Install the latest mlx-chronos release from PyPI",
+    )
+    upgrade_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_UPDATE_CHECK_TIMEOUT,
+        help=(
+            "Seconds to wait while checking PyPI for the latest release "
+            f"(default: {DEFAULT_UPDATE_CHECK_TIMEOUT})"
+        ),
+    )
+    upgrade_parser.set_defaults(func=cmd_upgrade)
+
     # Parse and dispatch
     args = parser.parse_args()
+    _maybe_start_update_check(args.command)
     args.func(args)
 
 

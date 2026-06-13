@@ -13,9 +13,12 @@ import httpx
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import (
     _emit_result_warnings,
+    _maybe_start_update_check,
+    _should_start_update_check,
     cmd_models,
     cmd_run,
     cmd_submit,
+    cmd_upgrade,
     cmd_validate,
     main,
 )
@@ -32,6 +35,16 @@ from mlx_chronos.protocol import COLD_PROMPTS, THROUGHPUT_PROMPTS
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.submit import SubmissionError, load_publishable_result, submit_result_file
+from mlx_chronos.updates import UpdateCheckResult
+
+
+class FakeTTY:
+    def __init__(self, is_tty=True):
+        self._is_tty = is_tty
+
+    def isatty(self):
+        return self._is_tty
+
 
 def test_cmd_run_invalid_trials(capsys):
     args = Namespace(trials=0, ram_sample_interval=0.1, format="json")
@@ -166,6 +179,117 @@ def test_main_submit_command():
         with patch("mlx_chronos.cli.cmd_submit") as mock_submit:
             main()
             mock_submit.assert_called_once()
+
+
+def test_main_upgrade_command():
+    with patch.object(sys, "argv", ["mlx-chronos", "upgrade"]):
+        with patch("mlx_chronos.cli.cmd_upgrade") as mock_upgrade:
+            main()
+            mock_upgrade.assert_called_once()
+
+
+def test_should_start_update_check_only_for_interactive_commands(monkeypatch):
+    monkeypatch.delenv("MLX_CHRONOS_DISABLE_UPDATE_CHECK", raising=False)
+
+    assert _should_start_update_check("engines", stream=FakeTTY(True)) is True
+    assert _should_start_update_check("engines", stream=FakeTTY(False)) is False
+    assert _should_start_update_check("upgrade", stream=FakeTTY(True)) is False
+
+
+def test_should_start_update_check_honors_disable_env(monkeypatch):
+    monkeypatch.setenv("MLX_CHRONOS_DISABLE_UPDATE_CHECK", "1")
+
+    assert _should_start_update_check("engines", stream=FakeTTY(True)) is False
+
+
+def test_maybe_start_update_check_starts_background_thread(monkeypatch):
+    monkeypatch.delenv("MLX_CHRONOS_DISABLE_UPDATE_CHECK", raising=False)
+    with patch("mlx_chronos.cli.sys.stderr", FakeTTY(True)):
+        with patch("mlx_chronos.cli.start_background_update_check") as mock_start:
+            _maybe_start_update_check("engines")
+
+    mock_start.assert_called_once()
+
+
+def test_maybe_start_update_check_skips_upgrade(monkeypatch):
+    monkeypatch.delenv("MLX_CHRONOS_DISABLE_UPDATE_CHECK", raising=False)
+    with patch("mlx_chronos.cli.sys.stderr", FakeTTY(True)):
+        with patch("mlx_chronos.cli.start_background_update_check") as mock_start:
+            _maybe_start_update_check("upgrade")
+
+    mock_start.assert_not_called()
+
+
+@patch("mlx_chronos.cli.subprocess.run")
+@patch("mlx_chronos.cli.check_for_update")
+def test_cmd_upgrade_installs_when_update_is_available(
+    mock_check_for_update,
+    mock_run,
+    caplog,
+):
+    mock_check_for_update.return_value = UpdateCheckResult(
+        current_version="0.2.1",
+        latest_version="0.2.2",
+        update_available=True,
+        error=None,
+    )
+    mock_run.return_value.returncode = 0
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_upgrade(Namespace(timeout=0.5))
+
+    mock_check_for_update.assert_called_once_with(timeout=0.5)
+    mock_run.assert_called_once_with(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "mlx-chronos"],
+        check=False,
+    )
+    assert "Updating mlx-chronos from" in caplog.text
+    assert "Upgrade complete" in caplog.text
+
+
+@patch("mlx_chronos.cli.subprocess.run")
+@patch("mlx_chronos.cli.check_for_update")
+def test_cmd_upgrade_reports_current_version_when_latest(
+    mock_check_for_update,
+    mock_run,
+    caplog,
+):
+    mock_check_for_update.return_value = UpdateCheckResult(
+        current_version=VERSION,
+        latest_version=VERSION,
+        update_available=False,
+        error=None,
+    )
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_upgrade(Namespace(timeout=0.5))
+
+    mock_run.assert_not_called()
+    assert "mlx-chronos is already up to date" in caplog.text
+
+
+@patch("mlx_chronos.cli.check_for_update")
+def test_cmd_upgrade_reports_check_error(mock_check_for_update, capsys):
+    mock_check_for_update.return_value = UpdateCheckResult(
+        current_version=VERSION,
+        latest_version=None,
+        update_available=False,
+        error="network down",
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_upgrade(Namespace(timeout=0.5))
+
+    assert exc.value.code == 1
+    assert "could not check for mlx-chronos updates: network down" in capsys.readouterr().err
+
+
+def test_cmd_upgrade_invalid_timeout(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cmd_upgrade(Namespace(timeout=0))
+
+    assert exc.value.code == 2
+    assert "Error: --timeout must be greater than 0." in capsys.readouterr().err
 
 @patch("mlx_chronos.cli.get_engine")
 def test_cmd_models_lists_engine_models(mock_get_engine, caplog):
