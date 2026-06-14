@@ -349,6 +349,54 @@ def test_append_progress_sample_skips_elapsed_that_rounds_to_zero():
 
     assert samples == []
 
+
+def test_append_progress_sample_replaces_duplicate_elapsed_for_same_source():
+    engine = OMLXEngine()
+    samples = []
+
+    engine._append_progress_sample(
+        samples,
+        completion_tokens=100,
+        elapsed_seconds=1.2344,
+        token_count_source="word_fallback",
+    )
+    engine._append_progress_sample(
+        samples,
+        completion_tokens=200,
+        elapsed_seconds=1.2344,
+        token_count_source="word_fallback",
+    )
+
+    assert samples == [
+        {
+            "completion_tokens": 200,
+            "elapsed_seconds": 1.234,
+            "tokens_per_second": round(200 / 1.234, 2),
+            "token_count_source": "word_fallback",
+        }
+    ]
+
+
+def test_append_progress_sample_keeps_same_elapsed_when_source_changes():
+    engine = OMLXEngine()
+    samples = []
+
+    engine._append_progress_sample(
+        samples,
+        completion_tokens=100,
+        elapsed_seconds=1.2344,
+        token_count_source="word_fallback",
+    )
+    engine._append_progress_sample(
+        samples,
+        completion_tokens=120,
+        elapsed_seconds=1.2344,
+        token_count_source="usage.completion_tokens",
+    )
+
+    assert len(samples) == 2
+
+
 @patch("httpx.stream")
 def test_measure_throughput_scales_timeout_for_long_outputs(mock_stream):
     mock_stream.return_value = stream_response(
@@ -773,6 +821,7 @@ def test_rapid_mlx_get_version_uses_timeout(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "rapid-mlx 0.6.68\n"
     mock_result.stderr = ""
+    mock_result.returncode = 0
     mock_run.return_value = mock_result
 
     assert RapidMLXEngine().get_version() == "0.6.68"
@@ -784,9 +833,29 @@ def test_rapid_mlx_get_version_accepts_plain_version(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "0.6.68\n"
     mock_result.stderr = ""
+    mock_result.returncode = 0
     mock_run.return_value = mock_result
 
     assert RapidMLXEngine().get_version() == "0.6.68"
+
+
+@patch("subprocess.run")
+def test_rapid_mlx_get_version_ignores_failed_command_output(mock_run):
+    mock_result = MagicMock()
+    mock_result.stdout = "Error: rapid-mlx not initialized\n"
+    mock_result.stderr = ""
+    mock_result.returncode = 1
+    mock_run.return_value = mock_result
+
+    assert RapidMLXEngine().get_version() == "unknown"
+
+
+def test_parse_version_output_strips_trailing_punctuation():
+    assert OMLXEngine()._parse_version_output("version 0.4.3.") == "0.4.3"
+    assert (
+        OMLXEngine()._parse_version_output("version 0.7.3-beta.1+build.2026")
+        == "0.7.3-beta.1+build.2026"
+    )
 
 @patch("httpx.get")
 def test_rapid_mlx_resolve_model_id(mock_get):

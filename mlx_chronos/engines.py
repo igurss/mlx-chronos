@@ -429,7 +429,10 @@ class BaseEngine(ABC):
 
     def _parse_version_output(self, output: str) -> str | None:
         match = re.search(r"\bv?(\d+(?:\.\d+)+(?:[-+._a-zA-Z0-9]*)?)\b", output)
-        return match.group(1) if match else None
+        if match is None:
+            return None
+        version = match.group(1).rstrip("._-+")
+        return version or None
 
     def _stream_chunk_has_content(self, chunk: dict) -> bool:
         choices = chunk.get("choices")
@@ -505,16 +508,20 @@ class BaseEngine(ABC):
         rounded_elapsed_seconds = round(elapsed_seconds, 3)
         if rounded_elapsed_seconds <= 0:
             return
-        samples.append(
-            {
-                "completion_tokens": completion_tokens,
-                "elapsed_seconds": rounded_elapsed_seconds,
-                "tokens_per_second": round(
-                    completion_tokens / rounded_elapsed_seconds, 2
-                ),
-                "token_count_source": token_count_source,
-            }
-        )
+        sample = {
+            "completion_tokens": completion_tokens,
+            "elapsed_seconds": rounded_elapsed_seconds,
+            "tokens_per_second": round(completion_tokens / rounded_elapsed_seconds, 2),
+            "token_count_source": token_count_source,
+        }
+        if (
+            samples
+            and samples[-1]["elapsed_seconds"] == rounded_elapsed_seconds
+            and samples[-1]["token_count_source"] == token_count_source
+        ):
+            samples[-1] = sample
+            return
+        samples.append(sample)
 
     def _version_from_mapping(
         self,
@@ -978,12 +985,10 @@ class RapidMLXEngine(BaseEngine):
                 text=True,
                 timeout=3,
             )
+            if result.returncode != 0:
+                return "unknown"
             output = f"{result.stdout}\n{result.stderr}"
-            return (
-                self._parse_version_output(output)
-                or result.stdout.strip()
-                or "unknown"
-            )
+            return self._parse_version_output(output) or "unknown"
         except Exception:
             return "unknown"
 

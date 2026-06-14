@@ -193,6 +193,20 @@ def get_low_power_mode() -> str:
     return "unavailable_parse_error"
 
 
+def _resolve_condition_field(
+    explicit_value: str | None,
+    hardware: dict,
+    key: str,
+    fallback_fn,
+) -> str:
+    if explicit_value is not None:
+        return explicit_value
+    hardware_value = hardware.get(key)
+    if hardware_value is not None:
+        return hardware_value
+    return fallback_fn()
+
+
 def get_benchmark_condition_warnings(
     hardware: dict,
     power_source: str | None = None,
@@ -224,12 +238,12 @@ def get_benchmark_condition_warnings(
             )
         )
 
-    power_source = (
-        hardware.get("power_source")
-        if power_source is None
-        else power_source
+    power_source = _resolve_condition_field(
+        power_source,
+        hardware,
+        "power_source",
+        get_power_source,
     )
-    power_source = get_power_source() if power_source is None else power_source
     if power_source == "battery":
         warnings.append(
             BenchmarkConditionWarning(
@@ -238,12 +252,12 @@ def get_benchmark_condition_warnings(
             )
         )
 
-    low_power_mode = (
-        hardware.get("low_power_mode")
-        if low_power_mode is None
-        else low_power_mode
+    low_power_mode = _resolve_condition_field(
+        low_power_mode,
+        hardware,
+        "low_power_mode",
+        get_low_power_mode,
     )
-    low_power_mode = get_low_power_mode() if low_power_mode is None else low_power_mode
     if low_power_mode == "on":
         warnings.append(
             BenchmarkConditionWarning(

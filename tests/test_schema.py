@@ -3,6 +3,7 @@ from typing import get_args
 
 import pytest
 from pydantic import ValidationError
+from mlx_chronos import __version__ as VERSION
 from mlx_chronos.constants import MAX_TRIALS, P95_MIN_TRIALS, VALID_ENGINE_NAMES
 from mlx_chronos.examples import EXAMPLE_RESULT
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
@@ -57,6 +58,11 @@ def test_valid_schema():
     )
     assert result.integrity.schema_name == "mlx-chronos-integrity-v1"
     validate_integrity_seal(EXAMPLE_RESULT)
+
+
+def test_example_result_chronos_version_matches_package():
+    assert EXAMPLE_RESULT["meta"]["chronos_version"] == VERSION
+
 
 def test_legacy_thermal_state_is_normalized():
     data = EXAMPLE_RESULT.copy()

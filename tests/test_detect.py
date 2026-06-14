@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from mlx_chronos.detect import (
+    _resolve_condition_field,
     get_benchmark_condition_warnings,
     get_architecture,
     get_chip_model,
@@ -153,6 +154,46 @@ def test_benchmark_condition_warnings_for_unavailable_thermal_state():
     assert len(warnings) == 1
     assert warnings[0].label == "thermal state unavailable"
     assert "unavailable_permission" in warnings[0].detail
+
+
+def test_condition_field_resolution_prefers_explicit_then_hardware():
+    def fallback():
+        raise AssertionError("fallback should not be called")
+
+    assert (
+        _resolve_condition_field(
+            "battery",
+            {"power_source": "ac_power"},
+            "power_source",
+            fallback,
+        )
+        == "battery"
+    )
+    assert (
+        _resolve_condition_field(
+            None,
+            {"power_source": "ac_power"},
+            "power_source",
+            fallback,
+        )
+        == "ac_power"
+    )
+
+
+def test_condition_field_resolution_uses_fallback_for_missing_or_none_hardware():
+    assert (
+        _resolve_condition_field(None, {}, "power_source", lambda: "unavailable")
+        == "unavailable"
+    )
+    assert (
+        _resolve_condition_field(
+            None,
+            {"power_source": None},
+            "power_source",
+            lambda: "unavailable",
+        )
+        == "unavailable"
+    )
 
 
 def test_benchmark_condition_warning_detection_failures_are_ignored():

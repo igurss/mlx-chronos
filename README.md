@@ -172,7 +172,7 @@ Default engine ports:
 | --- | --- |
 | oMLX | `8000` |
 | vllm-mlx | `8000` |
-| mlx-lm | `8002` |
+| mlx-lm | `8080` |
 
 oMLX and vllm-mlx both default to port `8000`. To avoid mislabeling results,
 mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot
