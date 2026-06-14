@@ -25,7 +25,7 @@ from mlx_chronos.constants import (
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
 )
-from mlx_chronos.engines import ENGINES
+from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.updates import DEFAULT_UPDATE_CHECK_TIMEOUT
 
@@ -69,6 +69,8 @@ OPTIONAL_RUN_SETTINGS = {
     "preflight": "Preflight model check",
     "notes": "Result notes",
 }
+
+MANUAL_MODEL_ENTRY = "__manual_model_entry__"
 
 
 class WizardAbort(RuntimeError):
@@ -360,13 +362,11 @@ class WizardSession:
             return False
 
     def _prompt_run_config(self, config: RunWizardConfig) -> RunWizardConfig:
+        engine = self._ask_engine(default=config.engine)
         config = replace(
             config,
-            engine=self._ask_engine(default=config.engine),
-            model=self._ask_required_text(
-                "Model name as exposed by the engine",
-                default=config.model,
-            ),
+            engine=engine,
+            model=self._ask_model(engine, default=config.model),
             quantization=self._ask_required_text(
                 "Quantization / format label",
                 default=config.quantization,
@@ -411,14 +411,17 @@ class WizardSession:
         setting: str,
     ) -> RunWizardConfig:
         if setting == "engine":
-            return replace(config, engine=self._ask_engine(default=config.engine))
+            engine = self._ask_engine(default=config.engine)
+            model = (
+                self._ask_model(engine)
+                if engine != config.engine
+                else config.model
+            )
+            return replace(config, engine=engine, model=model)
         if setting == "model":
             return replace(
                 config,
-                model=self._ask_required_text(
-                    "Model name as exposed by the engine",
-                    default=config.model,
-                ),
+                model=self._ask_model(config.engine, default=config.model),
             )
         if setting == "quantization":
             return replace(
@@ -575,7 +578,7 @@ class WizardSession:
         engine = self._ask_engine()
         model = None
         if self._confirm("Validate model access too?", default=True):
-            model = self._ask_required_text("Model name")
+            model = self._ask_model(engine)
         self._call_command(self.callbacks.validate, Namespace(engine=engine, model=model))
 
     def _models_flow(self) -> None:
@@ -623,6 +626,48 @@ class WizardSession:
             ],
             default=default,
         )
+
+    def _ask_model(self, engine_name: str, default: str = "") -> str:
+        model_ids, error = self._load_model_ids(engine_name)
+        default = default.strip()
+        if model_ids:
+            choices = []
+            if default and default not in model_ids:
+                choices.append((f"Keep current value: {default}", default))
+            choices.extend((model_id, model_id) for model_id in model_ids)
+            choices.append(("Enter manually", MANUAL_MODEL_ENTRY))
+            selected = self._select(
+                "Model exposed by the engine",
+                choices,
+                default=default if default in model_ids else model_ids[0],
+            )
+            if selected != MANUAL_MODEL_ENTRY:
+                return selected
+        else:
+            detail = f": {error}" if error else ""
+            self.console.print(
+                f"[yellow]Could not load models from {engine_name}{detail}.[/yellow]"
+            )
+
+        return self._ask_required_text(
+            "Model name as exposed by the engine",
+            default=default,
+        )
+
+    def _load_model_ids(self, engine_name: str) -> tuple[list[str], str | None]:
+        try:
+            engine = get_engine(engine_name)
+            if not engine.is_installed():
+                return [], f"engine '{engine_name}' is not installed"
+            if not engine.is_server_running():
+                return [], f"server is not running at {engine.base_url()}"
+            model_ids = engine.list_model_ids()
+        except Exception as exc:
+            return [], str(exc)
+
+        if not model_ids:
+            return [], "server returned no models"
+        return model_ids, None
 
     def _ask_profile(self, default: str = BENCHMARK_PROFILE_BASELINE) -> str:
         return self._select(

@@ -7,6 +7,8 @@
   questionary and Rich. The wizard covers common commands and provides a guided
   benchmark builder that previews the equivalent `mlx-chronos run ...` command
   before execution.
+- Let the wizard load model IDs from a running engine server and select the
+  benchmark or validation model from a menu, with manual entry only as fallback.
 
 ### Bug Fixes
 - Keep the wizard open when an internal command fails, instead of letting

@@ -118,9 +118,11 @@ mlx-chronos wizard
 
 The wizard provides a terminal menu for common actions and a guided benchmark
 builder with engine, model, profile, token bounds, output format, cooldown,
-preflight, notes, and other run options. Before launching a benchmark, it shows
-the equivalent `mlx-chronos run ...` command so the same configuration can be
-reused in scripts.
+preflight, notes, and other run options. When the selected engine server is
+running, the wizard loads `/models` and lets you select a model from the exposed
+IDs, with manual entry as a fallback. Before launching a benchmark, it shows the
+equivalent `mlx-chronos run ...` command so the same configuration can be reused
+in scripts.
 
 ### 5. Run a Benchmark Manually
 

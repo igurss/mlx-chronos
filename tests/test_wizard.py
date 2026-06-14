@@ -11,6 +11,7 @@ from mlx_chronos.constants import (
     SUSTAINED_TRIALS,
 )
 from mlx_chronos.wizard import (
+    MANUAL_MODEL_ENTRY,
     RunWizardConfig,
     WizardSession,
     build_run_command,
@@ -182,6 +183,81 @@ def test_wizard_config_uses_current_ram_default():
     assert RunWizardConfig().ram_sample_interval == pytest.approx(
         DEFAULT_RAM_SAMPLE_INTERVAL
     )
+
+
+def test_wizard_ask_model_selects_model_from_server():
+    session = object.__new__(WizardSession)
+    session._load_model_ids = lambda engine: (["model-a", "model-b"], None)
+    session._ask_required_text = lambda *_args, **_kwargs: pytest.fail(
+        "manual prompt should not be used"
+    )
+
+    captured = {}
+
+    def select(message, choices, default=None):
+        captured["message"] = message
+        captured["choices"] = choices
+        captured["default"] = default
+        return "model-b"
+
+    session._select = select
+
+    assert session._ask_model("omlx") == "model-b"
+    assert captured == {
+        "message": "Model exposed by the engine",
+        "choices": [
+            ("model-a", "model-a"),
+            ("model-b", "model-b"),
+            ("Enter manually", MANUAL_MODEL_ENTRY),
+        ],
+        "default": "model-a",
+    }
+
+
+def test_wizard_ask_model_can_keep_current_unlisted_value():
+    session = object.__new__(WizardSession)
+    session._load_model_ids = lambda engine: (["model-a"], None)
+    session._ask_required_text = lambda *_args, **_kwargs: pytest.fail(
+        "manual prompt should not be used"
+    )
+
+    captured = {}
+
+    def select(message, choices, default=None):
+        captured["choices"] = choices
+        captured["default"] = default
+        return "custom-model"
+
+    session._select = select
+
+    assert session._ask_model("omlx", default="custom-model") == "custom-model"
+    assert captured["choices"] == [
+        ("Keep current value: custom-model", "custom-model"),
+        ("model-a", "model-a"),
+        ("Enter manually", MANUAL_MODEL_ENTRY),
+    ]
+    assert captured["default"] == "model-a"
+
+
+def test_wizard_ask_model_allows_manual_entry_from_model_menu():
+    session = object.__new__(WizardSession)
+    session._load_model_ids = lambda engine: (["model-a"], None)
+    session._select = lambda *_args, **_kwargs: MANUAL_MODEL_ENTRY
+    session._ask_required_text = lambda message, default="": "manual-model"
+
+    assert session._ask_model("omlx") == "manual-model"
+
+
+def test_wizard_ask_model_falls_back_when_models_cannot_load():
+    session = object.__new__(WizardSession)
+    session.console = FakeConsole()
+    session._load_model_ids = lambda engine: ([], "server is not running")
+    session._ask_required_text = lambda message, default="": "manual-model"
+
+    assert session._ask_model("omlx") == "manual-model"
+    assert session.console.messages == [
+        "[yellow]Could not load models from omlx: server is not running.[/yellow]"
+    ]
 
 
 def test_wizard_call_command_catches_nonzero_system_exit():
