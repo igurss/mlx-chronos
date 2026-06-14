@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- Add `mlx-chronos wizard`, an interactive terminal menu built with
+  questionary and Rich. The wizard covers common commands and provides a guided
+  benchmark builder that previews the equivalent `mlx-chronos run ...` command
+  before execution.
+
 ## [0.2.1] — 2026-06-12
 
 Patch release focused on engine adapter correctness after validating `0.2.0`

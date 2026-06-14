@@ -19,6 +19,7 @@ from mlx_chronos.cli import (
     cmd_run,
     cmd_submit,
     cmd_upgrade,
+    cmd_wizard,
     cmd_validate,
     main,
 )
@@ -186,6 +187,20 @@ def test_main_upgrade_command():
         with patch("mlx_chronos.cli.cmd_upgrade") as mock_upgrade:
             main()
             mock_upgrade.assert_called_once()
+
+
+def test_main_wizard_command():
+    with patch.object(sys, "argv", ["mlx-chronos", "wizard"]):
+        with patch("mlx_chronos.cli.cmd_wizard") as mock_wizard:
+            main()
+            mock_wizard.assert_called_once()
+
+
+def test_cmd_wizard_invokes_interactive_runner():
+    with patch("mlx_chronos.wizard.run_wizard") as mock_run_wizard:
+        cmd_wizard(Namespace())
+
+    mock_run_wizard.assert_called_once()
 
 
 def test_should_start_update_check_only_for_interactive_commands(monkeypatch):

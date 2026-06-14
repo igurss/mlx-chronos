@@ -110,7 +110,19 @@ mlx-chronos models --engine omlx
 mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 ```
 
-### 4. Run a Benchmark
+### 4. Use the Interactive Wizard
+
+```bash
+mlx-chronos wizard
+```
+
+The wizard provides a terminal menu for common actions and a guided benchmark
+builder with engine, model, profile, token bounds, output format, cooldown,
+preflight, notes, and other run options. Before launching a benchmark, it shows
+the equivalent `mlx-chronos run ...` command so the same configuration can be
+reused in scripts.
+
+### 5. Run a Benchmark Manually
 
 ```bash
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
@@ -118,7 +130,7 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 
 Results are written to `results/local/` by default.
 
-### 5. Useful Run Options
+### 6. Useful Run Options
 
 ```bash
 # Write both JSON and Markdown outputs
@@ -147,6 +159,7 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
 | Command | Purpose |
 | --- | --- |
 | `mlx-chronos --version` | Print the installed package version |
+| `mlx-chronos wizard` | Open an interactive menu for common commands and guided benchmark setup |
 | `mlx-chronos upgrade` | Check PyPI and upgrade the current Python environment if a newer release exists |
 | `mlx-chronos engines` | List supported engines and local installed/running status |
 | `mlx-chronos models --engine <name>` | List model IDs exposed by a running engine server |

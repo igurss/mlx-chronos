@@ -1,0 +1,174 @@
+import shlex
+from argparse import Namespace
+from pathlib import Path
+
+import pytest
+
+from mlx_chronos.constants import (
+    DEFAULT_RAM_SAMPLE_INTERVAL,
+    DEFAULT_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    SUSTAINED_TRIALS,
+)
+from mlx_chronos.wizard import (
+    RunWizardConfig,
+    build_run_command,
+    resolved_run_defaults,
+    validate_run_config,
+)
+
+
+def test_run_wizard_config_builds_run_namespace():
+    config = RunWizardConfig(
+        engine="mlx-lm",
+        model="mlx-community/test-model",
+        quantization="nvfp4",
+        profile="sustained",
+        trials=2,
+        max_tokens=500,
+        min_tokens=400,
+        output_format="all",
+        output_dir=Path("/tmp/mlx results"),
+        cooldown_seconds=30.0,
+        connection_mode="per_request",
+        ram_sample_interval=0.25,
+        preflight=True,
+        notes="local test",
+    )
+
+    args = config.to_namespace()
+
+    assert isinstance(args, Namespace)
+    assert args.engine == "mlx-lm"
+    assert args.model == "mlx-community/test-model"
+    assert args.quantization == "nvfp4"
+    assert args.profile == "sustained"
+    assert args.trials == 2
+    assert args.max_tokens == 500
+    assert args.min_tokens == 400
+    assert args.format == "all"
+    assert args.output_dir == Path("/tmp/mlx results")
+    assert args.cooldown_seconds == 30.0
+    assert args.connection_mode == "per_request"
+    assert args.ram_sample_interval == 0.25
+    assert args.preflight is True
+    assert args.notes == "local test"
+
+
+def test_resolved_run_defaults_follow_profile():
+    baseline = RunWizardConfig(profile="baseline")
+    sustained = RunWizardConfig(profile="sustained")
+
+    assert resolved_run_defaults(baseline) == (
+        5,
+        DEFAULT_THROUGHPUT_MAX_TOKENS,
+    )
+    assert resolved_run_defaults(sustained) == (
+        SUSTAINED_TRIALS,
+        SUSTAINED_THROUGHPUT_MAX_TOKENS,
+    )
+
+
+def test_resolved_run_defaults_use_custom_values():
+    config = RunWizardConfig(profile="sustained", trials=3, max_tokens=700)
+
+    assert resolved_run_defaults(config) == (3, 700)
+
+
+def test_validate_run_config_rejects_min_tokens_above_effective_max():
+    errors = validate_run_config(
+        RunWizardConfig(model="test", min_tokens=200, max_tokens=100)
+    )
+
+    assert errors == [
+        "min tokens must be less than or equal to the effective max tokens (100)"
+    ]
+
+
+def test_validate_run_config_allows_min_tokens_against_profile_default():
+    assert validate_run_config(RunWizardConfig(model="test", min_tokens=80)) == []
+
+
+def test_build_run_command_contains_only_needed_default_flags():
+    command = build_run_command(
+        RunWizardConfig(
+            engine="omlx",
+            model="Qwen3.5-4B-OptiQ-4bit",
+            quantization="4bit",
+            profile="baseline",
+        )
+    )
+
+    parts = shlex.split(command)
+    assert parts == [
+        "mlx-chronos",
+        "run",
+        "--engine",
+        "omlx",
+        "--model",
+        "Qwen3.5-4B-OptiQ-4bit",
+        "--quantization",
+        "4bit",
+        "--profile",
+        "baseline",
+    ]
+    assert "--trials" not in parts
+    assert "--max-tokens" not in parts
+    assert "--ram-sample-interval" not in parts
+
+
+def test_build_run_command_quotes_paths_and_notes():
+    config = RunWizardConfig(
+        engine="rapid-mlx",
+        model="org/model name",
+        quantization="OptiQ 4bit",
+        profile="sustained",
+        trials=1,
+        max_tokens=1000,
+        min_tokens=800,
+        output_format="all",
+        output_dir=Path("/tmp/mlx results"),
+        cooldown_seconds=300.0,
+        connection_mode="per_request",
+        ram_sample_interval=0.1,
+        preflight=True,
+        notes="fan maxed; cold room",
+    )
+
+    assert shlex.split(build_run_command(config)) == [
+        "mlx-chronos",
+        "run",
+        "--engine",
+        "rapid-mlx",
+        "--model",
+        "org/model name",
+        "--quantization",
+        "OptiQ 4bit",
+        "--profile",
+        "sustained",
+        "--trials",
+        "1",
+        "--max-tokens",
+        "1000",
+        "--min-tokens",
+        "800",
+        "--format",
+        "all",
+        "--output-dir",
+        "/tmp/mlx results",
+        "--cooldown-seconds",
+        "300",
+        "--connection-mode",
+        "per_request",
+        "--ram-sample-interval",
+        "0.1",
+        "--preflight",
+        "--notes",
+        "fan maxed; cold room",
+    ]
+
+
+def test_wizard_config_uses_current_ram_default():
+    assert RunWizardConfig().ram_sample_interval == pytest.approx(
+        DEFAULT_RAM_SAMPLE_INTERVAL
+    )

@@ -503,6 +503,21 @@ def cmd_upgrade(args):
     logger.info("Upgrade complete. Run `%s --version` to confirm.", PROJECT_NAME)
 
 
+def cmd_wizard(args):
+    """Start the interactive command wizard."""
+    from mlx_chronos.wizard import WizardCallbacks, run_wizard
+
+    callbacks = WizardCallbacks(
+        run=cmd_run,
+        validate=cmd_validate,
+        models=cmd_models,
+        engines=cmd_engines,
+        submit=cmd_submit,
+        upgrade=cmd_upgrade,
+    )
+    run_wizard(args, callbacks)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(
@@ -722,6 +737,13 @@ def main():
         ),
     )
     upgrade_parser.set_defaults(func=cmd_upgrade)
+
+    # --- wizard ---
+    wizard_parser = subparsers.add_parser(
+        "wizard",
+        help="Open an interactive menu for common mlx-chronos commands",
+    )
+    wizard_parser.set_defaults(func=cmd_wizard)
 
     # Parse and dispatch
     args = parser.parse_args()
