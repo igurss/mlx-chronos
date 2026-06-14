@@ -13,6 +13,8 @@
 ### Bug Fixes
 - Keep the wizard open when an internal command fails, instead of letting
   `SystemExit` close the whole interactive session.
+- Let users leave benchmark setup and return to the wizard main menu without
+  starting a run or cancelling the whole wizard.
 - Suppress retry warning noise during passive engine server-status checks, so
   `mlx-chronos engines` reports installed/running state without scary HTTP
   retry logs when servers are simply offline.

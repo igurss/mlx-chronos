@@ -71,10 +71,16 @@ OPTIONAL_RUN_SETTINGS = {
 }
 
 MANUAL_MODEL_ENTRY = "__manual_model_entry__"
+BACK_TO_MENU = "__back_to_main_menu__"
+BACK_COMMAND = "/back"
 
 
 class WizardAbort(RuntimeError):
     """Raised when the user cancels the interactive wizard."""
+
+
+class WizardBackToMenu(RuntimeError):
+    """Raised when the user leaves a nested wizard flow for the main menu."""
 
 
 @dataclass(frozen=True)
@@ -332,46 +338,51 @@ class WizardSession:
         self.console.print(self.Panel(body, border_style="cyan"))
 
     def _run_benchmark_flow(self) -> bool:
-        config = self._prompt_run_config(RunWizardConfig())
-        while True:
-            self._render_run_summary(config)
-            action = self._select(
-                "Next step",
-                [
-                    ("Run benchmark now", "run"),
-                    ("Edit options", "edit"),
-                    ("Print command and exit", "print"),
-                    ("Cancel", "cancel"),
-                ],
-            )
-            if action == "run":
-                errors = validate_run_config(config)
-                if errors:
-                    self._render_run_errors(errors)
+        try:
+            config = self._prompt_run_config(RunWizardConfig())
+            while True:
+                self._render_run_summary(config)
+                action = self._select(
+                    "Next step",
+                    [
+                        ("Run benchmark now", "run"),
+                        ("Edit options", "edit"),
+                        ("Print command and exit", "print"),
+                        ("Back to main menu", "cancel"),
+                    ],
+                )
+                if action == "run":
+                    errors = validate_run_config(config)
+                    if errors:
+                        self._render_run_errors(errors)
+                        config = self._edit_run_config(config)
+                        continue
+                    self._call_command(self.callbacks.run, config.to_namespace())
+                    self._pause()
+                    return False
+                if action == "print":
+                    self.console.print(build_run_command(config))
+                    return True
+                if action == "edit":
                     config = self._edit_run_config(config)
                     continue
-                self._call_command(self.callbacks.run, config.to_namespace())
-                self._pause()
                 return False
-            if action == "print":
-                self.console.print(build_run_command(config))
-                return True
-            if action == "edit":
-                config = self._edit_run_config(config)
-                continue
+        except (WizardBackToMenu, WizardAbort):
+            self.console.print("[dim]Benchmark setup cancelled.[/dim]")
             return False
 
     def _prompt_run_config(self, config: RunWizardConfig) -> RunWizardConfig:
-        engine = self._ask_engine(default=config.engine)
+        engine = self._ask_engine(default=config.engine, allow_back=True)
         config = replace(
             config,
             engine=engine,
-            model=self._ask_model(engine, default=config.model),
+            model=self._ask_model(engine, default=config.model, allow_back=True),
             quantization=self._ask_required_text(
                 "Quantization / format label",
                 default=config.quantization,
+                allow_back=True,
             ),
-            profile=self._ask_profile(default=config.profile),
+            profile=self._ask_profile(default=config.profile, allow_back=True),
         )
 
         optional_settings = self._checkbox(
@@ -617,17 +628,28 @@ class WizardSession:
             Namespace(timeout=DEFAULT_UPDATE_CHECK_TIMEOUT),
         )
 
-    def _ask_engine(self, default: str = "omlx") -> str:
-        return self._select(
+    def _ask_engine(self, default: str = "omlx", allow_back: bool = False) -> str:
+        choices = [
+            (f"{name} - {ENGINE_DESCRIPTIONS.get(name, 'engine')}", name)
+            for name in ENGINES
+        ]
+        if allow_back:
+            choices.append(("Back to main menu", BACK_TO_MENU))
+        selected = self._select(
             "Engine",
-            [
-                (f"{name} - {ENGINE_DESCRIPTIONS.get(name, 'engine')}", name)
-                for name in ENGINES
-            ],
+            choices,
             default=default,
         )
+        if selected == BACK_TO_MENU:
+            raise WizardBackToMenu
+        return selected
 
-    def _ask_model(self, engine_name: str, default: str = "") -> str:
+    def _ask_model(
+        self,
+        engine_name: str,
+        default: str = "",
+        allow_back: bool = False,
+    ) -> str:
         model_ids, error = self._load_model_ids(engine_name)
         default = default.strip()
         if model_ids:
@@ -636,11 +658,15 @@ class WizardSession:
                 choices.append((f"Keep current value: {default}", default))
             choices.extend((model_id, model_id) for model_id in model_ids)
             choices.append(("Enter manually", MANUAL_MODEL_ENTRY))
+            if allow_back:
+                choices.append(("Back to main menu", BACK_TO_MENU))
             selected = self._select(
                 "Model exposed by the engine",
                 choices,
                 default=default if default in model_ids else model_ids[0],
             )
+            if selected == BACK_TO_MENU:
+                raise WizardBackToMenu
             if selected != MANUAL_MODEL_ENTRY:
                 return selected
         else:
@@ -648,10 +674,21 @@ class WizardSession:
             self.console.print(
                 f"[yellow]Could not load models from {engine_name}{detail}.[/yellow]"
             )
+            if allow_back:
+                selected = self._select(
+                    "Model selection",
+                    [
+                        ("Enter manually", MANUAL_MODEL_ENTRY),
+                        ("Back to main menu", BACK_TO_MENU),
+                    ],
+                )
+                if selected == BACK_TO_MENU:
+                    raise WizardBackToMenu
 
         return self._ask_required_text(
             "Model name as exposed by the engine",
             default=default,
+            allow_back=allow_back,
         )
 
     def _load_model_ids(self, engine_name: str) -> tuple[list[str], str | None]:
@@ -669,15 +706,25 @@ class WizardSession:
             return [], "server returned no models"
         return model_ids, None
 
-    def _ask_profile(self, default: str = BENCHMARK_PROFILE_BASELINE) -> str:
-        return self._select(
+    def _ask_profile(
+        self,
+        default: str = BENCHMARK_PROFILE_BASELINE,
+        allow_back: bool = False,
+    ) -> str:
+        choices = [
+            (f"{name} - {PROFILE_DESCRIPTIONS[name]}", name)
+            for name in (BENCHMARK_PROFILE_BASELINE, BENCHMARK_PROFILE_SUSTAINED)
+        ]
+        if allow_back:
+            choices.append(("Back to main menu", BACK_TO_MENU))
+        selected = self._select(
             "Benchmark profile",
-            [
-                (f"{name} - {PROFILE_DESCRIPTIONS[name]}", name)
-                for name in (BENCHMARK_PROFILE_BASELINE, BENCHMARK_PROFILE_SUSTAINED)
-            ],
+            choices,
             default=default,
         )
+        if selected == BACK_TO_MENU:
+            raise WizardBackToMenu
+        return selected
 
     def _select(
         self,
@@ -723,18 +770,36 @@ class WizardSession:
         )
         return bool(value)
 
-    def _ask_required_text(self, message: str, default: str = "") -> str:
+    def _ask_required_text(
+        self,
+        message: str,
+        default: str = "",
+        allow_back: bool = False,
+    ) -> str:
+        prompt_message = (
+            f"{message} (type {BACK_COMMAND} to return to the main menu)"
+            if allow_back
+            else message
+        )
+
+        def validate(text: str) -> bool | str:
+            stripped = text.strip()
+            if allow_back and stripped == BACK_COMMAND:
+                return True
+            return True if stripped else "This value is required."
+
         value = self._ask(
             self.questionary.text(
-                message,
+                prompt_message,
                 default=default,
-                validate=lambda text: True
-                if text.strip()
-                else "This value is required.",
+                validate=validate,
                 style=self.style,
             )
         )
-        return str(value).strip()
+        stripped = str(value).strip()
+        if allow_back and stripped == BACK_COMMAND:
+            raise WizardBackToMenu
+        return stripped
 
     def _ask_optional_text(self, message: str, default: str | None) -> str | None:
         value = self._ask(

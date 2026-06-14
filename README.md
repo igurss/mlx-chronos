@@ -122,7 +122,8 @@ preflight, notes, and other run options. When the selected engine server is
 running, the wizard loads `/models` and lets you select a model from the exposed
 IDs, with manual entry as a fallback. Before launching a benchmark, it shows the
 equivalent `mlx-chronos run ...` command so the same configuration can be reused
-in scripts.
+in scripts. You can return to the main menu from benchmark setup without
+starting a run.
 
 ### 5. Run a Benchmark Manually
 

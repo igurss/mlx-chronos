@@ -11,8 +11,12 @@ from mlx_chronos.constants import (
     SUSTAINED_TRIALS,
 )
 from mlx_chronos.wizard import (
+    BACK_COMMAND,
+    BACK_TO_MENU,
     MANUAL_MODEL_ENTRY,
     RunWizardConfig,
+    WizardAbort,
+    WizardBackToMenu,
     WizardSession,
     build_run_command,
     resolved_run_defaults,
@@ -214,6 +218,23 @@ def test_wizard_ask_model_selects_model_from_server():
     }
 
 
+def test_wizard_ask_engine_can_return_to_main_menu():
+    session = object.__new__(WizardSession)
+    session._select = lambda *_args, **_kwargs: BACK_TO_MENU
+
+    with pytest.raises(WizardBackToMenu):
+        session._ask_engine(allow_back=True)
+
+
+def test_wizard_ask_model_can_return_from_model_menu():
+    session = object.__new__(WizardSession)
+    session._load_model_ids = lambda engine: (["model-a"], None)
+    session._select = lambda *_args, **_kwargs: BACK_TO_MENU
+
+    with pytest.raises(WizardBackToMenu):
+        session._ask_model("omlx", allow_back=True)
+
+
 def test_wizard_ask_model_can_keep_current_unlisted_value():
     session = object.__new__(WizardSession)
     session._load_model_ids = lambda engine: (["model-a"], None)
@@ -243,7 +264,7 @@ def test_wizard_ask_model_allows_manual_entry_from_model_menu():
     session = object.__new__(WizardSession)
     session._load_model_ids = lambda engine: (["model-a"], None)
     session._select = lambda *_args, **_kwargs: MANUAL_MODEL_ENTRY
-    session._ask_required_text = lambda message, default="": "manual-model"
+    session._ask_required_text = lambda message, default="", **_kwargs: "manual-model"
 
     assert session._ask_model("omlx") == "manual-model"
 
@@ -252,12 +273,49 @@ def test_wizard_ask_model_falls_back_when_models_cannot_load():
     session = object.__new__(WizardSession)
     session.console = FakeConsole()
     session._load_model_ids = lambda engine: ([], "server is not running")
-    session._ask_required_text = lambda message, default="": "manual-model"
+    session._ask_required_text = lambda message, default="", **_kwargs: "manual-model"
 
     assert session._ask_model("omlx") == "manual-model"
     assert session.console.messages == [
         "[yellow]Could not load models from omlx: server is not running.[/yellow]"
     ]
+
+
+def test_wizard_ask_model_can_return_before_manual_fallback():
+    session = object.__new__(WizardSession)
+    session.console = FakeConsole()
+    session._load_model_ids = lambda engine: ([], "server is not running")
+    session._select = lambda *_args, **_kwargs: BACK_TO_MENU
+
+    with pytest.raises(WizardBackToMenu):
+        session._ask_model("omlx", allow_back=True)
+
+
+def test_wizard_required_text_supports_back_command():
+    class FakeQuestionary:
+        def text(self, *args, **kwargs):
+            return object()
+
+    session = object.__new__(WizardSession)
+    session.questionary = FakeQuestionary()
+    session.style = None
+    session._ask = lambda _prompt: BACK_COMMAND
+
+    with pytest.raises(WizardBackToMenu):
+        session._ask_required_text("Model", allow_back=True)
+
+
+def test_wizard_run_flow_catches_cancel_and_returns_to_menu():
+    session = object.__new__(WizardSession)
+    session.console = FakeConsole()
+
+    def cancel(_config):
+        raise WizardAbort
+
+    session._prompt_run_config = cancel
+
+    assert session._run_benchmark_flow() is False
+    assert session.console.messages == ["[dim]Benchmark setup cancelled.[/dim]"]
 
 
 def test_wizard_call_command_catches_nonzero_system_exit():
