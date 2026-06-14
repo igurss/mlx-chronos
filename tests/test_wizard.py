@@ -12,10 +12,20 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.wizard import (
     RunWizardConfig,
+    WizardSession,
     build_run_command,
     resolved_run_defaults,
     validate_run_config,
 )
+
+
+class FakeConsole:
+    def __init__(self):
+        self.messages = []
+
+    def print(self, *args, **kwargs):
+        del kwargs
+        self.messages.append(" ".join(str(arg) for arg in args))
 
 
 def test_run_wizard_config_builds_run_namespace():
@@ -172,3 +182,36 @@ def test_wizard_config_uses_current_ram_default():
     assert RunWizardConfig().ram_sample_interval == pytest.approx(
         DEFAULT_RAM_SAMPLE_INTERVAL
     )
+
+
+def test_wizard_call_command_catches_nonzero_system_exit():
+    session = object.__new__(WizardSession)
+    session.console = FakeConsole()
+
+    def fail(_args):
+        raise SystemExit(1)
+
+    assert session._call_command(fail, None) is False
+    assert session.console.messages == ["[red]Command failed with exit code 1.[/red]"]
+
+
+def test_wizard_call_command_allows_zero_system_exit():
+    session = object.__new__(WizardSession)
+    session.console = FakeConsole()
+
+    def ok(_args):
+        raise SystemExit(0)
+
+    assert session._call_command(ok, None) is True
+    assert session.console.messages == []
+
+
+def test_wizard_call_command_catches_unexpected_exception():
+    session = object.__new__(WizardSession)
+    session.console = FakeConsole()
+
+    def fail(_args):
+        raise RuntimeError("boom")
+
+    assert session._call_command(fail, None) is False
+    assert session.console.messages == ["[red]Command failed:[/red] boom"]

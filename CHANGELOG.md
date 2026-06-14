@@ -8,6 +8,13 @@
   benchmark builder that previews the equivalent `mlx-chronos run ...` command
   before execution.
 
+### Bug Fixes
+- Keep the wizard open when an internal command fails, instead of letting
+  `SystemExit` close the whole interactive session.
+- Suppress retry warning noise during passive engine server-status checks, so
+  `mlx-chronos engines` reports installed/running state without scary HTTP
+  retry logs when servers are simply offline.
+
 ## [0.2.1] — 2026-06-12
 
 Patch release focused on engine adapter correctness after validating `0.2.0`

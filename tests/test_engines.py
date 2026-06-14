@@ -650,6 +650,16 @@ def test_omlx_server_running_rejects_wrong_server_on_port(mock_pid, mock_get):
 
 
 @patch("httpx.get")
+def test_server_running_suppresses_retry_warnings_for_passive_checks(mock_get, caplog):
+    mock_get.side_effect = httpx.ConnectError("connection refused")
+    caplog.set_level("WARNING", logger="mlx_chronos")
+
+    assert OMLXEngine().is_server_running() is False
+    assert mock_get.call_count == 3
+    assert "server check failed with transient HTTP error" not in caplog.text
+
+
+@patch("httpx.get")
 def test_ollama_server_running_requires_ollama_identity(mock_get):
     models_response = MagicMock(status_code=200)
     version_response = MagicMock(status_code=200)

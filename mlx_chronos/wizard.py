@@ -300,16 +300,16 @@ class WizardSession:
                     ],
                 )
                 if action == "run":
-                    self._run_benchmark_flow()
-                    return
-                if action == "validate":
+                    if self._run_benchmark_flow():
+                        return
+                elif action == "validate":
                     self._validate_flow()
                     self._pause()
                 elif action == "models":
                     self._models_flow()
                     self._pause()
                 elif action == "engines":
-                    self.callbacks.engines(Namespace())
+                    self._call_command(self.callbacks.engines, Namespace())
                     self._pause()
                 elif action == "submit":
                     self._submit_flow()
@@ -329,7 +329,7 @@ class WizardSession:
         )
         self.console.print(self.Panel(body, border_style="cyan"))
 
-    def _run_benchmark_flow(self) -> None:
+    def _run_benchmark_flow(self) -> bool:
         config = self._prompt_run_config(RunWizardConfig())
         while True:
             self._render_run_summary(config)
@@ -348,15 +348,16 @@ class WizardSession:
                     self._render_run_errors(errors)
                     config = self._edit_run_config(config)
                     continue
-                self.callbacks.run(config.to_namespace())
-                return
+                self._call_command(self.callbacks.run, config.to_namespace())
+                self._pause()
+                return False
             if action == "print":
                 self.console.print(build_run_command(config))
-                return
+                return True
             if action == "edit":
                 config = self._edit_run_config(config)
                 continue
-            return
+            return False
 
     def _prompt_run_config(self, config: RunWizardConfig) -> RunWizardConfig:
         config = replace(
@@ -575,11 +576,11 @@ class WizardSession:
         model = None
         if self._confirm("Validate model access too?", default=True):
             model = self._ask_required_text("Model name")
-        self.callbacks.validate(Namespace(engine=engine, model=model))
+        self._call_command(self.callbacks.validate, Namespace(engine=engine, model=model))
 
     def _models_flow(self) -> None:
         engine = self._ask_engine()
-        self.callbacks.models(Namespace(engine=engine))
+        self._call_command(self.callbacks.models, Namespace(engine=engine))
 
     def _submit_flow(self) -> None:
         file_path = self._ask_required_path("Result JSON file")
@@ -591,14 +592,15 @@ class WizardSession:
             endpoint = self._ask_optional_text("Submission endpoint URL", None)
             email = self._ask_optional_text("Contact email", None)
             timeout = self._ask_float("Submission timeout in seconds", 30.0, 0.000001)
-        self.callbacks.submit(
+        self._call_command(
+            self.callbacks.submit,
             Namespace(
                 file=file_path,
                 endpoint=endpoint,
                 email=email,
                 timeout=timeout,
                 dry_run=dry_run,
-            )
+            ),
         )
 
     def _upgrade_flow(self) -> None:
@@ -607,7 +609,10 @@ class WizardSession:
             default=True,
         ):
             return
-        self.callbacks.upgrade(Namespace(timeout=DEFAULT_UPDATE_CHECK_TIMEOUT))
+        self._call_command(
+            self.callbacks.upgrade,
+            Namespace(timeout=DEFAULT_UPDATE_CHECK_TIMEOUT),
+        )
 
     def _ask_engine(self, default: str = "omlx") -> str:
         return self._select(
@@ -763,6 +768,22 @@ class WizardSession:
         if value is None:
             raise WizardAbort
         return value
+
+    def _call_command(self, callback: CommandCallback, args: Namespace) -> bool:
+        try:
+            callback(args)
+        except SystemExit as exc:
+            code = 0 if exc.code is None else exc.code
+            if code != 0:
+                self.console.print(
+                    f"[red]Command failed with exit code {code}.[/red]"
+                )
+                return False
+            return True
+        except Exception as exc:
+            self.console.print(f"[red]Command failed:[/red] {exc}")
+            return False
+        return True
 
     def _pause(self) -> None:
         self._ask(

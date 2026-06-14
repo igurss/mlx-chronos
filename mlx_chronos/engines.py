@@ -82,11 +82,18 @@ class BaseEngine(ABC):
         """Return a reusable HTTP client for benchmark request loops."""
         return httpx.Client()
 
-    def _http_get(self, url: str, *, timeout: float, action: str) -> httpx.Response:
+    def _http_get(
+        self,
+        url: str,
+        *,
+        timeout: float,
+        action: str,
+        log_retries: bool = True,
+    ) -> httpx.Response:
         return request_with_retry(
             lambda: httpx.get(url, timeout=timeout),
             action=f"{self.name} {action}",
-            logger=logger,
+            logger=logger if log_retries else None,
         )
 
     def _http_post(
@@ -232,6 +239,7 @@ class BaseEngine(ABC):
                 f"{self.base_url()}/models",
                 timeout=2.0,
                 action="server check",
+                log_retries=False,
             )
             return r.status_code == 200 and self._server_identity_matches()
         except Exception:
@@ -555,7 +563,12 @@ class BaseEngine(ABC):
         """Try to read an engine/server version from /v1/models metadata."""
         url = f"{self.base_url()}/models"
         try:
-            response = self._http_get(url, timeout=2.0, action="version lookup")
+            response = self._http_get(
+                url,
+                timeout=2.0,
+                action="version lookup",
+                log_retries=False,
+            )
             response.raise_for_status()
             data = response.json()
         except Exception:
@@ -1012,6 +1025,7 @@ class VLLMMLXEngine(BaseEngine):
                 f"{self.root_url()}/health",
                 timeout=2.0,
                 action="health identity check",
+                log_retries=False,
             )
             if response.status_code != 200:
                 return False
@@ -1145,6 +1159,7 @@ class OllamaEngine(BaseEngine):
                 f"{self.root_url()}/api/version",
                 timeout=2.0,
                 action="version identity check",
+                log_retries=False,
             )
             if response.status_code != 200:
                 return False
