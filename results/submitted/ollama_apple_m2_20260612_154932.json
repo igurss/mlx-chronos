@@ -17,6 +17,7 @@
   "model": {
     "name": "qwen3.5:4b-mlx",
     "quantization": "nvfp4",
+    "reference_url": "https://ollama.com/library/qwen3.5:4b-mlx",
     "source": null,
     "revision": null,
     "weight_hash": null,
@@ -229,6 +230,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "fcd49006c03f9cec4f5157f39bab23813d3c1340be67648418502a1f958bc45a"
+    "digest": "cd93cc48649ab88656f8f425d250e28719d625bf5b62cdd2fd11188ebeaf1ca5"
   }
 }

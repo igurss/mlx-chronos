@@ -17,6 +17,7 @@
   "model": {
     "name": "Qwen3.5-4B-OptiQ-4bit",
     "quantization": "4bit",
+    "reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit",
     "source": null,
     "revision": null,
     "weight_hash": null,
@@ -222,6 +223,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "cb7c3de70c862cc293b42f0fab6d83f07922784ab7866282cf7ff402a059dc94"
+    "digest": "ba1928ad8152a5d89e491136be04468a02474a80c71a6861cbdb9cd175ccc97c"
   }
 }
