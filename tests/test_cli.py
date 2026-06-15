@@ -495,6 +495,7 @@ def test_cmd_run_format_all_calls_reporters():
             engine_name="omlx",
             model_name="Qwen3.5-4B-OptiQ-4bit",
             model_quantization="4bit",
+            model_reference_url=None,
             trials=1,
             notes=None,
             ram_sample_interval=0.1,
@@ -511,6 +512,35 @@ def test_cmd_run_format_all_calls_reporters():
         expected_dir = Path.cwd() / "results" / "local"
         mock_json.return_value.save.assert_called_once_with(EXAMPLE_RESULT, expected_dir)
         mock_md.return_value.save.assert_called_once_with(EXAMPLE_RESULT, expected_dir)
+
+
+def test_cmd_run_passes_model_url():
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        model_url=" https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit ",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=120,
+        min_tokens=80,
+        format="json",
+        output_dir=None,
+        connection_mode="persistent",
+    )
+    with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT) as mock_run, \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
+         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+        mock_json.return_value.save.return_value = Path("results/local/test.json")
+
+        cmd_run(args)
+
+    assert mock_run.call_args.kwargs["model_reference_url"] == (
+        " https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit "
+    )
 
 
 def test_cmd_run_preflight_validates_model_before_benchmark():
@@ -814,6 +844,29 @@ def test_load_publishable_result_rejects_tampered_integrity(tmp_path):
 
     with pytest.raises(SubmissionError, match="integrity"):
         load_publishable_result(result_path)
+
+
+def test_load_publishable_result_rejects_missing_model_reference(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["model"].pop("reference_url", None)
+    result_path = write_result(tmp_path / "result.json", result)
+
+    with pytest.raises(SubmissionError, match="model.reference_url"):
+        load_publishable_result(result_path)
+
+
+def test_load_publishable_result_allows_legacy_missing_model_reference(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["model"].pop("reference_url", None)
+    result_path = write_result(tmp_path / "result.json", result)
+
+    _, parsed = load_publishable_result(
+        result_path,
+        allow_legacy_missing_model_reference=True,
+    )
+
+    assert parsed.model.reference_url is None
+
 
 def resize_result_trials(result: dict, count: int) -> None:
     for key in (

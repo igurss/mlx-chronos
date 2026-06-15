@@ -22,6 +22,7 @@ EXAMPLE_RESULT = {
     "model": {
         "name": "Qwen3.5-4B-OptiQ-4bit",
         "quantization": "4bit",
+        "reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit",
     },
     "metrics": {
         "ttft_cold": {"mean": 0.041, "stddev": 0.015, "min": 0.028, "max": 0.066},
@@ -169,6 +170,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "6ef2d48b40d25ef62b5af51801295c8608104350a177b1cfe0e08e988b99e085",
+        "digest": "f94bbc764a8d816f92f6d8b7593af6759d50317bdd1cc33b9dff580bea8807f8",
     },
 }

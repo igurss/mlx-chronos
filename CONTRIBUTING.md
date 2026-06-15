@@ -123,6 +123,7 @@ listing, and an optional tiny completion request.
 ```bash
 mlx-chronos run --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \
+  --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit" \
   --trials 5
 ```
 
@@ -152,11 +153,14 @@ standard profiles:
 Additional public requirements:
 
 - `metrics.token_count_source` must be `usage.completion_tokens`.
+- `model.reference_url` must point to the model used for the run.
 - `hardware.low_power_mode` must be `off`.
 - Benchmark protocol metadata must remain unchanged.
 - Generation parameters must remain deterministic: `temperature=0.0`,
   `top_p=1.0`.
 - Throughput timing fields and raw trial arrays must not be edited by hand.
+
+Model pages can change over time when maintainers update files or tags.
 
 If your JSON says `"token_count_source": "word_fallback"` or `"mixed"`, keep it
 as a local result until the engine can return real completion-token usage. New

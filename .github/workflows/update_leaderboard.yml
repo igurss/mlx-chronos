@@ -51,7 +51,10 @@ jobs:
 
           for path in sorted(results_dir.rglob("*.json")):
               try:
-                  _, result = load_publishable_result(path)
+                  _, result = load_publishable_result(
+                      path,
+                      allow_legacy_missing_model_reference=True,
+                  )
 
                   data = result.model_dump(mode="json", by_alias=True)
                   hw = data["hardware"]
@@ -72,6 +75,7 @@ jobs:
                       "engine_version": eng["version"],
                       "model": mod["name"],
                       "quantization": mod["quantization"],
+                      "model_reference_url": mod.get("reference_url"),
                       "benchmark_profile": benchmark_profile,
                       "tps": met["tokens_per_second"]["mean"],
                       "tps_stddev": met["tokens_per_second"]["stddev"],

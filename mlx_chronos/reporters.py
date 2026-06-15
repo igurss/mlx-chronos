@@ -109,7 +109,11 @@ class MarkdownReporter(BaseReporter):
         
         md = "# mlx-chronos Benchmark Result\n\n"
         md += f"**Engine:** {result['engine']['name']} ({result['engine']['version']})\n"
-        md += f"**Model:** {result['model']['name']} ({result['model']['quantization']})\n\n"
+        md += f"**Model:** {result['model']['name']} ({result['model']['quantization']})\n"
+        model_reference_url = result.get("model", {}).get("reference_url")
+        if model_reference_url:
+            md += f"**Model reference:** {model_reference_url}\n"
+        md += "\n"
         md += "## Run\n"
         md += f"- **Timestamp:** {self._format_timestamp(meta.get('timestamp'))}\n"
         md += f"- **Chronos version:** {self._format_optional(meta.get('chronos_version'))}\n"

@@ -69,6 +69,10 @@ def test_markdown_reporter_save(tmp_path):
     content = output_path.read_text()
     assert "# mlx-chronos Benchmark Result" in content
     assert "**Engine:** omlx" in content
+    assert (
+        "**Model reference:** "
+        "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
+    ) in content
     assert f"**Timestamp:** {EXAMPLE_RESULT['meta']['timestamp']}" in content
     assert f"**Chronos version:** {EXAMPLE_RESULT['meta']['chronos_version']}" in content
     assert "**Profile:** baseline" in content

@@ -1243,6 +1243,7 @@
         benchmark_profile: benchmarkProfile,
         decode_tps: row.decode_tps ?? null,
         date: row.date || dateFromTimestamp(timestamp),
+        model_reference_url: row.model_reference_url || "",
       };
     }
 
@@ -1438,6 +1439,7 @@
         ["Profile", profileLabel(row.benchmark_profile)],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
+        ["Model reference", row.model_reference_url || "not recorded"],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],

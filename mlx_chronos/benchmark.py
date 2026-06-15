@@ -29,6 +29,7 @@ from mlx_chronos.measurements import (
     DECODE_TIMING_UNAVAILABLE,
     ThroughputMeasurement,
 )
+from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
@@ -272,6 +273,7 @@ def run_benchmark(
     engine_name: str,
     model_name: str,
     model_quantization: str,
+    model_reference_url: str | None = None,
     trials: int = DEFAULT_TRIALS,
     notes: str | None = None,
     ram_sample_interval: float = DEFAULT_RAM_SAMPLE_INTERVAL,
@@ -329,6 +331,7 @@ def run_benchmark(
     model_name = model_name.strip()
     if not model_name:
         raise ValueError("model name must not be empty")
+    model_reference_url = normalize_model_reference_url(model_reference_url)
 
     if trials < 3:
         logger.warning(
@@ -694,6 +697,7 @@ def run_benchmark(
         "model": {
             "name": model_name,
             "quantization": model_quantization,
+            "reference_url": model_reference_url,
         },
         "metrics": {
             "ttft_cold": ttft_cold_stats,

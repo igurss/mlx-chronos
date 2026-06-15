@@ -150,13 +150,26 @@ def _validate_public_completion_tokens(
             )
 
 
-def validate_publishable_result(result: BenchmarkResult) -> None:
+def validate_publishable_result(
+    result: BenchmarkResult,
+    *,
+    allow_legacy_missing_model_reference: bool = False,
+) -> None:
     """Check public leaderboard comparability constraints."""
     token_source = result.metrics.token_count_source
     if token_source != PUBLIC_TOKEN_COUNT_SOURCE:
         raise SubmissionError(
             "leaderboard submissions must use "
             f"{PUBLIC_TOKEN_COUNT_SOURCE!r}; got {token_source!r}"
+        )
+
+    if (
+        result.model.reference_url is None
+        and not allow_legacy_missing_model_reference
+    ):
+        raise SubmissionError(
+            "leaderboard submissions must include model.reference_url. "
+            "Pass --model-url when running the benchmark."
         )
 
     profile = result.meta.benchmark_profile
@@ -236,7 +249,11 @@ def validate_publishable_result(result: BenchmarkResult) -> None:
     _validate_public_protocol(result)
 
 
-def load_publishable_result(path: Path) -> tuple[bytes, BenchmarkResult]:
+def load_publishable_result(
+    path: Path,
+    *,
+    allow_legacy_missing_model_reference: bool = False,
+) -> tuple[bytes, BenchmarkResult]:
     """Load, validate, and check whether a result can be submitted publicly."""
     try:
         raw = path.read_bytes()
@@ -260,7 +277,10 @@ def load_publishable_result(path: Path) -> tuple[bytes, BenchmarkResult]:
     except ValidationError as exc:
         raise SubmissionError(f"result does not match the mlx-chronos schema: {exc}") from exc
 
-    validate_publishable_result(result)
+    validate_publishable_result(
+        result,
+        allow_legacy_missing_model_reference=allow_legacy_missing_model_reference,
+    )
 
     return raw, result
 

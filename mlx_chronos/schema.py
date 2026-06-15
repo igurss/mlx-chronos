@@ -18,6 +18,7 @@ from mlx_chronos.measurements import (
     DECODE_TIMING_CLIENT_STREAM,
     DECODE_TIMING_UNAVAILABLE,
 )
+from mlx_chronos.model_reference import normalize_model_reference_url
 
 
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
@@ -152,6 +153,10 @@ class Engine(ChronosBaseModel):
 class Model(ChronosBaseModel):
     name: str = Field(..., description="Model name (e.g. 'Qwen3.5-9B')")
     quantization: str = Field(..., description="Quantization format (e.g. '4bit', '8bit')")
+    reference_url: Optional[str] = Field(
+        None,
+        description="Optional URL pointing to the model used for this run",
+    )
     source: Optional[str] = Field(
         None,
         description="Optional model source or repository identifier",
@@ -184,6 +189,11 @@ class Model(ChronosBaseModel):
         if not normalized:
             raise ValueError("model name must not be empty")
         return normalized
+
+    @field_validator("reference_url")
+    @classmethod
+    def normalize_reference_url(cls, value: str | None) -> str | None:
+        return normalize_model_reference_url(value)
 
     @field_validator("quantization")
     @classmethod

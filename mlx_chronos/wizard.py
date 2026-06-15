@@ -26,6 +26,7 @@ from mlx_chronos.constants import (
     SUSTAINED_TRIALS,
 )
 from mlx_chronos.engines import ENGINES, get_engine
+from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.updates import DEFAULT_UPDATE_CHECK_TIMEOUT
 
@@ -59,6 +60,7 @@ FORMAT_DESCRIPTIONS = {
 }
 
 OPTIONAL_RUN_SETTINGS = {
+    "model_url": "Model reference URL",
     "trials": "Trials per metric",
     "token_bounds": "Throughput token bounds",
     "format": "Output format",
@@ -88,6 +90,7 @@ class RunWizardConfig:
     engine: str = "omlx"
     model: str = ""
     quantization: str = "4bit"
+    model_url: str | None = None
     profile: str = BENCHMARK_PROFILE_BASELINE
     trials: int | None = None
     max_tokens: int | None = None
@@ -105,6 +108,7 @@ class RunWizardConfig:
             engine=self.engine,
             model=self.model,
             quantization=self.quantization,
+            model_url=self.model_url,
             trials=self.trials,
             notes=self.notes,
             ram_sample_interval=self.ram_sample_interval,
@@ -151,6 +155,10 @@ def validate_run_config(config: RunWizardConfig) -> list[str]:
         errors.append("model must not be empty")
     if not config.quantization.strip():
         errors.append("quantization must not be empty")
+    try:
+        normalize_model_reference_url(config.model_url)
+    except ValueError as exc:
+        errors.append(str(exc))
     if config.profile not in PROFILE_DESCRIPTIONS:
         errors.append(
             "profile must be one of "
@@ -192,6 +200,8 @@ def build_run_command(config: RunWizardConfig) -> str:
         "--profile",
         config.profile,
     ]
+    if config.model_url:
+        parts.extend(["--model-url", config.model_url])
     if config.trials is not None:
         parts.extend(["--trials", str(config.trials)])
     if config.max_tokens is not None:
@@ -404,6 +414,7 @@ class WizardSession:
                     ("Engine", "engine"),
                     ("Model", "model"),
                     ("Quantization / format label", "quantization"),
+                    ("Model reference URL", "model_url"),
                     ("Profile", "profile"),
                     *[
                         (label, key)
@@ -440,6 +451,14 @@ class WizardSession:
                 quantization=self._ask_required_text(
                     "Quantization / format label",
                     default=config.quantization,
+                ),
+            )
+        if setting == "model_url":
+            return replace(
+                config,
+                model_url=self._ask_optional_text(
+                    "Model reference URL",
+                    config.model_url,
                 ),
             )
         if setting == "profile":
@@ -538,6 +557,7 @@ class WizardSession:
             ("Engine", config.engine),
             ("Model", config.model),
             ("Quantization", config.quantization),
+            ("Model URL", _format_optional(config.model_url, "not set")),
             ("Profile", config.profile),
             (
                 "Trials",

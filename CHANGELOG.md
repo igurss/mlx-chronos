@@ -9,6 +9,8 @@
   before execution.
 - Let the wizard load model IDs from a running engine server and select the
   benchmark or validation model from a menu, with manual entry only as fallback.
+- Add optional `--model-url` metadata for local runs and require
+  `model.reference_url` for new public leaderboard submissions.
 
 ### Bug Fixes
 - Keep the wizard open when an internal command fails, instead of letting

@@ -248,6 +248,7 @@ def cmd_run(args):
             engine_name=args.engine,
             model_name=args.model,
             model_quantization=args.quantization,
+            model_reference_url=getattr(args, "model_url", None),
             trials=trials,
             notes=args.notes,
             ram_sample_interval=args.ram_sample_interval,
@@ -548,6 +549,14 @@ def main():
         "--quantization",
         default="4bit",
         help="Model quantization format (default: 4bit)",
+    )
+    run_parser.add_argument(
+        "--model-url",
+        default=None,
+        help=(
+            "Reference URL for the model used in this run. Optional for local "
+            "runs, required for public leaderboard submission."
+        ),
     )
     run_parser.add_argument(
         "--trials",

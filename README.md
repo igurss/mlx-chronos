@@ -153,6 +153,11 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds
 
 # Fail fast with an extra model access probe before measured work starts
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
+
+# Include a model reference URL, required for public leaderboard submissions
+mlx-chronos run --engine omlx \
+  --model "Qwen3.5-4B-OptiQ-4bit" \
+  --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
 ```
 
 ---
@@ -272,6 +277,7 @@ Public leaderboard submissions are stricter so rows remain comparable.
 ### Public Submission Requirements
 
 - Throughput must use the engine response's `usage.completion_tokens`.
+- The result must include `model.reference_url`, a link to the model used.
 - macOS Low Power Mode must be disabled.
 - The JSON must pass `mlx-chronos submit --dry-run`.
 - The result must include a valid integrity seal.
@@ -282,6 +288,8 @@ Public leaderboard submissions are stricter so rows remain comparable.
 Result JSON also contains internal benchmark-protocol labels used by validators
 to detect incompatible result formats. Treat labels such as `1`, `2`, and `3`
 as implementation compatibility markers, not public protocol release versions.
+Model reference URLs point to the model page used for the run. Model pages can
+change over time when maintainers update files or tags.
 
 ---
 

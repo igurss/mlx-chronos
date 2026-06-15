@@ -13,6 +13,9 @@ def test_valid_schema():
     """Test that the example result is fully valid."""
     result = BenchmarkResult(**EXAMPLE_RESULT)
     assert result.engine.name == "omlx"
+    assert result.model.reference_url == (
+        "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
+    )
     assert result.metrics.tokens_per_second.mean == 18.44
     assert result.metrics.request_tokens_per_second.mean == 18.44
     assert result.metrics.decode_tokens_per_second.mean == 18.654
@@ -567,6 +570,26 @@ def test_model_accepts_optional_identity_metadata():
     assert result.model.source == "mlx-community/example"
     assert result.model.revision == "abc123"
     assert result.model.architecture == "qwen3"
+
+
+def test_model_reference_url_is_normalized():
+    data = EXAMPLE_RESULT.copy()
+    data["model"] = data["model"].copy()
+    data["model"]["reference_url"] = " https://example.test/model "
+
+    result = BenchmarkResult(**data)
+
+    assert result.model.reference_url == "https://example.test/model"
+
+
+def test_invalid_model_reference_url_is_rejected():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["model"] = invalid_data["model"].copy()
+    invalid_data["model"]["reference_url"] = "not-a-url"
+
+    with pytest.raises(ValidationError, match="model reference URL"):
+        BenchmarkResult(**invalid_data)
+
 
 def test_uncommon_quantization_is_allowed():
     data = EXAMPLE_RESULT.copy()

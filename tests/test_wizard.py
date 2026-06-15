@@ -38,6 +38,7 @@ def test_run_wizard_config_builds_run_namespace():
         engine="mlx-lm",
         model="mlx-community/test-model",
         quantization="nvfp4",
+        model_url="https://huggingface.co/mlx-community/test-model",
         profile="sustained",
         trials=2,
         max_tokens=500,
@@ -57,6 +58,7 @@ def test_run_wizard_config_builds_run_namespace():
     assert args.engine == "mlx-lm"
     assert args.model == "mlx-community/test-model"
     assert args.quantization == "nvfp4"
+    assert args.model_url == "https://huggingface.co/mlx-community/test-model"
     assert args.profile == "sustained"
     assert args.trials == 2
     assert args.max_tokens == 500
@@ -104,6 +106,12 @@ def test_validate_run_config_allows_min_tokens_against_profile_default():
     assert validate_run_config(RunWizardConfig(model="test", min_tokens=80)) == []
 
 
+def test_validate_run_config_rejects_invalid_model_url():
+    errors = validate_run_config(RunWizardConfig(model="test", model_url="not-a-url"))
+
+    assert errors == ["model reference URL must be an http(s) URL"]
+
+
 def test_build_run_command_contains_only_needed_default_flags():
     command = build_run_command(
         RunWizardConfig(
@@ -137,6 +145,7 @@ def test_build_run_command_quotes_paths_and_notes():
         engine="rapid-mlx",
         model="org/model name",
         quantization="OptiQ 4bit",
+        model_url="https://huggingface.co/org/model-name",
         profile="sustained",
         trials=1,
         max_tokens=1000,
@@ -161,6 +170,8 @@ def test_build_run_command_quotes_paths_and_notes():
         "OptiQ 4bit",
         "--profile",
         "sustained",
+        "--model-url",
+        "https://huggingface.co/org/model-name",
         "--trials",
         "1",
         "--max-tokens",

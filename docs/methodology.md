@@ -467,6 +467,7 @@ Public rows must match one of the standard profiles:
 Public submissions must also:
 
 - use `usage.completion_tokens` token counts;
+- include `model.reference_url`, a link to the model used;
 - report Low Power Mode as `off`;
 - use standard deterministic generation parameters;
 - keep exact standard protocol metadata;
@@ -474,6 +475,9 @@ Public submissions must also:
 - pass raw-trial consistency validation;
 - pass integrity-seal validation;
 - be added or modified only as submitted JSON files in result-submission PRs.
+
+Model reference URLs are human-readable references. Model pages can change over
+time when maintainers update files or tags.
 
 GitHub Actions enforces this policy before generating the leaderboard index.
 Baseline and sustained rows are kept as separate profile choices in the
@@ -524,7 +528,7 @@ They are not a cryptographic hardware attestation system.
 To reproduce a result:
 
 1. Use the same engine version listed in the JSON.
-2. Use the same model name and quantization.
+2. Use the same model name, quantization, and model reference URL.
 3. Run on the same hardware: chip and memory.
 4. Disable Low Power Mode.
 5. Avoid other GPU-intensive processes during the run.

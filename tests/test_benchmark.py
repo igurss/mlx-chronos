@@ -345,6 +345,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
             engine_name="omlx",
             model_name="org/test-model",
             model_quantization="4bit",
+            model_reference_url=" https://huggingface.co/org/test-model ",
             trials=2,
             notes="test run",
             ram_sample_interval=0.1
@@ -353,6 +354,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["engine"]["name"] == "omlx"
     assert result["engine"]["version"] == "1.0.0"
     assert result["model"]["name"] == "org/test-model"
+    assert result["model"]["reference_url"] == "https://huggingface.co/org/test-model"
     assert result["metrics"]["tokens_per_second"]["mean"] == 20.0
     assert "p95" not in result["metrics"]["tokens_per_second"]
     assert result["metrics"]["request_tokens_per_second"]["mean"] == 20.0
@@ -1105,6 +1107,17 @@ def test_run_benchmark_rejects_empty_model_name():
             engine_name="omlx",
             model_name="  ",
             model_quantization="4bit",
+            trials=1,
+        )
+
+
+def test_run_benchmark_rejects_invalid_model_reference_url():
+    with pytest.raises(ValueError, match="model reference URL"):
+        run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            model_reference_url="not-a-url",
             trials=1,
         )
 
