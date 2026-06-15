@@ -170,6 +170,35 @@
       "timestamp": "2026-06-12T15:44:36.681985Z"
     },
     {
+      "chip": "Apple M2 Max",
+      "memory_gb": 64.0,
+      "machine_model": "Mac14,5",
+      "engine": "omlx",
+      "engine_version": "0.4.4rc2",
+      "model": "Qwen3.5-4B-OptiQ-4bit",
+      "quantization": "4bit",
+      "benchmark_profile": "baseline",
+      "tps": 68.51,
+      "tps_stddev": 5.236,
+      "decode_tps": 88.688,
+      "decode_timing_source": "client_stream",
+      "completion_tokens_raw": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ],
+      "ttft_cold": 0.209,
+      "ttft_cached": 0.205,
+      "system_ram_peak_gb": 40.262,
+      "system_ram_peak_percent": 62.9,
+      "thermal_state": "nominal",
+      "warmup_failures": 0,
+      "chronos_version": "0.2.1",
+      "timestamp": "2026-06-15T11:08:37.176265Z"
+    },
+    {
       "chip": "Apple M2",
       "memory_gb": 8.0,
       "machine_model": "Mac14,2",
