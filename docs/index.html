@@ -969,7 +969,7 @@
     </main>
 
     <footer>
-      Results are community-submitted, integrity-sealed, and validated through GitHub Actions. Public runs use <span id="standard-token-label">the project default trial counts and token bounds</span>, no requested min_tokens, and macOS Low Power Mode disabled.
+      Results are community-submitted, integrity-sealed, and validated through GitHub Actions. Public runs use <span id="standard-token-label">the project default trial counts, token bounds, and warmup policy</span>, no requested min_tokens, and macOS Low Power Mode disabled.
     </footer>
   </div>
 
@@ -1227,7 +1227,7 @@
       const minimumCompletion = minimumCompletionTokenRatio == null
         ? "at least 80% generated output"
         : `at least ${Math.round(minimumCompletionTokenRatio * 100)}% generated output`;
-      standardTokenLabel.textContent = `${baseline}; ${sustained}; ${minimumCompletion}`;
+      standardTokenLabel.textContent = `${baseline}; ${sustained}; ${minimumCompletion}; warmup failures=0`;
     }
 
     function formatTrialCount(count) {
@@ -1243,6 +1243,7 @@
         benchmark_profile: benchmarkProfile,
         decode_tps: row.decode_tps ?? null,
         date: row.date || dateFromTimestamp(timestamp),
+        macos_version: row.macos_version || "",
         model_reference_url: row.model_reference_url || "",
       };
     }
@@ -1424,9 +1425,6 @@
       } else if (row.thermal_state && row.thermal_state !== "nominal") {
         badges.push(`<span class="badge badge-amber">thermal ${escapeHtml(row.thermal_state)}</span>`);
       }
-      if (Number(row.warmup_failures || 0) > 0) {
-        badges.push(`<span class="badge badge-amber">warmup failure</span>`);
-      }
       if (!badges.length) {
         badges.push(`<span class="badge badge-green">no flags</span>`);
       }
@@ -1444,7 +1442,7 @@
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],
         ["Machine", row.machine_model],
-        ["Warmup failures", row.warmup_failures ?? 0],
+        ["macOS", row.macos_version || "unknown"],
         ["Stddev tok/s", row.tps_stddev == null ? "-" : fmt(row.tps_stddev, 3)],
         ["Date", row.date],
       ];

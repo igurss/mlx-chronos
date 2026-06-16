@@ -1039,6 +1039,10 @@ def make_sustained_with_baseline_max_tokens(result: dict) -> None:
             "pmset -g custom",
         ),
         (
+            lambda result: result["meta"].__setitem__("warmup_failures", 1),
+            "warmup_failures=1",
+        ),
+        (
             make_sustained_with_two_trials,
             "sustained leaderboard submissions must use the standard sustained trial count",
         ),

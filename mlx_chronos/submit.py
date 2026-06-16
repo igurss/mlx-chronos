@@ -199,6 +199,12 @@ def validate_publishable_result(
             "Battery, or run `pmset -g custom` and make sure lowpowermode is 0."
         )
 
+    if result.meta.warmup_failures != 0:
+        raise SubmissionError(
+            "leaderboard submissions must complete all warmup calls without "
+            f"failures; got warmup_failures={result.meta.warmup_failures}"
+        )
+
     throughput = protocol.throughput
     requested_max_tokens = throughput.requested_max_tokens
     requested_min_tokens = throughput.requested_min_tokens

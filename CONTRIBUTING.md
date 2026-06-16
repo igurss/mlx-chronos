@@ -154,6 +154,7 @@ Additional public requirements:
 
 - `metrics.token_count_source` must be `usage.completion_tokens`.
 - `model.reference_url` must point to the model used for the run.
+- `meta.warmup_failures` must be `0`.
 - `hardware.low_power_mode` must be `off`.
 - Benchmark protocol metadata must remain unchanged.
 - Generation parameters must remain deterministic: `temperature=0.0`,

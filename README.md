@@ -278,6 +278,7 @@ Public leaderboard submissions are stricter so rows remain comparable.
 
 - Throughput must use the engine response's `usage.completion_tokens`.
 - The result must include `model.reference_url`, a link to the model used.
+- All warmup calls must complete successfully (`warmup_failures=0`).
 - macOS Low Power Mode must be disabled.
 - The JSON must pass `mlx-chronos submit --dry-run`.
 - The result must include a valid integrity seal.

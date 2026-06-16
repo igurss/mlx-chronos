@@ -10,6 +10,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "mlx-lm",
       "engine_version": "0.31.3",
@@ -36,6 +37,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "mlx-lm",
       "engine_version": "0.31.3",
@@ -66,6 +68,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "ollama",
       "engine_version": "0.30.5",
@@ -96,6 +99,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "ollama",
       "engine_version": "0.30.5",
@@ -122,6 +126,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "omlx",
       "engine_version": "0.4.3",
@@ -152,6 +157,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "omlx",
       "engine_version": "0.4.3",
@@ -178,6 +184,7 @@
     {
       "chip": "Apple M2 Max",
       "memory_gb": 64.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,5",
       "engine": "omlx",
       "engine_version": "0.4.4rc2",
@@ -208,6 +215,7 @@
     {
       "chip": "Apple M2 Max",
       "memory_gb": 64.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,5",
       "engine": "omlx",
       "engine_version": "0.4.4rc2",
@@ -238,6 +246,7 @@
     {
       "chip": "Apple M2 Max",
       "memory_gb": 64.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,5",
       "engine": "omlx",
       "engine_version": "0.4.4rc2",
@@ -268,6 +277,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "rapid-mlx",
       "engine_version": "0.7.3",
@@ -298,6 +308,7 @@
     {
       "chip": "Apple M2",
       "memory_gb": 8.0,
+      "macos_version": "26.5.1",
       "machine_model": "Mac14,2",
       "engine": "rapid-mlx",
       "engine_version": "0.7.3",

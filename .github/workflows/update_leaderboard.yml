@@ -70,6 +70,7 @@ jobs:
                   index.append({
                       "chip": hw["chip"],
                       "memory_gb": hw["memory_gb"],
+                      "macos_version": hw["macos_version"],
                       "machine_model": hw.get("machine_model", "unknown"),
                       "engine": eng["name"],
                       "engine_version": eng["version"],

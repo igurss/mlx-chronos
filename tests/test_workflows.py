@@ -69,6 +69,7 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
     assert "load_publishable_result(" in text
     assert "allow_legacy_missing_model_reference=True" in text
     assert '"model_reference_url": mod.get("reference_url")' in text
+    assert '"macos_version": hw["macos_version"]' in text
     assert "PUBLIC_BASELINE_TRIALS" in text
     assert "PUBLIC_MIN_COMPLETION_TOKEN_RATIO" in text
     assert "SUSTAINED_TRIALS" in text
@@ -112,7 +113,9 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
     assert "minimumCompletionTokenRatio" in html
     assert "model_reference_url" in html
     assert "Model reference" in html
-    assert "project default trial counts and token bounds" in html
+    assert "macos_version" in html
+    assert "warmup failures=0" in html
+    assert "project default trial counts, token bounds, and warmup policy" in html
     assert 'fetch(RESULTS_INDEX, { cache: "no-store" })' in html
     assert "baseline 5 trials" in html
     assert "sustained 1 trial" in html

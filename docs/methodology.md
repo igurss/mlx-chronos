@@ -468,6 +468,7 @@ Public submissions must also:
 
 - use `usage.completion_tokens` token counts;
 - include `model.reference_url`, a link to the model used;
+- complete all warmup calls without failures (`warmup_failures=0`);
 - report Low Power Mode as `off`;
 - use standard deterministic generation parameters;
 - keep exact standard protocol metadata;

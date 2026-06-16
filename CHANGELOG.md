@@ -11,6 +11,7 @@
   benchmark or validation model from a menu, with manual entry only as fallback.
 - Add optional `--model-url` metadata for local runs and require
   `model.reference_url` for new public leaderboard submissions.
+- Require public leaderboard submissions to complete warmup without failures.
 
 ### Bug Fixes
 - Keep the wizard open when an internal command fails, instead of letting
