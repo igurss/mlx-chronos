@@ -928,8 +928,8 @@
             <thead>
               <tr id="compare-head">
                 <th>Engine</th>
-                <th>Request tok/s</th>
                 <th>Decode tok/s</th>
+                <th>Request tok/s</th>
                 <th>TTFT cold</th>
                 <th>TTFT cached</th>
                 <th>System RAM peak</th>
@@ -1351,8 +1351,8 @@
       compareBody.innerHTML = representatives.map(row => `
         <tr>
           <td>${engineCell(row)}</td>
-          <td><span class="metric-strong">${fmt(row.tps, 2)}</span></td>
-          ${showDecodeTps ? `<td>${fmt(row.decode_tps, 2)}</td>` : ""}
+          ${showDecodeTps ? `<td><span class="metric-strong">${fmt(row.decode_tps, 2)}</span></td>` : ""}
+          <td>${showDecodeTps ? fmt(row.tps, 2) : `<span class="metric-strong">${fmt(row.tps, 2)}</span>`}</td>
           <td>${fmt(row.ttft_cold, 3)} s</td>
           <td>${fmt(row.ttft_cached, 3)} s</td>
           <td>${systemRamCell(row)}</td>
@@ -1373,8 +1373,8 @@
     function renderCompareHead(showDecodeTps) {
       compareHead.innerHTML = `
         <th>Engine</th>
-        <th>Request tok/s</th>
         ${showDecodeTps ? "<th>Decode tok/s</th>" : ""}
+        <th>Request tok/s</th>
         <th>TTFT cold</th>
         <th>TTFT cached</th>
         <th>System RAM peak</th>
@@ -1392,7 +1392,11 @@
 
       return [...groups.values()]
         .map(group => group.slice().sort(compareRunRecency)[0])
-        .sort((a, b) => numericSortValue(b.tps) - numericSortValue(a.tps));
+        .sort((a, b) => numericSortValue(primaryThroughput(b)) - numericSortValue(primaryThroughput(a)));
+    }
+
+    function primaryThroughput(row) {
+      return row.decode_tps == null ? row.tps : row.decode_tps;
     }
 
     function compareRunRecency(a, b) {

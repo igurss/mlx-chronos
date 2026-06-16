@@ -313,6 +313,34 @@ def test_measure_throughput_records_progress_samples(mock_stream):
     )
 
 
+@patch("httpx.stream")
+def test_measure_throughput_deduplicates_burst_progress_samples(mock_stream):
+    content = " ".join(["token"] * 900)
+    mock_stream.return_value = stream_response(
+        completion_stream(content=content, completion_tokens=None)
+    )
+    engine = OMLXEngine()
+    with patch(
+        "time.perf_counter",
+        side_effect=[0.0, 0.5, *([32.7324] * 9), 32.733],
+    ):
+        measurement = engine.measure_throughput(
+            "test prompt",
+            "default",
+            900,
+            progress_sample_interval_tokens=100,
+        )
+
+    assert measurement.progress_samples == (
+        {
+            "completion_tokens": 900,
+            "elapsed_seconds": 32.732,
+            "tokens_per_second": round(900 / 32.732, 2),
+            "token_count_source": "word_fallback",
+        },
+    )
+
+
 def test_append_progress_sample_uses_rounded_elapsed_for_tps():
     engine = OMLXEngine()
     samples = []
@@ -437,6 +465,23 @@ def test_measure_tokens_per_second_includes_optional_min_tokens(mock_stream):
     assert payload["temperature"] == BENCHMARK_REQUEST_TEMPERATURE
     assert payload["top_p"] == BENCHMARK_REQUEST_TOP_P
     assert payload["stream_options"] == {"include_usage": True}
+
+
+@patch("httpx.stream")
+def test_measure_tokens_per_second_can_skip_stream_usage(mock_stream):
+    mock_stream.return_value = stream_response(completion_stream())
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.0]):
+        engine.measure_tokens_per_second(
+            "test prompt",
+            "default",
+            max_tokens=100,
+            request_stream_usage=False,
+        )
+
+    payload = mock_stream.call_args.kwargs["json"]
+    assert "stream_options" not in payload
+
 
 @patch("httpx.stream")
 def test_measure_throughput_retries_without_stream_usage_when_unsupported(mock_stream):
@@ -797,10 +842,21 @@ def test_omlx_get_version_falls_back_to_models_metadata(mock_run, mock_get):
 def test_ollama_get_version(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "ollama version is 0.24.0\n"
+    mock_result.returncode = 0
     mock_run.return_value = mock_result
 
     engine = OllamaEngine()
     assert engine.get_version() == "0.24.0"
+
+
+@patch("subprocess.run")
+def test_ollama_get_version_ignores_failed_command_output(mock_run):
+    mock_result = MagicMock()
+    mock_result.stdout = "Error: could not connect to ollama app, is it running?\n"
+    mock_result.returncode = 1
+    mock_run.return_value = mock_result
+
+    assert OllamaEngine().get_version() == "unknown"
 
 @patch("importlib.metadata.version", return_value="0.4.0rc1")
 def test_vllm_mlx_get_version_uses_package_metadata(mock_version):

@@ -1079,6 +1079,17 @@ def test_load_publishable_result_accepts_standard_sustained_run(tmp_path):
         == SUSTAINED_THROUGHPUT_MAX_TOKENS
     )
 
+
+def test_load_publishable_result_accepts_warmup_without_stream_usage(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["meta"]["benchmark_protocol"]["warmup"]["stream_usage_requested"] = False
+    result_path = write_result(tmp_path / "result.json", result)
+
+    _, parsed = load_publishable_result(result_path)
+
+    assert parsed.meta.benchmark_protocol.warmup.stream_usage_requested is False
+
+
 @patch("mlx_chronos.submit.httpx.post")
 def test_cmd_submit_env_endpoint_overrides_default(mock_post, tmp_path, monkeypatch):
     monkeypatch.setenv("MLX_CHRONOS_SUBMIT_ENDPOINT", "https://example.test/env-form")

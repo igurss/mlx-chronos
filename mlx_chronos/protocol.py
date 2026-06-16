@@ -213,6 +213,7 @@ def build_benchmark_protocol(
     throughput_min_tokens: int | None,
     name: str = "baseline",
     connection_mode: str = CONNECTION_MODE_PERSISTENT,
+    warmup_stream_usage_requested: bool = True,
 ) -> dict:
     if connection_mode not in VALID_CONNECTION_MODES:
         raise ValueError(
@@ -225,7 +226,7 @@ def build_benchmark_protocol(
             [WARMUP_PROMPT],
             WARMUP_MAX_TOKENS,
             request_mode="streaming",
-            stream_usage_requested=True,
+            stream_usage_requested=warmup_stream_usage_requested,
             connection_mode=connection_mode,
         ),
         "ttft_cold": _protocol_phase(

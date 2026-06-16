@@ -401,7 +401,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert protocol["name"] == "baseline"
     assert protocol["version"] == "3"
     assert protocol["warmup"]["request_mode"] == "streaming"
-    assert protocol["warmup"]["stream_usage_requested"] is True
+    assert protocol["warmup"]["stream_usage_requested"] is False
     assert protocol["warmup"]["connection_mode"] == "persistent"
     assert protocol["ttft_cold"]["request_mode"] == "streaming"
     assert protocol["ttft_cold"]["stream_usage_requested"] is False
@@ -448,6 +448,10 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         call.kwargs.get("min_tokens")
         for call in mock_engine.measure_tokens_per_second.call_args_list
     ] == [None, None]
+    assert [
+        call.kwargs.get("request_stream_usage")
+        for call in mock_engine.measure_tokens_per_second.call_args_list
+    ] == [False, False]
     assert [
         call.kwargs.get("min_tokens")
         for call in mock_engine.measure_throughput.call_args_list

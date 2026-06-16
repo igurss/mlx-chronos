@@ -166,6 +166,14 @@ def test_leaderboard_compare_recency_uses_full_timestamp():
     assert "dateFromTimestamp" in html
 
 
+def test_leaderboard_compare_prefers_decode_tps_when_available():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert "primaryThroughput(row)" in html
+    assert "row.decode_tps == null ? row.tps : row.decode_tps" in html
+    assert "<th>Decode tok/s</th>\n                <th>Request tok/s</th>" in html
+
+
 def test_leaderboard_hides_internal_protocol_and_condition_noise():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 

@@ -117,24 +117,6 @@
           "token_count_source": "word_fallback"
         },
         {
-          "completion_tokens": 600,
-          "elapsed_seconds": 32.732,
-          "tokens_per_second": 18.33,
-          "token_count_source": "word_fallback"
-        },
-        {
-          "completion_tokens": 700,
-          "elapsed_seconds": 32.732,
-          "tokens_per_second": 21.39,
-          "token_count_source": "word_fallback"
-        },
-        {
-          "completion_tokens": 800,
-          "elapsed_seconds": 32.732,
-          "tokens_per_second": 24.44,
-          "token_count_source": "word_fallback"
-        },
-        {
           "completion_tokens": 900,
           "elapsed_seconds": 32.732,
           "tokens_per_second": 27.5,
@@ -254,6 +236,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "5e7d624083b137fac8ec202599b69919d367b4f5118575836d6b803bbaaa0362"
+    "digest": "8ef827b943ad1f540ec96b50d8b1905a92e2a166d982a2ca221a9c6702887775"
   }
 }

@@ -446,6 +446,7 @@ def run_benchmark(
                             WARMUP_PROMPT,
                             model=model_name,
                             max_tokens=WARMUP_MAX_TOKENS,
+                            request_stream_usage=False,
                             client=http_client,
                         )
                     except Exception as exc:
@@ -757,6 +758,7 @@ def run_benchmark(
                 throughput_min_tokens,
                 name=benchmark_profile,
                 connection_mode=connection_mode,
+                warmup_stream_usage_requested=False,
             ),
             "notes": notes,
         },

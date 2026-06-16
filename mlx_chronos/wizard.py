@@ -456,7 +456,7 @@ class WizardSession:
         if setting == "model_url":
             return replace(
                 config,
-                model_url=self._ask_optional_text(
+                model_url=self._ask_optional_model_url(
                     "Model reference URL",
                     config.model_url,
                 ),
@@ -821,16 +821,33 @@ class WizardSession:
             raise WizardBackToMenu
         return stripped
 
-    def _ask_optional_text(self, message: str, default: str | None) -> str | None:
+    def _ask_optional_text(
+        self,
+        message: str,
+        default: str | None,
+        validate: Callable[[str], bool | str] | None = None,
+    ) -> str | None:
         value = self._ask(
             self.questionary.text(
                 message,
                 default=default or "",
+                validate=validate,
                 style=self.style,
             )
         )
         stripped = str(value).strip()
         return stripped or None
+
+    def _ask_optional_model_url(
+        self,
+        message: str,
+        default: str | None,
+    ) -> str | None:
+        return self._ask_optional_text(
+            message,
+            default,
+            validate=self._optional_model_url_validator(),
+        )
 
     def _ask_optional_int(
         self,
@@ -941,6 +958,17 @@ class WizardSession:
                 return f"Enter a value >= {min_value}."
             if max_value is not None and value > max_value:
                 return f"Enter a value <= {max_value}."
+            return True
+
+        return validate
+
+    @staticmethod
+    def _optional_model_url_validator() -> Callable[[str], bool | str]:
+        def validate(text: str) -> bool | str:
+            try:
+                normalize_model_reference_url(text)
+            except ValueError as exc:
+                return str(exc)
             return True
 
         return validate

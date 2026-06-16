@@ -16,7 +16,7 @@
   },
   "model": {
     "name": "Qwen3.5-4B-nvfp4",
-    "quantization": "4bit",
+    "quantization": "nvfp4",
     "reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-nvfp4",
     "source": null,
     "revision": null,
@@ -223,6 +223,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "8cf42a710c03405ecd77df4ff77e81474481bf34a329a9fdf3e0cedce492c95b"
+    "digest": "73836044c82141d166aae50ce87a96defae0c94f7bd201e6729bbc2ccaeebded"
   }
 }

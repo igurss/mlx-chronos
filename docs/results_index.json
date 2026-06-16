@@ -220,7 +220,7 @@
       "engine": "omlx",
       "engine_version": "0.4.4rc2",
       "model": "Qwen3.5-4B-nvfp4",
-      "quantization": "4bit",
+      "quantization": "nvfp4",
       "model_reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-nvfp4",
       "benchmark_profile": "baseline",
       "tps": 81.994,

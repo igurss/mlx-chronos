@@ -114,23 +114,29 @@ def _validate_public_protocol(result: BenchmarkResult) -> None:
     expected_trials, expected_max_tokens = _expected_public_profile_shape(
         result.meta.benchmark_profile
     )
-    expected_protocol = BenchmarkProtocol.model_validate(
-        build_benchmark_protocol(
-            expected_trials,
-            expected_max_tokens,
-            None,
-            name=result.meta.benchmark_profile,
-            connection_mode=CONNECTION_MODE_PERSISTENT,
-        )
-    ).model_dump(mode="json")
     actual_protocol = result.meta.benchmark_protocol.model_dump(mode="json")
 
-    difference = _first_protocol_difference(expected_protocol, actual_protocol)
-    if difference:
-        raise SubmissionError(
-            "leaderboard submissions must match the standard benchmark "
-            f"protocol exactly; {difference}"
-        )
+    differences = []
+    for warmup_stream_usage_requested in (False, True):
+        expected_protocol = BenchmarkProtocol.model_validate(
+            build_benchmark_protocol(
+                expected_trials,
+                expected_max_tokens,
+                None,
+                name=result.meta.benchmark_profile,
+                connection_mode=CONNECTION_MODE_PERSISTENT,
+                warmup_stream_usage_requested=warmup_stream_usage_requested,
+            )
+        ).model_dump(mode="json")
+        difference = _first_protocol_difference(expected_protocol, actual_protocol)
+        if difference is None:
+            return
+        differences.append(difference)
+
+    raise SubmissionError(
+        "leaderboard submissions must match the standard benchmark "
+        f"protocol exactly; {differences[0]}"
+    )
 
 
 def _validate_public_completion_tokens(

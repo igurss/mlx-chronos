@@ -692,6 +692,7 @@ class BaseEngine(ABC):
         min_tokens: int | None = None,
         progress_sample_interval_tokens: int | None = None,
         client: httpx.Client | None = None,
+        request_stream_usage: bool = True,
     ) -> ThroughputMeasurement:
         """Measure request throughput and client-observed decode throughput."""
         if (
@@ -711,7 +712,8 @@ class BaseEngine(ABC):
         url = f"{self.base_url()}{self.endpoint()}"
         request_model = str(base_payload["model"])
         action = "measure throughput"
-        for include_usage in (True, False):
+        usage_attempts = (True, False) if request_stream_usage else (False,)
+        for include_usage in usage_attempts:
             payload = dict(base_payload)
             if include_usage:
                 payload["stream_options"] = {"include_usage": True}
@@ -873,6 +875,7 @@ class BaseEngine(ABC):
         max_tokens: int = 100,
         min_tokens: int | None = None,
         client: httpx.Client | None = None,
+        request_stream_usage: bool = True,
     ) -> float:
         """Measure client-observed total request throughput."""
         return self.measure_throughput(
@@ -881,6 +884,7 @@ class BaseEngine(ABC):
             max_tokens=max_tokens,
             min_tokens=min_tokens,
             client=client,
+            request_stream_usage=request_stream_usage,
         ).request_tokens_per_second
 
     @abstractmethod
@@ -1173,6 +1177,8 @@ class OllamaEngine(BaseEngine):
             result = subprocess.run(
                 ["ollama", "--version"], capture_output=True, text=True, timeout=3
             )
+            if result.returncode != 0:
+                return "unknown"
             version_str = result.stdout.strip()
             return version_str.split()[-1] if version_str else "unknown"
         except Exception:

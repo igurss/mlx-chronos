@@ -112,6 +112,29 @@ def test_validate_run_config_rejects_invalid_model_url():
     assert errors == ["model reference URL must be an http(s) URL"]
 
 
+def test_wizard_model_url_prompt_validates_inline():
+    captured = {}
+
+    class FakeQuestionary:
+        def text(self, *args, **kwargs):
+            del args
+            captured.update(kwargs)
+            return object()
+
+    session = object.__new__(WizardSession)
+    session.questionary = FakeQuestionary()
+    session.style = None
+    session._ask = lambda _prompt: " https://huggingface.co/org/model "
+
+    assert session._ask_optional_model_url("Model reference URL", None) == (
+        "https://huggingface.co/org/model"
+    )
+    assert captured["validate"]("not-a-url") == (
+        "model reference URL must be an http(s) URL"
+    )
+    assert captured["validate"]("") is True
+
+
 def test_build_run_command_contains_only_needed_default_flags():
     command = build_run_command(
         RunWizardConfig(
