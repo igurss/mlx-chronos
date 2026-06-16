@@ -557,6 +557,7 @@ def test_model_accepts_optional_identity_metadata():
     data = EXAMPLE_RESULT.copy()
     data["model"] = {
         **data["model"],
+        "format": "safetensors",
         "source": "mlx-community/example",
         "revision": "abc123",
         "weight_hash": "sha256:weights",
@@ -568,6 +569,7 @@ def test_model_accepts_optional_identity_metadata():
     result = BenchmarkResult(**data)
 
     assert result.model.source == "mlx-community/example"
+    assert result.model.format == "safetensors"
     assert result.model.revision == "abc123"
     assert result.model.architecture == "qwen3"
 

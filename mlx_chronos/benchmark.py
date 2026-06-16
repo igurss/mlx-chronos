@@ -377,6 +377,13 @@ def run_benchmark(
             f"Please start it before running mlx-chronos."
         )
 
+    model_backend_metadata = engine.validate_model_backend(model_name)
+    if not isinstance(model_backend_metadata, dict):
+        model_backend_metadata = {}
+    model_format = model_backend_metadata.get("format")
+    if model_format:
+        logger.info(f"Model format: {model_format}\n")
+
     # 3. Engine version
     engine_version = engine.get_version()
     logger.info(f"Engine version: {engine_version}\n")
@@ -689,17 +696,21 @@ def run_benchmark(
         )
 
     # 7. Build result
+    model_metadata = {
+        "name": model_name,
+        "quantization": model_quantization,
+        "reference_url": model_reference_url,
+    }
+    if model_format:
+        model_metadata["format"] = model_format
+
     result = {
         "hardware": hw,
         "engine": {
             "name": engine_name,
             "version": engine_version,
         },
-        "model": {
-            "name": model_name,
-            "quantization": model_quantization,
-            "reference_url": model_reference_url,
-        },
+        "model": model_metadata,
         "metrics": {
             "ttft_cold": ttft_cold_stats,
             "ttft_cached": ttft_cached_stats,

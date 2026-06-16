@@ -157,6 +157,10 @@ class Model(ChronosBaseModel):
         None,
         description="Optional URL pointing to the model used for this run",
     )
+    format: Optional[str] = Field(
+        None,
+        description="Optional model weight/container format reported by the engine",
+    )
     source: Optional[str] = Field(
         None,
         description="Optional model source or repository identifier",
@@ -215,6 +219,7 @@ class Model(ChronosBaseModel):
         return aliases.get(normalized, normalized)
 
     @field_validator(
+        "format",
         "source",
         "revision",
         "weight_hash",

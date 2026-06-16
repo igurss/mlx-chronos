@@ -445,6 +445,71 @@ def test_cmd_validate_with_model(mock_detect, mock_get_engine):
     )
     mock_engine.validate_completion_request.assert_called_once_with("org/test-model")
 
+
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_validate_reports_ollama_model_backend(
+    mock_detect,
+    mock_get_engine,
+    caplog,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+    }
+
+    mock_engine = mock_get_engine.return_value
+    mock_engine.requires_model_backend_validation = True
+    mock_engine.is_installed.return_value = True
+    mock_engine.get_version.return_value = "0.30.5"
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:11434/v1"
+    mock_engine.list_model_ids.return_value = ["qwen3.5:4b-mlx"]
+    mock_engine.resolve_listed_model_id.return_value = "qwen3.5:4b-mlx"
+    mock_engine.validate_model_backend.return_value = {"format": "safetensors"}
+    mock_engine.validate_completion_request.return_value = "qwen3.5:4b-mlx"
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_validate(Namespace(engine="ollama", model="qwen3.5:4b-mlx"))
+
+    mock_engine.validate_model_backend.assert_called_once_with("qwen3.5:4b-mlx")
+    assert "[ok] model backend: format=safetensors" in caplog.text
+
+
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_validate_fails_ollama_gguf_backend(
+    mock_detect,
+    mock_get_engine,
+    caplog,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+    }
+
+    mock_engine = mock_get_engine.return_value
+    mock_engine.requires_model_backend_validation = True
+    mock_engine.is_installed.return_value = True
+    mock_engine.get_version.return_value = "0.30.5"
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:11434/v1"
+    mock_engine.list_model_ids.return_value = ["qwen3.5:4b"]
+    mock_engine.resolve_listed_model_id.return_value = "qwen3.5:4b"
+    mock_engine.validate_model_backend.side_effect = RuntimeError("GGUF weights")
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_validate(Namespace(engine="ollama", model="qwen3.5:4b"))
+
+    assert exc.value.code == 1
+    mock_engine.validate_completion_request.assert_not_called()
+    assert "[fail] model backend: GGUF weights" in caplog.text
+    assert "[skip] completion request: fix failed checks first" in caplog.text
+
+
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")
 def test_cmd_validate_fails_when_server_is_down(mock_detect, mock_get_engine):
@@ -577,6 +642,9 @@ def test_cmd_run_preflight_validates_model_before_benchmark():
         cmd_run(args)
 
     mock_engine.validate_completion_request.assert_called_once_with(
+        "Qwen3.5-4B-OptiQ-4bit"
+    )
+    mock_engine.validate_model_backend.assert_called_once_with(
         "Qwen3.5-4B-OptiQ-4bit"
     )
     mock_run.assert_called_once()
@@ -1088,6 +1156,59 @@ def test_load_publishable_result_accepts_warmup_without_stream_usage(tmp_path):
     _, parsed = load_publishable_result(result_path)
 
     assert parsed.meta.benchmark_protocol.warmup.stream_usage_requested is False
+
+
+def make_ollama_publishable_result(result: dict, model_format: str | None) -> None:
+    result["engine"]["name"] = "ollama"
+    result["engine"]["version"] = "0.30.5"
+    result["model"]["name"] = "qwen3.5:4b-mlx"
+    result["model"]["quantization"] = "nvfp4"
+    result["model"]["reference_url"] = "https://ollama.com/library/qwen3.5:4b-mlx"
+    if model_format is None:
+        result["model"].pop("format", None)
+    else:
+        result["model"]["format"] = model_format
+
+
+def test_load_publishable_result_accepts_ollama_safetensors_format(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    make_ollama_publishable_result(result, "safetensors")
+    result_path = write_result(tmp_path / "result.json", result)
+
+    _, parsed = load_publishable_result(result_path)
+
+    assert parsed.model.format == "safetensors"
+
+
+def test_load_publishable_result_rejects_ollama_gguf_format(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    make_ollama_publishable_result(result, "gguf")
+    result_path = write_result(tmp_path / "result.json", result)
+
+    with pytest.raises(SubmissionError, match="safetensors"):
+        load_publishable_result(result_path)
+
+
+def test_load_publishable_result_rejects_missing_ollama_model_format(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    make_ollama_publishable_result(result, None)
+    result_path = write_result(tmp_path / "result.json", result)
+
+    with pytest.raises(SubmissionError, match="model.format"):
+        load_publishable_result(result_path)
+
+
+def test_load_publishable_result_allows_legacy_missing_ollama_model_format(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    make_ollama_publishable_result(result, None)
+    result_path = write_result(tmp_path / "result.json", result)
+
+    _, parsed = load_publishable_result(
+        result_path,
+        allow_legacy_missing_ollama_model_format=True,
+    )
+
+    assert parsed.model.format is None
 
 
 @patch("mlx_chronos.submit.httpx.post")

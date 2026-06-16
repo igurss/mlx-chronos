@@ -20,6 +20,8 @@ from mlx_chronos.constants import (
     ENGINE_NAME_RAPID_MLX,
     ENGINE_NAME_VLLM_MLX,
     ERROR_RESPONSE_BODY_LIMIT,
+    OLLAMA_MLX_MODEL_FORMATS,
+    OLLAMA_REJECTED_MODEL_FORMATS,
     TOKEN_COUNT_SOURCE_USAGE,
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
 )
@@ -44,6 +46,7 @@ class BaseEngine(ABC):
     name: str
     default_port: int
     expected_process_names: tuple[str, ...] = ()
+    requires_model_backend_validation = False
 
     def __init__(self, port: int | None = None):
         self.port = port if port is not None else self._configured_port()
@@ -377,6 +380,11 @@ class BaseEngine(ABC):
                 )
             )
         return request_model
+
+    def validate_model_backend(self, model: str) -> dict[str, str]:
+        """Validate engine-specific model backend requirements."""
+        del model
+        return {}
 
     def wait_for_server(self, timeout: int = 60) -> bool:
         start = time.perf_counter()
@@ -1153,6 +1161,7 @@ class OllamaEngine(BaseEngine):
     name = ENGINE_NAME_OLLAMA
     default_port = 11434
     expected_process_names = ("ollama",)
+    requires_model_backend_validation = True
 
     def is_installed(self) -> bool:
         return shutil.which("ollama") is not None
@@ -1171,6 +1180,105 @@ class OllamaEngine(BaseEngine):
         except Exception:
             return False
         return isinstance(data, dict) and isinstance(data.get("version"), str)
+
+    def validate_model_backend(self, model: str) -> dict[str, str]:
+        """Require Ollama MLX models to use safetensors, not GGUF."""
+        request_model = self._request_model_name(model)
+        url = f"{self.root_url()}/api/show"
+        action = "verify model backend"
+        try:
+            response = self._http_post(
+                url,
+                json_payload={"model": request_model},
+                timeout=10.0,
+                action=action,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                self._request_error_message(
+                    action,
+                    url,
+                    exc,
+                    model=model,
+                    request_model=request_model,
+                )
+            ) from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                self._invalid_json_message(
+                    action,
+                    url,
+                    model=model,
+                    request_model=request_model,
+                )
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid show response: response must be a JSON object",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+        details = data.get("details")
+        if not isinstance(details, dict):
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid show response: field 'details' must be a JSON object",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+
+        raw_format = details.get("format")
+        if not isinstance(raw_format, str) or not raw_format.strip():
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "could not verify Ollama MLX backend: details.format is missing",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+
+        model_format = raw_format.strip().lower()
+        if model_format in OLLAMA_REJECTED_MODEL_FORMATS:
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    (
+                        "Ollama model uses GGUF weights; public Ollama results "
+                        "must use MLX safetensors models"
+                    ),
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+        if model_format not in OLLAMA_MLX_MODEL_FORMATS:
+            allowed = ", ".join(sorted(OLLAMA_MLX_MODEL_FORMATS))
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    (
+                        "unsupported Ollama model format "
+                        f"{model_format!r}; expected one of: {allowed}"
+                    ),
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+
+        return {"format": model_format}
 
     def get_version(self) -> str:
         try:

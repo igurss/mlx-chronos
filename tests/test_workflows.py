@@ -68,6 +68,8 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
 
     assert "load_publishable_result(" in text
     assert "allow_legacy_missing_model_reference=True" in text
+    assert "allow_legacy_missing_ollama_model_format=True" in text
+    assert '"model_format": mod.get("format")' in text
     assert '"model_reference_url": mod.get("reference_url")' in text
     assert '"macos_version": hw["macos_version"]' in text
     assert "PUBLIC_BASELINE_TRIALS" in text
@@ -112,6 +114,7 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
     assert "standardSustainedTrials" in html
     assert "minimumCompletionTokenRatio" in html
     assert "model_reference_url" in html
+    assert "Model format" in html
     assert "Model reference" in html
     assert "macos_version" in html
     assert "warmup failures=0" in html

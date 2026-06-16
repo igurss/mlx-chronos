@@ -54,6 +54,7 @@ jobs:
                   _, result = load_publishable_result(
                       path,
                       allow_legacy_missing_model_reference=True,
+                      allow_legacy_missing_ollama_model_format=True,
                   )
 
                   data = result.model_dump(mode="json", by_alias=True)
@@ -76,6 +77,7 @@ jobs:
                       "engine_version": eng["version"],
                       "model": mod["name"],
                       "quantization": mod["quantization"],
+                      "model_format": mod.get("format"),
                       "model_reference_url": mod.get("reference_url"),
                       "benchmark_profile": benchmark_profile,
                       "tps": met["tokens_per_second"]["mean"],

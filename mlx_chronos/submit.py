@@ -12,6 +12,9 @@ from mlx_chronos.constants import (
     PHASE_TIMING_TOLERANCE_SECONDS,
     PUBLIC_BASELINE_TRIALS,
     PUBLIC_MIN_COMPLETION_TOKEN_RATIO,
+    ENGINE_NAME_OLLAMA,
+    OLLAMA_MLX_MODEL_FORMATS,
+    OLLAMA_REJECTED_MODEL_FORMATS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
     TOKEN_COUNT_SOURCE_USAGE,
@@ -156,10 +159,44 @@ def _validate_public_completion_tokens(
             )
 
 
+def _validate_public_ollama_model_format(
+    result: BenchmarkResult,
+    *,
+    allow_legacy_missing_ollama_model_format: bool,
+) -> None:
+    if result.engine.name != ENGINE_NAME_OLLAMA:
+        return
+
+    model_format = result.model.format
+    if model_format is None:
+        if allow_legacy_missing_ollama_model_format:
+            return
+        raise SubmissionError(
+            "Ollama leaderboard submissions must include model.format from "
+            "/api/show details.format"
+        )
+
+    normalized_format = model_format.strip().lower()
+    if normalized_format in OLLAMA_MLX_MODEL_FORMATS:
+        return
+    if normalized_format in OLLAMA_REJECTED_MODEL_FORMATS:
+        raise SubmissionError(
+            "Ollama leaderboard submissions must use MLX safetensors models; "
+            f"got model.format={model_format!r}"
+        )
+
+    allowed = ", ".join(sorted(OLLAMA_MLX_MODEL_FORMATS))
+    raise SubmissionError(
+        "Ollama leaderboard submissions must use a supported MLX model "
+        f"format ({allowed}); got model.format={model_format!r}"
+    )
+
+
 def validate_publishable_result(
     result: BenchmarkResult,
     *,
     allow_legacy_missing_model_reference: bool = False,
+    allow_legacy_missing_ollama_model_format: bool = False,
 ) -> None:
     """Check public leaderboard comparability constraints."""
     token_source = result.metrics.token_count_source
@@ -259,12 +296,19 @@ def validate_publishable_result(
 
     _validate_public_completion_tokens(result, expected_max_tokens)
     _validate_public_protocol(result)
+    _validate_public_ollama_model_format(
+        result,
+        allow_legacy_missing_ollama_model_format=(
+            allow_legacy_missing_ollama_model_format
+        ),
+    )
 
 
 def load_publishable_result(
     path: Path,
     *,
     allow_legacy_missing_model_reference: bool = False,
+    allow_legacy_missing_ollama_model_format: bool = False,
 ) -> tuple[bytes, BenchmarkResult]:
     """Load, validate, and check whether a result can be submitted publicly."""
     try:
@@ -292,6 +336,9 @@ def load_publishable_result(
     validate_publishable_result(
         result,
         allow_legacy_missing_model_reference=allow_legacy_missing_model_reference,
+        allow_legacy_missing_ollama_model_format=(
+            allow_legacy_missing_ollama_model_format
+        ),
     )
 
     return raw, result

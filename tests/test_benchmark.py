@@ -476,6 +476,49 @@ def test_run_benchmark(mock_detect, mock_get_engine):
 
 @patch("mlx_chronos.benchmark.get_engine")
 @patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_records_model_format(mock_detect, mock_get_engine):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+
+    mock_engine = MagicMock()
+    mock_engine.name = "ollama"
+    mock_engine.validate_model_backend.return_value = {"format": "safetensors"}
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_ttft.return_value = 0.5
+    mock_engine.measure_throughput.return_value = throughput_measurement()
+    mock_engine.get_version.return_value = "0.30.5"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_virtual_memory:
+        system_mem_info = MagicMock()
+        system_mem_info.total = 8 * (1024 ** 3)
+        system_mem_info.available = 2 * (1024 ** 3)
+        mock_virtual_memory.return_value = system_mem_info
+
+        result = run_benchmark(
+            engine_name="ollama",
+            model_name="qwen3.5:4b-mlx",
+            model_quantization="nvfp4",
+            model_reference_url="https://ollama.com/library/qwen3.5:4b-mlx",
+            trials=1,
+            ram_sample_interval=0.01,
+        )
+
+    assert result["model"]["format"] == "safetensors"
+    mock_engine.validate_model_backend.assert_called_once_with("qwen3.5:4b-mlx")
+    validate_integrity_seal(result)
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
 def test_run_benchmark_falls_back_when_system_ram_stop_fails(
     mock_detect,
     mock_get_engine,

@@ -174,6 +174,11 @@ def _run_model_preflight(engine_name: str, model: str) -> None:
     else:
         logger.info("  Model listed: %s", resolved_model)
 
+    model_backend_metadata = engine.validate_model_backend(model)
+    if engine.requires_model_backend_validation is True:
+        model_format = model_backend_metadata.get("format", "unknown")
+        logger.info("  Model backend verified: format=%s", model_format)
+
     request_model = engine.validate_completion_request(model)
     logger.info("  Completion request accepted as: %s", request_model)
     logger.info("")
@@ -398,12 +403,26 @@ def cmd_validate(args):
         else:
             log_validation_check("ok", "model listed", resolved_model)
 
+        backend_failed = False
         try:
-            request_model = engine.validate_completion_request(model)
-            log_validation_check("ok", "completion request", request_model)
+            model_backend_metadata = engine.validate_model_backend(model)
+            if engine.requires_model_backend_validation is True:
+                model_format = model_backend_metadata.get("format", "unknown")
+                log_validation_check("ok", "model backend", f"format={model_format}")
         except RuntimeError as exc:
             failures += 1
-            log_validation_check("fail", "completion request", str(exc))
+            backend_failed = True
+            log_validation_check("fail", "model backend", str(exc))
+
+        if backend_failed:
+            log_validation_check("skip", "completion request", "fix failed checks first")
+        else:
+            try:
+                request_model = engine.validate_completion_request(model)
+                log_validation_check("ok", "completion request", request_model)
+            except RuntimeError as exc:
+                failures += 1
+                log_validation_check("fail", "completion request", str(exc))
 
     if failures:
         logger.info(f"\nValidation failed with {failures} error(s).")

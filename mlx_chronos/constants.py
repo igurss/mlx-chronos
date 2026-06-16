@@ -24,6 +24,8 @@ ENGINE_NAME_RAPID_MLX = "rapid-mlx"
 ENGINE_NAME_VLLM_MLX = "vllm-mlx"
 ENGINE_NAME_MLX_LM = "mlx-lm"
 ENGINE_NAME_OLLAMA = "ollama"
+OLLAMA_MLX_MODEL_FORMATS = frozenset({"safetensors"})
+OLLAMA_REJECTED_MODEL_FORMATS = frozenset({"gguf"})
 # Keep in sync with engines.ENGINES and schema.EngineName. constants.py is kept
 # dependency-light, so tests enforce the registry/schema match instead.
 VALID_ENGINE_NAMES = {

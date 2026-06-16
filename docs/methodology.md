@@ -384,6 +384,13 @@ server is not running even though `/v1/models` responds. In that case, verify
 the process on the port, adjust permissions, or move the server to a known port
 and set `MLX_CHRONOS_OMLX_PORT`.
 
+For Ollama, mlx-Chronos also verifies the local model format before a measured
+run. It calls `POST /api/show` for the requested model and requires
+`details.format` to be `safetensors`, which is the format Ollama reports for
+MLX model weights. `gguf` models are rejected for public Ollama benchmark runs
+because they use the non-MLX model format and are not comparable with the MLX
+leaderboard entries.
+
 ---
 
 ## Trial Protocol

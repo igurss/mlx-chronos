@@ -723,6 +723,59 @@ def test_ollama_server_running_rejects_wrong_server_on_port(mock_get):
     assert OllamaEngine().is_server_running() is False
 
 
+@patch("httpx.post")
+def test_ollama_validate_model_backend_accepts_safetensors(mock_post):
+    response = MagicMock()
+    response.json.return_value = {
+        "details": {
+            "format": "safetensors",
+            "quantization_level": "nvfp4",
+        }
+    }
+    mock_post.return_value = response
+
+    metadata = OllamaEngine().validate_model_backend("qwen3.5:4b-mlx")
+
+    assert metadata == {"format": "safetensors"}
+    assert mock_post.call_args.args[0] == "http://localhost:11434/api/show"
+    assert mock_post.call_args.kwargs["json"] == {"model": "qwen3.5:4b-mlx"}
+
+
+@patch("httpx.post")
+def test_ollama_validate_model_backend_rejects_gguf(mock_post):
+    response = MagicMock()
+    response.json.return_value = {
+        "details": {
+            "format": "gguf",
+            "quantization_level": "Q4_0",
+        }
+    }
+    mock_post.return_value = response
+
+    with pytest.raises(RuntimeError, match="GGUF"):
+        OllamaEngine().validate_model_backend("qwen3.5:4b")
+
+
+@patch("httpx.post")
+def test_ollama_validate_model_backend_rejects_unknown_format(mock_post):
+    response = MagicMock()
+    response.json.return_value = {"details": {"format": "mystery"}}
+    mock_post.return_value = response
+
+    with pytest.raises(RuntimeError, match="unsupported Ollama model format"):
+        OllamaEngine().validate_model_backend("qwen3.5:4b-mlx")
+
+
+@patch("httpx.post")
+def test_ollama_validate_model_backend_requires_details_format(mock_post):
+    response = MagicMock()
+    response.json.return_value = {"details": {}}
+    mock_post.return_value = response
+
+    with pytest.raises(RuntimeError, match="details.format is missing"):
+        OllamaEngine().validate_model_backend("qwen3.5:4b-mlx")
+
+
 @patch("httpx.get")
 def test_vllm_mlx_server_running_requires_health_identity(mock_get):
     models_response = MagicMock(status_code=200)

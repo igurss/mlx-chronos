@@ -1441,6 +1441,7 @@
         ["Profile", profileLabel(row.benchmark_profile)],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
+        ["Model format", row.model_format || "not recorded"],
         ["Model reference", row.model_reference_url || "not recorded"],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
