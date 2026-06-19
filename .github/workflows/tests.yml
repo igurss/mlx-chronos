@@ -56,7 +56,7 @@ jobs:
           python -m mlx_chronos.cli validate --help
           python -m mlx_chronos.cli models --help
           python -m mlx_chronos.cli engines
-          python -m mlx_chronos.detect
+          python -c "from mlx_chronos.detect import detect_hardware; print(detect_hardware())"
 
       - name: Validate leaderboard JavaScript syntax
         run: |
@@ -68,5 +68,31 @@ jobs:
           for (const script of scripts) new Function(script);
           NODE
 
+      - name: Run frontend behavior and security tests
+        run: node --test tests/frontend.test.cjs
+
       - name: Run tests
         run: pytest
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package
+        run: pip install -e ".[test]"
+
+      - name: Lint
+        run: ruff check mlx_chronos tests
+
+      - name: Type check
+        run: mypy
+
+      - name: Enforce coverage
+        run: pytest --cov --cov-report=term-missing

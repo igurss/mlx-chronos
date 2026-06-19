@@ -25,6 +25,12 @@ def test_tests_workflow_covers_leaderboard_and_python_314():
     assert ".github/workflows/*.yml" in text
     assert "'3.14'" in text
     assert "Validate leaderboard JavaScript syntax" in text
+    assert "node --test tests/frontend.test.cjs" in text
+    assert "ruff check mlx_chronos tests" in text
+    assert "mypy" in text
+    assert "pytest --cov" in text
+    assert "python -m mlx_chronos.detect" not in text
+    assert "detect_hardware" in text
 
 
 def test_release_workflow_tests_python_314():
@@ -39,6 +45,7 @@ def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
     assert "must not delete submitted " in text
     assert "result files:" in text
     assert "load_publishable_result(path)" in text
+    assert "load_archive_results" in text
     assert '"results/submitted",' not in text
 
 
@@ -63,28 +70,24 @@ def test_protocol_reexports_default_throughput_constant():
     assert PROTOCOL_DEFAULT == DEFAULT_THROUGHPUT_MAX_TOKENS
 
 
+def test_readme_lists_every_default_engine_port():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    for engine, port in (
+        ("oMLX", "8000"),
+        ("Rapid-MLX", "8001"),
+        ("vllm-mlx", "8000"),
+        ("mlx-lm", "8080"),
+        ("Ollama", "11434"),
+    ):
+        assert f"| {engine} | `{port}` |" in readme
+
+
 def test_update_leaderboard_workflow_uses_publishable_result_policy():
     text = workflow_text("update_leaderboard.yml")
 
-    assert "load_publishable_result(" in text
-    assert "allow_legacy_missing_model_reference=True" in text
-    assert "allow_legacy_missing_ollama_model_format=True" in text
-    assert '"model_format": mod.get("format")' in text
-    assert '"model_reference_url": mod.get("reference_url")' in text
-    assert '"macos_version": hw["macos_version"]' in text
-    assert "PUBLIC_BASELINE_TRIALS" in text
-    assert "PUBLIC_MIN_COMPLETION_TOKEN_RATIO" in text
-    assert "SUSTAINED_TRIALS" in text
-    assert '"timestamp": meta["timestamp"]' in text
-    assert '"protocol_version"' not in text
-    assert '"connection_mode"' not in text
-    assert '"power_source"' not in text
-    assert '"low_power_mode"' not in text
-    assert '"notes"' not in text
-    assert '"is_standard_throughput_tokens"' not in text
-    assert '"throughput_max_tokens"' not in text
-    assert '"throughput_min_tokens"' not in text
-    assert '"trials": tri["count"]' not in text
+    assert "python -m mlx_chronos.leaderboard" in text
+    assert "python - <<'EOF'" not in text
 
 
 def test_result_workflows_use_single_error_handler():
@@ -169,11 +172,11 @@ def test_leaderboard_compare_recency_uses_full_timestamp():
     assert "dateFromTimestamp" in html
 
 
-def test_leaderboard_compare_prefers_decode_tps_when_available():
+def test_leaderboard_compare_sorts_consistently_by_request_tps():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 
-    assert "primaryThroughput(row)" in html
-    assert "row.decode_tps == null ? row.tps : row.decode_tps" in html
+    assert "primaryThroughput" not in html
+    assert "numericSortValue(b.tps) - numericSortValue(a.tps)" in html
     assert "<th>Decode tok/s</th>\n                <th>Request tok/s</th>" in html
 
 

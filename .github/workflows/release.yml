@@ -39,7 +39,7 @@ jobs:
           python -m mlx_chronos.cli validate --help
           python -m mlx_chronos.cli models --help
           python -m mlx_chronos.cli engines
-          python -m mlx_chronos.detect
+          python -c "from mlx_chronos.detect import detect_hardware; print(detect_hardware())"
 
       - name: Run tests
         run: pytest
