@@ -7,7 +7,12 @@ from mlx_chronos import __version__ as VERSION
 from mlx_chronos.constants import MAX_TRIALS, P95_MIN_TRIALS, VALID_ENGINE_NAMES
 from mlx_chronos.examples import EXAMPLE_RESULT
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
-from mlx_chronos.schema import BenchmarkResult, Engine, TrialStats
+from mlx_chronos.schema import (
+    BenchmarkResult,
+    Engine,
+    TrialStats,
+    normalize_model_quantization,
+)
 
 def test_valid_schema():
     """Test that the example result is fully valid."""
@@ -31,8 +36,8 @@ def test_valid_schema():
     assert result.meta.sustained_throttling_warning is False
     assert result.meta.cached_ttft_warning is False
     assert result.meta.phase_timings_seconds.total_runtime == 38.1
-    assert result.meta.thermal_monitor.source == "unavailable"
-    assert result.meta.thermal_monitor.start_state == "unavailable_foundation"
+    assert result.meta.thermal_monitor.source == "foundation"
+    assert result.meta.thermal_monitor.start_state == "nominal"
     assert result.hardware.architecture == "arm64"
     assert result.hardware.power_source == "ac_power"
     assert result.hardware.low_power_mode == "off"
@@ -47,6 +52,13 @@ def test_valid_schema():
         5.402,
         5.411,
         5.417,
+    ]
+    assert result.trials.decode_elapsed_seconds_raw == [
+        5.294,
+        5.354,
+        5.286,
+        5.297,
+        5.305,
     ]
     assert result.meta.benchmark_protocol is not None
     assert result.meta.benchmark_protocol.name == "baseline"
@@ -63,6 +75,19 @@ def test_valid_schema():
     validate_integrity_seal(EXAMPLE_RESULT)
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("Q4", "4bit"), ("int-8", "8bit"), ("float16", "fp16"), ("NVFP4", "nvfp4")],
+)
+def test_normalize_model_quantization(raw, expected):
+    assert normalize_model_quantization(raw) == expected
+
+
+def test_normalize_model_quantization_rejects_blank_value():
+    with pytest.raises(ValueError, match="must not be empty"):
+        normalize_model_quantization("   ")
+
+
 def test_example_result_chronos_version_matches_package():
     assert EXAMPLE_RESULT["meta"]["chronos_version"] == VERSION
 
@@ -75,6 +100,15 @@ def test_legacy_thermal_state_is_normalized():
     result = BenchmarkResult(**data)
 
     assert result.hardware.thermal_state == "unavailable_permission"
+
+
+def test_thermal_state_rejects_html_payloads():
+    data = EXAMPLE_RESULT.copy()
+    data["hardware"] = data["hardware"].copy()
+    data["hardware"]["thermal_state"] = '<img src=x onerror="alert(1)">'
+
+    with pytest.raises(ValidationError, match="thermal_state"):
+        BenchmarkResult(**data)
 
 def test_invalid_engine_name():
     """Test that an unknown engine name raises a validation error."""
@@ -169,6 +203,10 @@ def test_decode_timing_source_accepts_client_stream():
         20.5,
         20.0,
         20.0,
+    ]
+    data["trials"]["decode_elapsed_seconds_raw"] = [
+        round(99 / value, 3)
+        for value in data["trials"]["decode_tokens_per_second_raw"]
     ]
 
     result = BenchmarkResult(**data)
@@ -284,6 +322,18 @@ def test_phase_timings_reject_total_shorter_than_phase_sum():
     with pytest.raises(ValidationError, match="total_runtime"):
         BenchmarkResult(**invalid_data)
 
+
+def test_phase_timings_reject_implausible_unattributed_runtime():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["phase_timings_seconds"] = {
+        **invalid_data["meta"]["phase_timings_seconds"],
+        "total_runtime": 999999.0,
+    }
+
+    with pytest.raises(ValidationError, match="exceeds benchmark phase"):
+        BenchmarkResult(**invalid_data)
+
 def test_thermal_monitor_rejects_unmarked_state_change():
     invalid_data = EXAMPLE_RESULT.copy()
     invalid_data["meta"] = invalid_data["meta"].copy()
@@ -296,8 +346,58 @@ def test_thermal_monitor_rejects_unmarked_state_change():
         "changed_during_run": False,
     }
 
-    with pytest.raises(ValidationError, match="changed_during_run"):
+    with pytest.raises(ValidationError, match="unchanged thermal monitor"):
         BenchmarkResult(**invalid_data)
+
+
+def test_thermal_monitor_rejects_hidden_worst_state_change():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["thermal_monitor"] = {
+        **invalid_data["meta"]["thermal_monitor"],
+        "start_state": "nominal",
+        "end_state": "nominal",
+        "worst_state": "critical",
+        "changed_during_run": False,
+        "non_nominal_observed": True,
+    }
+
+    with pytest.raises(ValidationError, match="unchanged thermal monitor"):
+        BenchmarkResult(**invalid_data)
+
+
+def test_thermal_monitor_rejects_worst_state_better_than_endpoint():
+    invalid_data = EXAMPLE_RESULT.copy()
+    invalid_data["meta"] = invalid_data["meta"].copy()
+    invalid_data["meta"]["thermal_monitor"] = {
+        **invalid_data["meta"]["thermal_monitor"],
+        "start_state": "serious",
+        "end_state": "nominal",
+        "worst_state": "fair",
+        "changed_during_run": True,
+        "non_nominal_observed": True,
+    }
+
+    with pytest.raises(ValidationError, match="at least as severe"):
+        BenchmarkResult(**invalid_data)
+
+
+def test_thermal_monitor_accepts_intermediate_state_change():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    data["meta"]["thermal_monitor"] = {
+        **data["meta"]["thermal_monitor"],
+        "start_state": "nominal",
+        "end_state": "nominal",
+        "worst_state": "fair",
+        "changed_during_run": True,
+        "non_nominal_observed": True,
+        "non_nominal_phases": ["throughput"],
+    }
+
+    result = BenchmarkResult(**data)
+
+    assert result.meta.thermal_monitor.worst_state == "fair"
 
 def test_thermal_monitor_rejects_phases_without_non_nominal_flag():
     invalid_data = EXAMPLE_RESULT.copy()
@@ -500,6 +600,7 @@ def test_p95_is_required_for_large_trial_sets():
     data["trials"]["completion_tokens_raw"] = [100] * P95_MIN_TRIALS
     data["trials"]["throughput_elapsed_seconds_raw"] = [5.0] * P95_MIN_TRIALS
     data["trials"]["decode_tokens_per_second_raw"] = None
+    data["trials"]["decode_elapsed_seconds_raw"] = None
     data["metrics"]["decode_tokens_per_second"] = None
     data["metrics"]["decode_timing_source"] = "unavailable"
     data["metrics"]["ttft_cold"] = {

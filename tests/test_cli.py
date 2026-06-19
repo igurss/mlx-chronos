@@ -13,6 +13,7 @@ import httpx
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import (
     _emit_result_warnings,
+    _log_result_summary,
     _maybe_start_update_check,
     _should_start_update_check,
     cmd_models,
@@ -904,6 +905,33 @@ def test_emit_result_warnings_does_not_duplicate_cached_ttft_warning(capsys):
     assert "cached TTFT" not in capsys.readouterr().err
 
 
+def test_log_result_summary_reports_core_metrics_and_clean_run(caplog):
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    _log_result_summary(EXAMPLE_RESULT)
+
+    assert "Results Summary" in caplog.text
+    assert "Throughput : 18.44 tok/s" in caplog.text
+    assert "Thermal    : nominal -> nominal" in caplog.text
+    assert "Warnings   : none" in caplog.text
+
+
+def test_log_result_summary_collects_result_warnings(caplog):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["meta"]["cached_ttft_warning"] = True
+    result["meta"]["system_ram_monitor_errors"] = 1
+    result["meta"]["thermal_monitor"]["worst_state"] = "fair"
+    result["hardware"]["power_source"] = "battery"
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    _log_result_summary(result)
+
+    assert "cached TTFT close to cold TTFT" in caplog.text
+    assert "system RAM monitor errors" in caplog.text
+    assert "thermal state fair" in caplog.text
+    assert "battery power" in caplog.text
+
+
 def test_load_publishable_result_rejects_tampered_integrity(tmp_path):
     result = copy.deepcopy(EXAMPLE_RESULT)
     result["metrics"]["tokens_per_second"]["mean"] = 99.0
@@ -923,6 +951,16 @@ def test_load_publishable_result_rejects_missing_model_reference(tmp_path):
         load_publishable_result(result_path)
 
 
+def test_load_publishable_result_rejects_unknown_engine_version(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["engine"]["version"] = "unknown"
+    result["meta"]["engine_version_warning"] = True
+    result_path = write_result(tmp_path / "result.json", result)
+
+    with pytest.raises(SubmissionError, match="known engine version"):
+        load_publishable_result(result_path)
+
+
 def test_load_publishable_result_allows_legacy_missing_model_reference(tmp_path):
     result = copy.deepcopy(EXAMPLE_RESULT)
     result["model"].pop("reference_url", None)
@@ -936,6 +974,71 @@ def test_load_publishable_result_allows_legacy_missing_model_reference(tmp_path)
     assert parsed.model.reference_url is None
 
 
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda result: result["hardware"].__setitem__("architecture", "x86_64"),
+            "Apple Silicon architecture",
+        ),
+        (
+            lambda result: result["hardware"].__setitem__("chip", "Intel Xeon"),
+            "Apple M-series chip",
+        ),
+        (
+            lambda result: result["hardware"].__setitem__("macos_version", "unknown"),
+            "valid macOS version",
+        ),
+        (
+            lambda result: result["meta"].__setitem__(
+                "timestamp", "2099-01-01T00:00:00Z"
+            ),
+            "too far in the future",
+        ),
+        (
+            lambda result: result["meta"].__setitem__(
+                "system_ram_monitor_errors", 1
+            ),
+            "system_ram_monitor_errors=1",
+        ),
+        (
+            lambda result: result["meta"]["thermal_monitor"].__setitem__(
+                "sampling_errors", 1
+            ),
+            "thermal_monitor.sampling_errors=1",
+        ),
+    ],
+)
+def test_load_publishable_result_rejects_untrusted_environment_metadata(
+    tmp_path,
+    mutate,
+    message,
+):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    mutate(result)
+    result_path = write_result(tmp_path / "result.json", result)
+
+    with pytest.raises(SubmissionError, match=message):
+        load_publishable_result(result_path)
+
+
+def test_load_publishable_result_requires_monitor_diagnostic_counters(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["meta"].pop("system_ram_monitor_errors")
+    result["meta"].pop("engine_ram_monitor_errors")
+    result["meta"]["thermal_monitor"].pop("sampling_errors")
+    result_path = write_result(tmp_path / "result.json", result)
+
+    with pytest.raises(SubmissionError, match="monitor diagnostic counters"):
+        load_publishable_result(result_path)
+
+    _, parsed = load_publishable_result(
+        result_path,
+        allow_legacy_missing_monitor_diagnostics=True,
+    )
+    assert parsed.meta.system_ram_monitor_errors == 0
+
+
 def resize_result_trials(result: dict, count: int) -> None:
     for key in (
         "ttft_cold_raw",
@@ -943,6 +1046,7 @@ def resize_result_trials(result: dict, count: int) -> None:
         "tokens_per_second_raw",
         "throughput_elapsed_seconds_raw",
         "decode_tokens_per_second_raw",
+        "decode_elapsed_seconds_raw",
         "completion_tokens_raw",
     ):
         result["trials"][key] = result["trials"][key][:count]
@@ -976,6 +1080,7 @@ def expand_result_to_six_trials(result: dict) -> None:
         "tokens_per_second_raw",
         "throughput_elapsed_seconds_raw",
         "decode_tokens_per_second_raw",
+        "decode_elapsed_seconds_raw",
         "completion_tokens_raw",
     ):
         result["trials"][key].append(result["trials"][key][-1])
@@ -1023,6 +1128,12 @@ def set_completion_tokens(result: dict, tokens: int) -> None:
     throughput_stats = compute_stats(result["trials"]["tokens_per_second_raw"])
     result["metrics"]["tokens_per_second"] = throughput_stats
     result["metrics"]["request_tokens_per_second"] = throughput_stats
+    decode_tps = [
+        round((tokens - 1) / elapsed, 2)
+        for elapsed in result["trials"]["decode_elapsed_seconds_raw"]
+    ]
+    result["trials"]["decode_tokens_per_second_raw"] = decode_tps
+    result["metrics"]["decode_tokens_per_second"] = compute_stats(decode_tps)
 
 
 def make_sustained_with_two_trials(result: dict) -> None:

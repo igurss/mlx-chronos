@@ -17,7 +17,15 @@ RECENT_BENCHMARK_WARNING_SECONDS = 300.0
 
 # Phase durations and total runtime are rounded independently before validation.
 PHASE_TIMING_TOLERANCE_SECONDS = 0.05
+MAX_PHASE_TIMING_OVERHEAD_SECONDS = 30.0
 ERROR_RESPONSE_BODY_LIMIT = 500
+
+THERMAL_STATE_ORDER = {
+    "nominal": 0,
+    "fair": 1,
+    "serious": 2,
+    "critical": 3,
+}
 
 ENGINE_NAME_OMLX = "omlx"
 ENGINE_NAME_RAPID_MLX = "rapid-mlx"

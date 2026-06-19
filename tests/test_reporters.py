@@ -22,6 +22,16 @@ def test_base_reporter_slug():
     assert reporter._slug("  ") == "unknown"
     assert reporter._slug("!@#") == "unknown"
 
+
+def test_format_stats_includes_unit_for_p95():
+    reporter = DummyReporter()
+    rendered = reporter._format_stats(
+        {"mean": 10.0, "stddev": 1.0, "min": 8.0, "max": 12.0, "p95": 11.5},
+        "tokens/s",
+    )
+
+    assert rendered.endswith("p95 11.5 tokens/s")
+
 def test_generate_base_filename_string_timestamp():
     reporter = DummyReporter()
     result = {
@@ -87,14 +97,14 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Request throughput:** 18.44 tokens/s" in content
     assert "**Decode throughput:** 18.654 tokens/s" in content
     assert "**Decode timing source:** client_stream" in content
-    assert "**Thermal state:** unavailable_permission" in content
+    assert "**Thermal state:** nominal" in content
     assert "**Power source:** ac_power" in content
     assert "**Low Power Mode:** off" in content
     assert "min 18.27, max 18.51" in content
     assert "## Thermal Monitor" in content
-    assert "**Source:** unavailable" in content
+    assert "**Source:** foundation" in content
     assert "**Sample interval:** 1.0 s" in content
-    assert "**State:** unavailable_foundation -> unavailable_foundation" in content
+    assert "**State:** nominal -> nominal" in content
     assert "## Phase Timings" in content
     assert "**Throughput:** 27.104 s" in content
     assert "**RAM measurement method:** system_fallback" in content

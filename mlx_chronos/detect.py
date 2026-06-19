@@ -4,7 +4,11 @@ import os
 import importlib
 import psutil
 from dataclasses import dataclass
-from functools import lru_cache
+
+
+_system_profiler_hardware_cache: dict[str, str] | None = None
+_chip_model_cache: str | None = None
+_machine_model_cache: str | None = None
 
 
 @dataclass(frozen=True)
@@ -15,9 +19,11 @@ class BenchmarkConditionWarning:
     detail: str
 
 
-@lru_cache(maxsize=1)
 def get_system_profiler_hardware() -> dict[str, str]:
-    """Return selected hardware fields from system_profiler when available."""
+    """Return hardware fields, caching only successful profiler results."""
+    global _system_profiler_hardware_cache
+    if _system_profiler_hardware_cache is not None:
+        return _system_profiler_hardware_cache
     try:
         result = subprocess.run(
             ["system_profiler", "SPHardwareDataType"],
@@ -27,6 +33,8 @@ def get_system_profiler_hardware() -> dict[str, str]:
         )
     except Exception:
         return {}
+    if result.returncode != 0:
+        return {}
 
     fields = {}
     for line in result.stdout.splitlines():
@@ -34,45 +42,63 @@ def get_system_profiler_hardware() -> dict[str, str]:
         if not separator:
             continue
         fields[key.strip()] = value.strip()
+    if fields:
+        _system_profiler_hardware_cache = fields
     return fields
 
 
-@lru_cache(maxsize=1)
 def get_chip_model() -> str:
     """Detect the Apple Silicon chip model (e.g. 'Apple M3 Ultra')."""
+    global _chip_model_cache
+    if _chip_model_cache is not None:
+        return _chip_model_cache
     try:
         result = subprocess.run(
             ["sysctl", "-n", "machdep.cpu.brand_string"],
             capture_output=True, text=True
         )
         chip = result.stdout.strip()
-        if chip:
+        if result.returncode == 0 and chip:
+            _chip_model_cache = chip
             return chip
     except Exception:
         pass
-    chip = get_system_profiler_hardware().get("Chip")
-    if chip:
-        return chip
+    profiler_chip = get_system_profiler_hardware().get("Chip")
+    if profiler_chip:
+        _chip_model_cache = profiler_chip
+        return profiler_chip
     return "unknown"
 
 
-@lru_cache(maxsize=1)
 def get_machine_model() -> str:
     """Return the Mac machine identifier (e.g. 'Mac14,2')."""
+    global _machine_model_cache
+    if _machine_model_cache is not None:
+        return _machine_model_cache
     try:
         result = subprocess.run(
             ["sysctl", "-n", "hw.model"],
             capture_output=True, text=True
         )
         model = result.stdout.strip()
-        if model:
+        if result.returncode == 0 and model:
+            _machine_model_cache = model
             return model
     except Exception:
         pass
-    model = get_system_profiler_hardware().get("Model Identifier")
-    if model:
-        return model
+    profiler_model = get_system_profiler_hardware().get("Model Identifier")
+    if profiler_model:
+        _machine_model_cache = profiler_model
+        return profiler_model
     return "unknown"
+
+
+def clear_hardware_detection_caches() -> None:
+    """Clear successful hardware-detection caches, primarily for tests."""
+    global _system_profiler_hardware_cache, _chip_model_cache, _machine_model_cache
+    _system_profiler_hardware_cache = None
+    _chip_model_cache = None
+    _machine_model_cache = None
 
 
 def get_memory_gb() -> float:

@@ -1,5 +1,6 @@
 from datetime import datetime
 import math
+import re
 import statistics
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
@@ -8,10 +9,12 @@ from typing import Optional, Annotated, Literal
 from mlx_chronos.constants import (
     VALID_ENGINE_NAMES,
     MAX_TRIALS,
+    MAX_PHASE_TIMING_OVERHEAD_SECONDS,
     P95_MIN_TRIALS,
     PHASE_TIMING_TOLERANCE_SECONDS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
+    THERMAL_STATE_ORDER,
 )
 from mlx_chronos.integrity import INTEGRITY_DIGEST_HEX_LENGTH
 from mlx_chronos.measurements import (
@@ -133,7 +136,18 @@ class Hardware(ChronosBaseModel):
         normalized = value.strip()
         if normalized == "unavailable_no_sudo":
             return "unavailable_permission"
-        return normalized or "unavailable_unknown"
+        normalized = normalized or "unavailable_unknown"
+        if normalized in {"nominal", "fair", "serious", "critical"}:
+            return normalized
+        if normalized.startswith("unavailable_") and re.fullmatch(
+            r"[a-z0-9_]+",
+            normalized,
+        ):
+            return normalized
+        raise ValueError(
+            "thermal_state must be nominal/fair/serious/critical or an "
+            "unavailable_* status"
+        )
 
 
 class Engine(ChronosBaseModel):
@@ -148,6 +162,26 @@ class Engine(ChronosBaseModel):
                 f"Unknown engine: '{value}'. Available: {sorted(VALID_ENGINE_NAMES)}"
             )
         return value
+
+
+def normalize_model_quantization(value: str) -> str:
+    normalized = (
+        value.strip().lower().replace("-", "").replace("_", "").replace(" ", "")
+    )
+    if not normalized:
+        raise ValueError("quantization must not be empty")
+    aliases = {
+        "4bits": "4bit",
+        "int4": "4bit",
+        "q4": "4bit",
+        "8bits": "8bit",
+        "int8": "8bit",
+        "q8": "8bit",
+        "float16": "fp16",
+        "f16": "fp16",
+        "bfloat16": "bf16",
+    }
+    return aliases.get(normalized, normalized)
 
 
 class Model(ChronosBaseModel):
@@ -185,6 +219,14 @@ class Model(ChronosBaseModel):
         None,
         description="Optional model architecture identifier",
     )
+    family: Optional[str] = Field(
+        None,
+        description="Optional model family reported by the inference engine",
+    )
+    parameter_size: Optional[str] = Field(
+        None,
+        description="Optional model parameter-size label reported by the engine",
+    )
 
     @field_validator("name")
     @classmethod
@@ -202,21 +244,7 @@ class Model(ChronosBaseModel):
     @field_validator("quantization")
     @classmethod
     def normalize_quantization(cls, value: str) -> str:
-        normalized = value.strip().lower().replace("-", "").replace("_", "").replace(" ", "")
-        if not normalized:
-            raise ValueError("quantization must not be empty")
-        aliases = {
-            "4bits": "4bit",
-            "int4": "4bit",
-            "q4": "4bit",
-            "8bits": "8bit",
-            "int8": "8bit",
-            "q8": "8bit",
-            "float16": "fp16",
-            "f16": "fp16",
-            "bfloat16": "bf16",
-        }
-        return aliases.get(normalized, normalized)
+        return normalize_model_quantization(value)
 
     @field_validator(
         "format",
@@ -226,6 +254,8 @@ class Model(ChronosBaseModel):
         "tokenizer_hash",
         "chat_template_hash",
         "architecture",
+        "family",
+        "parameter_size",
     )
     @classmethod
     def normalize_optional_identity_field(cls, value: str | None) -> str | None:
@@ -280,7 +310,7 @@ class Metrics(ChronosBaseModel):
         description="Decode-only throughput (tok/s) when reliable engine timing is available",
     )
     decode_timing_source: DecodeTimingSource = Field(
-        DECODE_TIMING_UNAVAILABLE,
+        "unavailable",
         description="Source used for decode-only throughput timing",
     )
     ram_peak_gb: NonNegativeFloat = Field(
@@ -377,6 +407,13 @@ class Trials(ChronosBaseModel):
         None,
         description="Raw decode-only tok/s values per throughput trial when available",
     )
+    decode_elapsed_seconds_raw: Optional[list[PositiveFloat]] = Field(
+        None,
+        description=(
+            "Client-observed first-content-to-stream-end seconds for each "
+            "decode throughput trial"
+        ),
+    )
     completion_tokens_raw: list[NonNegativeInt] = Field(
         ...,
         description=(
@@ -395,23 +432,28 @@ class Trials(ChronosBaseModel):
 
     @model_validator(mode="after")
     def validate_raw_lengths(self):
-        raw_lists = [
-            self.ttft_cold_raw,
-            self.ttft_cached_raw,
-            self.tokens_per_second_raw,
-            self.throughput_elapsed_seconds_raw,
-            self.completion_tokens_raw,
-        ]
-        if self.decode_tokens_per_second_raw is not None:
-            raw_lists.append(self.decode_tokens_per_second_raw)
-        if self.throughput_progress_samples_raw is not None:
-            raw_lists.append(self.throughput_progress_samples_raw)
         lengths = {
-            len(raw_values)
-            for raw_values in raw_lists
+            len(self.ttft_cold_raw),
+            len(self.ttft_cached_raw),
+            len(self.tokens_per_second_raw),
+            len(self.throughput_elapsed_seconds_raw),
+            len(self.completion_tokens_raw),
         }
+        if self.decode_tokens_per_second_raw is not None:
+            lengths.add(len(self.decode_tokens_per_second_raw))
+        if self.decode_elapsed_seconds_raw is not None:
+            lengths.add(len(self.decode_elapsed_seconds_raw))
+        if self.throughput_progress_samples_raw is not None:
+            lengths.add(len(self.throughput_progress_samples_raw))
         if lengths != {self.count}:
             raise ValueError("trials.count must match all raw metric list lengths")
+        if (
+            self.decode_tokens_per_second_raw is None
+            and self.decode_elapsed_seconds_raw is not None
+        ):
+            raise ValueError(
+                "decode_elapsed_seconds_raw requires decode_tokens_per_second_raw"
+            )
         return self
 
 
@@ -525,6 +567,14 @@ class PhaseTimings(ChronosBaseModel):
         )
         if self.total_runtime + PHASE_TIMING_TOLERANCE_SECONDS < phase_sum:
             raise ValueError("total_runtime must cover the sum of benchmark phases")
+        if (
+            self.total_runtime - phase_sum
+            > MAX_PHASE_TIMING_OVERHEAD_SECONDS + PHASE_TIMING_TOLERANCE_SECONDS
+        ):
+            raise ValueError(
+                "total_runtime exceeds benchmark phase durations by more than "
+                f"{MAX_PHASE_TIMING_OVERHEAD_SECONDS:g} seconds"
+            )
         return self
 
 
@@ -540,18 +590,47 @@ class ThermalMonitor(ChronosBaseModel):
     start_state: str = Field(..., min_length=1, description="First observed thermal state")
     end_state: str = Field(..., min_length=1, description="Last observed thermal state")
     worst_state: str = Field(..., min_length=1, description="Worst observed thermal state")
-    samples: PositiveInt = Field(..., description="Number of thermal samples collected")
+    samples: NonNegativeInt = Field(..., description="Number of valid thermal samples collected")
     changed_during_run: bool = Field(..., description="Whether thermal state changed during the run")
     non_nominal_observed: bool = Field(..., description="Whether a known non-nominal state was observed")
     non_nominal_phases: list[str] = Field(
         default_factory=list,
         description="Benchmark phases where a known non-nominal state was observed",
     )
+    sampling_errors: NonNegativeInt = Field(
+        0,
+        description="Number of thermal monitor sampling errors during the run",
+    )
 
     @model_validator(mode="after")
     def validate_thermal_monitor(self):
-        if self.start_state != self.end_state and not self.changed_during_run:
-            raise ValueError("changed_during_run must be true when start and end differ")
+        if not self.changed_during_run and (
+            self.start_state != self.end_state or self.worst_state != self.start_state
+        ):
+            raise ValueError(
+                "unchanged thermal monitor must have identical start, end, and "
+                "worst states"
+            )
+        worst_rank = THERMAL_STATE_ORDER.get(self.worst_state)
+        for label, state in (
+            ("start_state", self.start_state),
+            ("end_state", self.end_state),
+        ):
+            state_rank = THERMAL_STATE_ORDER.get(state)
+            if state_rank is not None and (
+                worst_rank is None or state_rank > worst_rank
+            ):
+                raise ValueError(
+                    f"worst_state must be at least as severe as {label}"
+                )
+        worst_is_non_nominal = (
+            self.worst_state in THERMAL_STATE_ORDER
+            and self.worst_state != "nominal"
+        )
+        if self.non_nominal_observed != worst_is_non_nominal:
+            raise ValueError(
+                "non_nominal_observed must match the recorded worst_state"
+            )
         if self.non_nominal_phases and not self.non_nominal_observed:
             raise ValueError(
                 "non_nominal_observed must be true when non_nominal_phases is non-empty"
@@ -596,6 +675,14 @@ class Meta(ChronosBaseModel):
     warmup_failures: NonNegativeInt = Field(
         ...,
         description="Number of unrecorded warmup calls that failed before measurement",
+    )
+    system_ram_monitor_errors: NonNegativeInt = Field(
+        0,
+        description="Number of system RAM sampling errors during the run",
+    )
+    engine_ram_monitor_errors: NonNegativeInt = Field(
+        0,
+        description="Number of diagnostic engine RSS sampling errors during the run",
     )
     word_fallback_warning: bool = Field(
         ...,
@@ -674,11 +761,40 @@ class BenchmarkResult(ChronosBaseModel):
                 self.trials.decode_tokens_per_second_raw,
                 "metrics.decode_tokens_per_second",
             )
+            if self.trials.decode_elapsed_seconds_raw is not None:
+                self._assert_decode_tps_matches_tokens_and_elapsed()
         self._assert_request_tps_matches_tokens_and_elapsed()
         self._assert_throughput_token_bounds()
         self._assert_progress_samples_match_final_trials()
         self._assert_protocol_trial_alignment()
         return self
+
+    def _assert_decode_tps_matches_tokens_and_elapsed(self) -> None:
+        tolerance = 0.02
+        decode_elapsed = self.trials.decode_elapsed_seconds_raw
+        decode_tps = self.trials.decode_tokens_per_second_raw
+        if decode_elapsed is None or decode_tps is None:
+            return
+        for index, (tps, tokens, elapsed) in enumerate(
+            zip(
+                decode_tps,
+                self.trials.completion_tokens_raw,
+                decode_elapsed,
+            ),
+            start=1,
+        ):
+            if tokens <= 1:
+                raise ValueError(
+                    "decode throughput requires more than one completion token "
+                    f"(trial {index})"
+                )
+            expected_tps = round((tokens - 1) / elapsed, 2)
+            if abs(tps - expected_tps) > tolerance:
+                raise ValueError(
+                    "trials.decode_tokens_per_second_raw must match completion "
+                    "tokens minus one divided by decode elapsed seconds "
+                    f"(trial {index}: expected {expected_tps}, got {tps})"
+                )
 
     def _assert_request_tps_matches_tokens_and_elapsed(self) -> None:
         tolerance = 0.02

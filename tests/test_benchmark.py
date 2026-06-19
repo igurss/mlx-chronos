@@ -40,6 +40,7 @@ def throughput_measurement(
     source: str = "usage.completion_tokens",
     elapsed: float = 5.0,
     decode_tps: float | None = None,
+    decode_elapsed: float | None = None,
     progress_samples: tuple[dict, ...] = (),
 ) -> ThroughputMeasurement:
     return ThroughputMeasurement(
@@ -48,6 +49,11 @@ def throughput_measurement(
         token_count_source=source,
         elapsed_seconds=elapsed,
         decode_tokens_per_second=decode_tps,
+        decode_elapsed_seconds=(
+            decode_elapsed
+            if decode_elapsed is not None
+            else ((tokens - 1) / decode_tps if decode_tps is not None else None)
+        ),
         decode_timing_source="client_stream" if decode_tps is not None else "unavailable",
         progress_samples=progress_samples,
     )
@@ -275,10 +281,10 @@ def test_system_ram_tracker_start_survives_sampling_error():
     ):
         tracker = SystemRAMTracker(interval=0.001)
         tracker.start()
-        peak_gb, peak_percent = tracker.stop()
+        with pytest.raises(RuntimeError, match="no valid samples"):
+            tracker.stop()
 
-    assert peak_gb == 0.0
-    assert peak_percent == 0.0
+    assert tracker.sample_errors >= 1
 
 def test_thermal_state_tracker_summarizes_non_nominal_phases():
     states = iter(["nominal", "fair", "serious"])
@@ -489,7 +495,12 @@ def test_run_benchmark_records_model_format(mock_detect, mock_get_engine):
 
     mock_engine = MagicMock()
     mock_engine.name = "ollama"
-    mock_engine.validate_model_backend.return_value = {"format": "safetensors"}
+    mock_engine.validate_model_backend.return_value = {
+        "format": "safetensors",
+        "quantization": "nvfp4",
+        "family": "qwen3",
+        "parameter_size": "4.0B",
+    }
     mock_engine.measure_tokens_per_second.return_value = 20.0
     mock_engine.measure_ttft.return_value = 0.5
     mock_engine.measure_throughput.return_value = throughput_measurement()
@@ -513,8 +524,42 @@ def test_run_benchmark_records_model_format(mock_detect, mock_get_engine):
         )
 
     assert result["model"]["format"] == "safetensors"
+    assert result["model"]["quantization"] == "nvfp4"
+    assert result["model"]["family"] == "qwen3"
+    assert result["model"]["parameter_size"] == "4.0B"
     mock_engine.validate_model_backend.assert_called_once_with("qwen3.5:4b-mlx")
     validate_integrity_seal(result)
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_rejects_declared_ollama_quantization_mismatch(
+    mock_detect,
+    mock_get_engine,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+    mock_engine = MagicMock()
+    mock_engine.validate_model_backend.return_value = {
+        "format": "safetensors",
+        "quantization": "nvfp4",
+    }
+    mock_get_engine.return_value = mock_engine
+
+    with pytest.raises(RuntimeError, match="quantization does not match"):
+        run_benchmark(
+            engine_name="ollama",
+            model_name="qwen3.5:4b-mlx",
+            model_quantization="4bit",
+            trials=1,
+        )
 
 
 @patch("mlx_chronos.benchmark.get_engine")
@@ -1014,6 +1059,47 @@ def test_run_benchmark_aborts_when_all_warmups_fail(mock_detect, mock_get_engine
             )
 
     mock_engine.measure_ttft.assert_not_called()
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_aborts_when_cache_priming_fails(
+    mock_detect,
+    mock_get_engine,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+    mock_engine = MagicMock()
+    mock_engine.name = "omlx"
+    mock_engine.measure_tokens_per_second.return_value = 20.0
+    mock_engine.measure_ttft.side_effect = [0.5, RuntimeError("priming failed")]
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory") as mock_memory:
+        memory = MagicMock()
+        memory.total = 8 * (1024**3)
+        memory.available = 2 * (1024**3)
+        mock_memory.return_value = memory
+
+        with pytest.raises(RuntimeError, match="cache priming failed"):
+            run_benchmark(
+                engine_name="omlx",
+                model_name="org/test-model",
+                model_quantization="4bit",
+                trials=1,
+                ram_sample_interval=0.01,
+            )
+
+    mock_engine.measure_throughput.assert_not_called()
 
 
 @patch("mlx_chronos.benchmark.get_engine")

@@ -12,5 +12,6 @@ class ThroughputMeasurement:
     token_count_source: str
     elapsed_seconds: float
     decode_tokens_per_second: float | None = None
+    decode_elapsed_seconds: float | None = None
     decode_timing_source: str = DECODE_TIMING_UNAVAILABLE
     progress_samples: tuple[dict, ...] = ()

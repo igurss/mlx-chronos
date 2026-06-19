@@ -554,9 +554,9 @@ class BaseEngine(ABC):
         for nested_key in ("metadata", "meta"):
             nested = mapping.get(nested_key)
             if isinstance(nested, dict):
-                version = self._version_from_mapping(nested, version_keys)
-                if version:
-                    return version
+                nested_version = self._version_from_mapping(nested, version_keys)
+                if nested_version:
+                    return nested_version
         return None
 
     def _get_version_from_models_endpoint(
@@ -626,6 +626,7 @@ class BaseEngine(ABC):
                 else httpx.stream(method, url, **kwargs)
             ),
             action=f"{self.name} stream {method} {url}",
+            attempts=1,
             logger=logger,
         )
 
@@ -730,7 +731,7 @@ class BaseEngine(ABC):
             stream_finished_at = None
             completion_text_parts = []
             completion_tokens = None
-            progress_samples = []
+            progress_samples: list[dict] = []
             next_progress_sample_at = progress_sample_interval_tokens
 
             try:
@@ -785,6 +786,7 @@ class BaseEngine(ABC):
                                         completion_text_parts
                                     )
                                     while estimated_tokens >= next_progress_sample_at:
+                                        assert progress_sample_interval_tokens is not None
                                         self._append_progress_sample(
                                             progress_samples,
                                             next_progress_sample_at,
@@ -837,6 +839,7 @@ class BaseEngine(ABC):
 
         request_tps = round(completion_tokens / rounded_elapsed, 2)
         decode_tps = None
+        rounded_decode_elapsed = None
         decode_source = DECODE_TIMING_UNAVAILABLE
         decode_elapsed = elapsed - (first_token_at - start)
         if (
@@ -844,7 +847,13 @@ class BaseEngine(ABC):
             and completion_tokens > 1
             and decode_elapsed > 0
         ):
-            decode_tps = round((completion_tokens - 1) / decode_elapsed, 2)
+            rounded_decode_elapsed = round(decode_elapsed, 3)
+            if rounded_decode_elapsed <= 0:
+                rounded_decode_elapsed = 0.001
+            decode_tps = round(
+                (completion_tokens - 1) / rounded_decode_elapsed,
+                2,
+            )
             decode_source = DECODE_TIMING_CLIENT_STREAM
         finalized_progress_samples = []
         if progress_sample_interval_tokens is not None:
@@ -872,6 +881,7 @@ class BaseEngine(ABC):
             token_count_source=token_count_source,
             elapsed_seconds=rounded_elapsed,
             decode_tokens_per_second=decode_tps,
+            decode_elapsed_seconds=rounded_decode_elapsed,
             decode_timing_source=decode_source,
             progress_samples=tuple(finalized_progress_samples),
         )
@@ -1166,7 +1176,7 @@ class OllamaEngine(BaseEngine):
     def is_installed(self) -> bool:
         return shutil.which("ollama") is not None
 
-    def _server_identity_matches(self) -> bool:
+    def _server_version(self) -> str | None:
         try:
             response = self._http_get(
                 f"{self.root_url()}/api/version",
@@ -1175,11 +1185,19 @@ class OllamaEngine(BaseEngine):
                 log_retries=False,
             )
             if response.status_code != 200:
-                return False
+                return None
             data = response.json()
         except Exception:
-            return False
-        return isinstance(data, dict) and isinstance(data.get("version"), str)
+            return None
+        if not isinstance(data, dict):
+            return None
+        version = data.get("version")
+        if not isinstance(version, str) or not version.strip():
+            return None
+        return version.strip()
+
+    def _server_identity_matches(self) -> bool:
+        return self._server_version() is not None
 
     def validate_model_backend(self, model: str) -> dict[str, str]:
         """Require Ollama MLX models to use safetensors, not GGUF."""
@@ -1278,9 +1296,36 @@ class OllamaEngine(BaseEngine):
                 )
             )
 
-        return {"format": model_format}
+        raw_quantization = details.get("quantization_level")
+        if not isinstance(raw_quantization, str) or not raw_quantization.strip():
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "could not verify Ollama model quantization: "
+                    "details.quantization_level is missing",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+
+        metadata = {
+            "format": model_format,
+            "quantization": raw_quantization.strip(),
+        }
+        for response_key, metadata_key in (
+            ("family", "family"),
+            ("parameter_size", "parameter_size"),
+        ):
+            value = details.get(response_key)
+            if isinstance(value, str) and value.strip():
+                metadata[metadata_key] = value.strip()
+        return metadata
 
     def get_version(self) -> str:
+        server_version = self._server_version()
+        if server_version is not None:
+            return server_version
         try:
             result = subprocess.run(
                 ["ollama", "--version"], capture_output=True, text=True, timeout=3

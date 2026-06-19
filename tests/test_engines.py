@@ -514,24 +514,23 @@ def test_measure_tokens_per_second_wraps_http_errors(mock_stream):
     with patch("mlx_chronos.http_retry.time.sleep"):
         with pytest.raises(RuntimeError, match="engine=omlx; action=measure throughput"):
             engine.measure_tokens_per_second("test prompt", "default", 100)
-    assert mock_stream.call_count == 3
+    assert mock_stream.call_count == 1
 
 
 @patch("httpx.stream")
-def test_measure_tokens_per_second_retries_stream_setup_failure(mock_stream):
+def test_measure_tokens_per_second_does_not_retry_stream_setup_failure(mock_stream):
     mock_stream.side_effect = [
         httpx.ConnectError("connection reset"),
         stream_response(completion_stream(content="hello", completion_tokens=150)),
     ]
 
     engine = OMLXEngine()
-    with patch("mlx_chronos.http_retry.time.sleep") as mock_sleep, \
-         patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
-        measurement = engine.measure_throughput("test prompt", "default", 100)
+    with patch("mlx_chronos.http_retry.time.sleep") as mock_sleep:
+        with pytest.raises(RuntimeError, match="connection reset"):
+            engine.measure_throughput("test prompt", "default", 100)
 
-    assert measurement.request_tokens_per_second == 100.0
-    assert mock_stream.call_count == 2
-    mock_sleep.assert_called_once()
+    assert mock_stream.call_count == 1
+    mock_sleep.assert_not_called()
 
 @patch("httpx.stream")
 def test_measure_tokens_per_second_reports_status_model_and_body(mock_stream):
@@ -730,13 +729,20 @@ def test_ollama_validate_model_backend_accepts_safetensors(mock_post):
         "details": {
             "format": "safetensors",
             "quantization_level": "nvfp4",
+            "family": "qwen3",
+            "parameter_size": "4.0B",
         }
     }
     mock_post.return_value = response
 
     metadata = OllamaEngine().validate_model_backend("qwen3.5:4b-mlx")
 
-    assert metadata == {"format": "safetensors"}
+    assert metadata == {
+        "format": "safetensors",
+        "quantization": "nvfp4",
+        "family": "qwen3",
+        "parameter_size": "4.0B",
+    }
     assert mock_post.call_args.args[0] == "http://localhost:11434/api/show"
     assert mock_post.call_args.kwargs["json"] == {"model": "qwen3.5:4b-mlx"}
 
@@ -773,6 +779,16 @@ def test_ollama_validate_model_backend_requires_details_format(mock_post):
     mock_post.return_value = response
 
     with pytest.raises(RuntimeError, match="details.format is missing"):
+        OllamaEngine().validate_model_backend("qwen3.5:4b-mlx")
+
+
+@patch("httpx.post")
+def test_ollama_validate_model_backend_requires_quantization(mock_post):
+    response = MagicMock()
+    response.json.return_value = {"details": {"format": "safetensors"}}
+    mock_post.return_value = response
+
+    with pytest.raises(RuntimeError, match="quantization_level is missing"):
         OllamaEngine().validate_model_backend("qwen3.5:4b-mlx")
 
 
@@ -899,7 +915,19 @@ def test_ollama_get_version(mock_run):
     mock_run.return_value = mock_result
 
     engine = OllamaEngine()
-    assert engine.get_version() == "0.24.0"
+    with patch.object(engine, "_server_version", return_value=None):
+        assert engine.get_version() == "0.24.0"
+
+
+@patch("httpx.get")
+def test_ollama_get_version_prefers_server_version(mock_get):
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"version": "0.30.5"}
+    mock_get.return_value = response
+
+    with patch("subprocess.run") as mock_run:
+        assert OllamaEngine().get_version() == "0.30.5"
+    mock_run.assert_not_called()
 
 
 @patch("subprocess.run")
@@ -909,7 +937,9 @@ def test_ollama_get_version_ignores_failed_command_output(mock_run):
     mock_result.returncode = 1
     mock_run.return_value = mock_result
 
-    assert OllamaEngine().get_version() == "unknown"
+    engine = OllamaEngine()
+    with patch.object(engine, "_server_version", return_value=None):
+        assert engine.get_version() == "unknown"
 
 @patch("importlib.metadata.version", return_value="0.4.0rc1")
 def test_vllm_mlx_get_version_uses_package_metadata(mock_version):

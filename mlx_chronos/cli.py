@@ -19,7 +19,7 @@ from mlx_chronos.benchmark import (
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
-from mlx_chronos.reporters import JSONReporter, MarkdownReporter
+from mlx_chronos.reporters import BaseReporter, JSONReporter, MarkdownReporter
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
     DEFAULT_SUBMITTER_EMAIL,
@@ -153,6 +153,75 @@ def _emit_result_warnings(result: dict) -> None:
         )
 
 
+def _result_warning_labels(result: dict) -> list[str]:
+    meta = result.get("meta", {})
+    hardware = result.get("hardware", {})
+    labels = []
+    for field, label in (
+        ("word_fallback_warning", "estimated token counts"),
+        ("engine_version_warning", "unknown engine version"),
+        ("sustained_throttling_warning", "possible sustained throttling"),
+        ("cached_ttft_warning", "cached TTFT close to cold TTFT"),
+    ):
+        if meta.get(field):
+            labels.append(label)
+    if meta.get("warmup_failures", 0):
+        labels.append("warmup failures")
+    if meta.get("system_ram_monitor_errors", 0):
+        labels.append("system RAM monitor errors")
+    if meta.get("engine_ram_monitor_errors", 0):
+        labels.append("engine RAM monitor errors")
+    thermal_monitor = meta.get("thermal_monitor") or {}
+    if thermal_monitor.get("sampling_errors", 0):
+        labels.append("thermal monitor errors")
+    worst_thermal_state = thermal_monitor.get("worst_state")
+    if str(worst_thermal_state or "").startswith("unavailable"):
+        labels.append("thermal state unavailable")
+    elif worst_thermal_state not in {None, "nominal"}:
+        labels.append(f"thermal state {worst_thermal_state}")
+    if hardware.get("power_source") == "battery":
+        labels.append("battery power")
+    if hardware.get("low_power_mode") == "on":
+        labels.append("Low Power Mode")
+    return labels
+
+
+def _log_result_summary(result: dict) -> None:
+    metrics = result["metrics"]
+    meta = result["meta"]
+    thermal = meta["thermal_monitor"]
+    throughput = metrics["tokens_per_second"]
+    cold = metrics["ttft_cold"]
+    cached = metrics["ttft_cached"]
+    warnings = _result_warning_labels(result)
+
+    logger.info("\n%s", "=" * 50)
+    logger.info("  Results Summary")
+    logger.info(
+        "  Throughput : %.2f tok/s (±%.2f)",
+        throughput["mean"],
+        throughput["stddev"],
+    )
+    logger.info(
+        "  TTFT       : cold %.3fs | cached %.3fs",
+        cold["mean"],
+        cached["mean"],
+    )
+    logger.info(
+        "  Thermal    : %s -> %s (worst: %s)",
+        thermal["start_state"],
+        thermal["end_state"],
+        thermal["worst_state"],
+    )
+    logger.info(
+        "  Peak RAM   : %.2f GB (%.1f%%)",
+        metrics["system_ram_peak_gb"],
+        metrics["system_ram_peak_percent"],
+    )
+    logger.info("  Warnings   : %s", ", ".join(warnings) if warnings else "none")
+    logger.info("%s\n", "=" * 50)
+
+
 def _run_model_preflight(engine_name: str, model: str) -> None:
     """Run an opt-in model access probe before the measured benchmark."""
     logger.info("Running preflight model access check...")
@@ -270,7 +339,8 @@ def cmd_run(args):
         raise SystemExit(1) from exc
 
     _emit_result_warnings(result)
-    reporters = []
+    _log_result_summary(result)
+    reporters: list[BaseReporter] = []
     if args.format in ("json", "all"):
         reporters.append(JSONReporter())
     if args.format in ("markdown", "all"):

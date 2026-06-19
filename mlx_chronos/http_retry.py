@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 import logging
 import sys
 import time
@@ -14,6 +14,7 @@ import httpx
 
 DEFAULT_HTTP_RETRY_ATTEMPTS = 3
 DEFAULT_HTTP_RETRY_BACKOFF_SECONDS = 0.25
+DEFAULT_HTTP_RETRY_MAX_BACKOFF_SECONDS = 8.0
 TRANSIENT_HTTP_EXCEPTIONS = (
     httpx.TimeoutException,
     httpx.NetworkError,
@@ -22,17 +23,43 @@ TRANSIENT_HTTP_EXCEPTIONS = (
 T = TypeVar("T")
 
 
+def _validate_retry_settings(
+    attempts: int,
+    backoff_seconds: float,
+    max_backoff_seconds: float,
+) -> None:
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    if backoff_seconds < 0:
+        raise ValueError("backoff_seconds must be non-negative")
+    if max_backoff_seconds < 0:
+        raise ValueError("max_backoff_seconds must be non-negative")
+
+
+def _retry_delay(
+    backoff_seconds: float,
+    max_backoff_seconds: float,
+    attempt: int,
+) -> float:
+    delay = min(backoff_seconds, max_backoff_seconds)
+    for _ in range(max(0, attempt - 1)):
+        if delay >= max_backoff_seconds:
+            break
+        delay = min(delay * 2, max_backoff_seconds)
+    return delay
+
+
 def request_with_retry(
     call: Callable[[], T],
     *,
     action: str,
     attempts: int = DEFAULT_HTTP_RETRY_ATTEMPTS,
     backoff_seconds: float = DEFAULT_HTTP_RETRY_BACKOFF_SECONDS,
+    max_backoff_seconds: float = DEFAULT_HTTP_RETRY_MAX_BACKOFF_SECONDS,
     logger: logging.Logger | None = None,
 ) -> T:
     """Run a non-streaming HTTP call with retries for transient failures."""
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
+    _validate_retry_settings(attempts, backoff_seconds, max_backoff_seconds)
 
     for attempt in range(1, attempts + 1):
         try:
@@ -48,20 +75,23 @@ def request_with_retry(
                     attempt + 1,
                     attempts,
                 )
-            time.sleep(backoff_seconds * (2 ** (attempt - 1)))
+            time.sleep(
+                _retry_delay(backoff_seconds, max_backoff_seconds, attempt)
+            )
 
     raise RuntimeError("unreachable HTTP retry state")
 
 
 @contextmanager
 def stream_with_retry(
-    open_stream: Callable[[], object],
+    open_stream: Callable[[], AbstractContextManager[T]],
     *,
     action: str,
     attempts: int = DEFAULT_HTTP_RETRY_ATTEMPTS,
     backoff_seconds: float = DEFAULT_HTTP_RETRY_BACKOFF_SECONDS,
+    max_backoff_seconds: float = DEFAULT_HTTP_RETRY_MAX_BACKOFF_SECONDS,
     logger: logging.Logger | None = None,
-):
+) -> Iterator[T]:
     """Open a streaming HTTP context with setup retries.
 
     Only failures that happen while opening/entering the stream are retried. Once
@@ -69,11 +99,10 @@ def stream_with_retry(
     generation request and corrupt the measurement, so body-consumption errors
     are propagated directly.
     """
-    if attempts < 1:
-        raise ValueError("attempts must be at least 1")
+    _validate_retry_settings(attempts, backoff_seconds, max_backoff_seconds)
 
-    manager = None
-    response = None
+    manager: AbstractContextManager[T] | None = None
+    response: T | None = None
     for attempt in range(1, attempts + 1):
         manager = None
         try:
@@ -96,13 +125,18 @@ def stream_with_retry(
                     attempt + 1,
                     attempts,
                 )
-            time.sleep(backoff_seconds * (2 ** (attempt - 1)))
+            time.sleep(
+                _retry_delay(backoff_seconds, max_backoff_seconds, attempt)
+            )
         except BaseException:
             if manager is not None:
                 manager.__exit__(*sys.exc_info())
             raise
     else:
         raise RuntimeError("unreachable HTTP stream retry state")
+
+    if manager is None or response is None:
+        raise RuntimeError("stream context did not produce a response")
 
     try:
         yield response

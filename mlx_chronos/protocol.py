@@ -1,8 +1,11 @@
 from mlx_chronos.constants import (
     BENCHMARK_REQUEST_TEMPERATURE,
     BENCHMARK_REQUEST_TOP_P,
-    DEFAULT_THROUGHPUT_MAX_TOKENS,
+    DEFAULT_THROUGHPUT_MAX_TOKENS as _DEFAULT_THROUGHPUT_MAX_TOKENS,
 )
+
+# Kept as a public compatibility re-export.
+DEFAULT_THROUGHPUT_MAX_TOKENS = _DEFAULT_THROUGHPUT_MAX_TOKENS
 
 
 BASELINE_PROTOCOL_VERSION = "3"
@@ -189,10 +192,11 @@ def _generation_parameters() -> dict:
 def _protocol_phase(
     prompts: list[str],
     requested_max_tokens: int,
+    *,
+    connection_mode: str,
     requested_min_tokens: int | None = None,
     request_mode: str | None = None,
     stream_usage_requested: bool | None = None,
-    connection_mode: str | None = None,
 ) -> dict:
     return {
         "prompts": prompts,
@@ -246,7 +250,7 @@ def build_benchmark_protocol(
         "throughput": _protocol_phase(
             THROUGHPUT_PROMPTS[:trials],
             throughput_max_tokens,
-            throughput_min_tokens,
+            requested_min_tokens=throughput_min_tokens,
             request_mode="streaming",
             stream_usage_requested=True,
             connection_mode=connection_mode,

@@ -1,5 +1,7 @@
 import json
 import logging
+import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -37,6 +39,7 @@ PUBLIC_TOKEN_COUNT_SOURCE = TOKEN_COUNT_SOURCE_USAGE
 PUBLIC_PROFILE_BASELINE = "baseline"
 PUBLIC_PROFILE_SUSTAINED = "sustained"
 PUBLIC_LOW_POWER_MODE = "off"
+PUBLIC_TIMESTAMP_FUTURE_TOLERANCE = timedelta(minutes=10)
 logger = logging.getLogger("mlx_chronos")
 
 
@@ -197,6 +200,7 @@ def validate_publishable_result(
     *,
     allow_legacy_missing_model_reference: bool = False,
     allow_legacy_missing_ollama_model_format: bool = False,
+    allow_legacy_missing_decode_elapsed: bool = False,
 ) -> None:
     """Check public leaderboard comparability constraints."""
     token_source = result.metrics.token_count_source
@@ -204,6 +208,69 @@ def validate_publishable_result(
         raise SubmissionError(
             "leaderboard submissions must use "
             f"{PUBLIC_TOKEN_COUNT_SOURCE!r}; got {token_source!r}"
+        )
+    if result.engine.version.strip().lower() == "unknown":
+        raise SubmissionError(
+            "leaderboard submissions require a known engine version"
+        )
+
+    architecture = result.hardware.architecture.strip().lower()
+    if architecture != "arm64":
+        raise SubmissionError(
+            "leaderboard submissions require Apple Silicon architecture "
+            f"'arm64'; got {result.hardware.architecture!r}"
+        )
+    if re.fullmatch(r"Apple M\d+(?: (?:Pro|Max|Ultra))?", result.hardware.chip) is None:
+        raise SubmissionError(
+            "leaderboard submissions require an Apple M-series chip; "
+            f"got {result.hardware.chip!r}"
+        )
+    if re.fullmatch(r"\d+(?:\.\d+){1,2}", result.hardware.macos_version) is None:
+        raise SubmissionError(
+            "leaderboard submissions require a valid macOS version; "
+            f"got {result.hardware.macos_version!r}"
+        )
+
+    now = datetime.now(timezone.utc)
+    if result.meta.timestamp > now + PUBLIC_TIMESTAMP_FUTURE_TOLERANCE:
+        raise SubmissionError(
+            "leaderboard submission timestamp is too far in the future; "
+            f"got {result.meta.timestamp.isoformat()}"
+        )
+
+    if result.meta.system_ram_monitor_errors != 0:
+        raise SubmissionError(
+            "leaderboard submissions require error-free system RAM monitoring; "
+            f"got system_ram_monitor_errors={result.meta.system_ram_monitor_errors}"
+        )
+    if result.meta.engine_ram_monitor_errors != 0:
+        raise SubmissionError(
+            "leaderboard submissions require error-free engine RAM monitoring; "
+            f"got engine_ram_monitor_errors={result.meta.engine_ram_monitor_errors}"
+        )
+    if result.meta.thermal_monitor.sampling_errors != 0:
+        raise SubmissionError(
+            "leaderboard submissions require error-free thermal monitoring; "
+            "got thermal_monitor.sampling_errors="
+            f"{result.meta.thermal_monitor.sampling_errors}"
+        )
+    if (
+        result.meta.thermal_monitor.source != "foundation"
+        or result.meta.thermal_monitor.samples == 0
+    ):
+        raise SubmissionError(
+            "leaderboard submissions require valid continuous thermal samples "
+            "from Foundation"
+        )
+
+    if (
+        result.metrics.decode_tokens_per_second is not None
+        and result.trials.decode_elapsed_seconds_raw is None
+        and not allow_legacy_missing_decode_elapsed
+    ):
+        raise SubmissionError(
+            "leaderboard submissions with decode throughput must include "
+            "trials.decode_elapsed_seconds_raw"
         )
 
     if (
@@ -273,10 +340,7 @@ def validate_publishable_result(
                 "baseline leaderboard submissions must use the standard baseline "
                 f"trial count ({expected_trials}); got {result.trials.count}"
             )
-        if (
-            requested_max_tokens is not None
-            and requested_max_tokens != expected_max_tokens
-        ):
+        if requested_max_tokens != expected_max_tokens:
             raise SubmissionError(
                 "baseline leaderboard submissions must use standard throughput "
                 f"max_tokens={expected_max_tokens}; got "
@@ -309,6 +373,8 @@ def load_publishable_result(
     *,
     allow_legacy_missing_model_reference: bool = False,
     allow_legacy_missing_ollama_model_format: bool = False,
+    allow_legacy_missing_decode_elapsed: bool = False,
+    allow_legacy_missing_monitor_diagnostics: bool = False,
 ) -> tuple[bytes, BenchmarkResult]:
     """Load, validate, and check whether a result can be submitted publicly."""
     try:
@@ -328,6 +394,22 @@ def load_publishable_result(
     except IntegrityError as exc:
         raise SubmissionError(f"result integrity check failed: {exc}") from exc
 
+    if not allow_legacy_missing_monitor_diagnostics and isinstance(data, dict):
+        meta = data.get("meta")
+        thermal_monitor = meta.get("thermal_monitor") if isinstance(meta, dict) else None
+        required_fields_missing = (
+            not isinstance(meta, dict)
+            or "system_ram_monitor_errors" not in meta
+            or "engine_ram_monitor_errors" not in meta
+            or not isinstance(thermal_monitor, dict)
+            or "sampling_errors" not in thermal_monitor
+        )
+        if required_fields_missing:
+            raise SubmissionError(
+                "new leaderboard submissions must include RAM and thermal "
+                "monitor diagnostic counters"
+            )
+
     try:
         result = BenchmarkResult.model_validate(data)
     except ValidationError as exc:
@@ -339,6 +421,7 @@ def load_publishable_result(
         allow_legacy_missing_ollama_model_format=(
             allow_legacy_missing_ollama_model_format
         ),
+        allow_legacy_missing_decode_elapsed=allow_legacy_missing_decode_elapsed,
     )
 
     return raw, result

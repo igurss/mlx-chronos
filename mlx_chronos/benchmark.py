@@ -13,9 +13,6 @@ from mlx_chronos.constants import (
     MAX_TRIALS,
     RAM_MEASUREMENT_PROCESS_RSS,
     RAM_MEASUREMENT_SYSTEM_FALLBACK,
-    SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
-    SUSTAINED_THROUGHPUT_MAX_TOKENS,
-    SUSTAINED_TRIALS,
     TOKEN_COUNT_SOURCE_MIXED,
     TOKEN_COUNT_SOURCE_USAGE,
     TOKEN_COUNT_SOURCE_WORD_FALLBACK,
@@ -40,7 +37,12 @@ from mlx_chronos.protocol import (
     WARMUP_MAX_TOKENS,
     build_benchmark_protocol,
 )
-from mlx_chronos.schema import BenchmarkProfile, BenchmarkResult, dump_benchmark_result
+from mlx_chronos.schema import (
+    BenchmarkProfile,
+    BenchmarkResult,
+    dump_benchmark_result,
+    normalize_model_quantization,
+)
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
 
@@ -341,7 +343,7 @@ def run_benchmark(
         )
 
     logger.info(f"\n{'='*50}")
-    logger.info(f"  mlx-Chronos Benchmark")
+    logger.info("  mlx-Chronos Benchmark")
     logger.info(f"  Engine : {engine_name}")
     logger.info(f"  Model  : {model_name} ({model_quantization})")
     logger.info(f"  Profile: {benchmark_profile}")
@@ -383,6 +385,19 @@ def run_benchmark(
     model_format = model_backend_metadata.get("format")
     if model_format:
         logger.info(f"Model format: {model_format}\n")
+    reported_quantization = model_backend_metadata.get("quantization")
+    if reported_quantization:
+        declared_quantization = normalize_model_quantization(model_quantization)
+        authoritative_quantization = normalize_model_quantization(
+            reported_quantization
+        )
+        if declared_quantization != authoritative_quantization:
+            raise RuntimeError(
+                "declared model quantization does not match the engine metadata: "
+                f"declared {model_quantization!r}, engine reported "
+                f"{reported_quantization!r}"
+            )
+        model_quantization = authoritative_quantization
 
     # 3. Engine version
     engine_version = engine.get_version()
@@ -399,7 +414,7 @@ def run_benchmark(
         )
 
     # 4. Start background sampling before warmup so load/cache pressure is captured.
-    phase_timings = {}
+    phase_timings: dict[str, float] = {}
     total_runtime_start = time.perf_counter()
     logger.info(
         f"Starting continuous background thermal sampling "
@@ -421,6 +436,7 @@ def run_benchmark(
     tps_trials = []
     throughput_elapsed_trials = []
     decode_tps_trials = []
+    decode_elapsed_trials = []
     decode_timing_sources = []
     token_count_sources = []
     completion_tokens_trials = []
@@ -516,9 +532,10 @@ def run_benchmark(
                         client=http_client,
                     )
                 except Exception as exc:
-                    logger.warning(
-                        f"  Cache priming failed; cached TTFT may be cold: {exc}"
-                    )
+                    raise RuntimeError(
+                        "cache priming failed; cached TTFT cannot be measured "
+                        f"reliably: {exc}"
+                    ) from exc
                 logger.info("  Done.\n")
 
             thermal_tracker.set_phase("ttft_cached")
@@ -572,7 +589,15 @@ def run_benchmark(
                         list(measurement.progress_samples)
                     )
                     if measurement.decode_tokens_per_second is not None:
+                        if measurement.decode_elapsed_seconds is None:
+                            raise RuntimeError(
+                                "engine returned decode throughput without decode "
+                                "elapsed time"
+                            )
                         decode_tps_trials.append(measurement.decode_tokens_per_second)
+                        decode_elapsed_trials.append(
+                            measurement.decode_elapsed_seconds
+                        )
                         decode_timing_sources.append(measurement.decode_timing_source)
     finally:
         thermal_tracker.set_phase("teardown")
@@ -703,6 +728,10 @@ def run_benchmark(
     }
     if model_format:
         model_metadata["format"] = model_format
+    for identity_field in ("family", "parameter_size"):
+        identity_value = model_backend_metadata.get(identity_field)
+        if identity_value:
+            model_metadata[identity_field] = identity_value
 
     result = {
         "hardware": hw,
@@ -738,6 +767,11 @@ def run_benchmark(
             "decode_tokens_per_second_raw": (
                 decode_tps_trials if len(decode_tps_trials) == len(tps_trials) else None
             ),
+            "decode_elapsed_seconds_raw": (
+                decode_elapsed_trials
+                if len(decode_elapsed_trials) == len(tps_trials)
+                else None
+            ),
             "completion_tokens_raw": completion_tokens_trials,
             "throughput_progress_samples_raw": (
                 throughput_progress_samples_trials
@@ -759,6 +793,16 @@ def run_benchmark(
             "phase_timings_seconds": phase_timings,
             "thermal_monitor": thermal_summary,
             "warmup_failures": warmup_failures,
+            "system_ram_monitor_errors": getattr(
+                system_ram_tracker,
+                "sample_errors",
+                0,
+            ),
+            "engine_ram_monitor_errors": (
+                getattr(ram_tracker, "sample_errors", 0)
+                if ram_tracker is not None
+                else 0
+            ),
             "word_fallback_warning": word_fallback_warning,
             "engine_version_warning": engine_version_warning,
             "sustained_throttling_warning": sustained_throttling_warning,
@@ -776,5 +820,5 @@ def run_benchmark(
         "integrity": placeholder_integrity_seal(),
     }
     # Validate against schema before returning
-    validated = dump_benchmark_result(BenchmarkResult(**result))
+    validated = dump_benchmark_result(BenchmarkResult.model_validate(result))
     return seal_result(validated)

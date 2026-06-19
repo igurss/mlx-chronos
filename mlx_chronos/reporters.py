@@ -79,7 +79,7 @@ class BaseReporter(ABC):
             f"(±{stats['stddev']}; min {stats['min']}, max {stats['max']})"
         )
         if stats.get("p95") is not None:
-            text += f", p95 {stats['p95']}"
+            text += f", p95 {stats['p95']} {unit}"
         return text
 
 class JSONReporter(BaseReporter):

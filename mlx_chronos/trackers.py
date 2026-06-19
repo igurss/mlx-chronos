@@ -4,18 +4,10 @@ import time
 
 import psutil
 
-from mlx_chronos.constants import DEFAULT_RAM_SAMPLE_INTERVAL
+from mlx_chronos.constants import DEFAULT_RAM_SAMPLE_INTERVAL, THERMAL_STATE_ORDER
 from mlx_chronos.detect import get_thermal_state_from_foundation
 
 DEFAULT_CHILD_PROCESS_REFRESH_INTERVAL = 30.0
-
-
-THERMAL_STATE_ORDER = {
-    "nominal": 0,
-    "fair": 1,
-    "serious": 2,
-    "critical": 3,
-}
 
 
 def _is_non_nominal_thermal_state(state: str) -> bool:
@@ -44,9 +36,11 @@ class RAMTracker:
         self._children_refreshed = False
         self._last_child_refresh_at = 0.0
         self.peak_ram_bytes = 0
+        self.sample_count = 0
+        self.sample_errors = 0
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread = None
+        self._thread: threading.Thread | None = None
 
     def _refresh_child_processes(self) -> None:
         try:
@@ -75,6 +69,8 @@ class RAMTracker:
                 rss_bytes += child.memory_info().rss
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
+        with self._lock:
+            self.sample_count += 1
         return rss_bytes
 
     def _monitor(self):
@@ -85,6 +81,8 @@ class RAMTracker:
                     if current_ram > self.peak_ram_bytes:
                         self.peak_ram_bytes = current_ram
             except (psutil.NoSuchProcess, psutil.AccessDenied):
+                with self._lock:
+                    self.sample_errors += 1
                 try:
                     is_running = self._process.is_running()
                 except psutil.Error:
@@ -119,9 +117,11 @@ class SystemRAMTracker:
         self.interval = interval
         self.peak_used_bytes = 0
         self.peak_percent = 0.0
+        self.sample_count = 0
+        self.sample_errors = 0
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread = None
+        self._thread: threading.Thread | None = None
 
     def _sample_system_ram(self) -> tuple[int, float]:
         mem = psutil.virtual_memory()
@@ -129,22 +129,28 @@ class SystemRAMTracker:
         percent = (used_bytes / mem.total * 100) if mem.total else 0.0
         return used_bytes, percent
 
+    def _record_sample(self) -> None:
+        used_bytes, percent = self._sample_system_ram()
+        with self._lock:
+            self.sample_count += 1
+            if used_bytes > self.peak_used_bytes:
+                self.peak_used_bytes = used_bytes
+                self.peak_percent = percent
+
     def _monitor(self):
         while not self._stop_event.wait(self.interval):
             try:
-                used_bytes, percent = self._sample_system_ram()
-                with self._lock:
-                    if used_bytes > self.peak_used_bytes:
-                        self.peak_used_bytes = used_bytes
-                        self.peak_percent = percent
+                self._record_sample()
             except Exception:
-                pass
+                with self._lock:
+                    self.sample_errors += 1
 
     def start(self):
         try:
-            self.peak_used_bytes, self.peak_percent = self._sample_system_ram()
+            self._record_sample()
         except Exception:
-            self.peak_used_bytes, self.peak_percent = 0, 0.0
+            with self._lock:
+                self.sample_errors += 1
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._monitor, daemon=True)
         self._thread.start()
@@ -154,6 +160,8 @@ class SystemRAMTracker:
         if self._thread:
             self._thread.join()
         with self._lock:
+            if self.sample_count == 0:
+                raise RuntimeError("system RAM monitor collected no valid samples")
             peak_used = self.peak_used_bytes
             peak_pct = self.peak_percent
         return peak_used / (1024 ** 3), peak_pct
@@ -174,7 +182,8 @@ class ThermalStateTracker:
         self._samples: list[tuple[str, str]] = []
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread = None
+        self._thread: threading.Thread | None = None
+        self.sample_errors = 0
 
     def _sample_thermal_state(self) -> str:
         state = self.sampler()
@@ -189,7 +198,11 @@ class ThermalStateTracker:
 
     def _monitor(self):
         while not self._stop_event.wait(self.interval):
-            self._record_sample()
+            try:
+                self._record_sample()
+            except Exception:
+                with self._lock:
+                    self.sample_errors += 1
 
     def set_phase(self, phase: str) -> None:
         with self._lock:
@@ -199,7 +212,11 @@ class ThermalStateTracker:
         with self._lock:
             self._samples = []
         self._stop_event.clear()
-        self._record_sample()
+        try:
+            self._record_sample()
+        except Exception:
+            with self._lock:
+                self.sample_errors += 1
         self._thread = threading.Thread(target=self._monitor, daemon=True)
         self._thread.start()
 
@@ -207,7 +224,11 @@ class ThermalStateTracker:
         self._stop_event.set()
         if self._thread:
             self._thread.join()
-        self._record_sample()
+        try:
+            self._record_sample()
+        except Exception:
+            with self._lock:
+                self.sample_errors += 1
 
         with self._lock:
             samples = list(self._samples)
@@ -247,4 +268,5 @@ class ThermalStateTracker:
                 _is_non_nominal_thermal_state(state) for state in states
             ),
             "non_nominal_phases": non_nominal_phases,
+            "sampling_errors": self.sample_errors,
         }
