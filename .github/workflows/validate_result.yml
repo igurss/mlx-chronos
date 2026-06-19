@@ -35,6 +35,7 @@ jobs:
           import subprocess
           import sys
           from pathlib import Path
+          from mlx_chronos.leaderboard import load_archive_results
           from mlx_chronos.submit import load_publishable_result
 
           def get_changed_files() -> list[str]:
@@ -121,6 +122,12 @@ jobs:
           if errors:
               print(f"\nValidation failed for {len(errors)} file(s).")
               sys.exit(1)
-          else:
-              print(f"\nAll {len(json_files)} changed file(s) are valid.")
+
+          try:
+              load_archive_results(Path("results/submitted"))
+          except Exception as e:
+              print(f"FAIL: submitted result archive - {e}")
+              sys.exit(1)
+
+          print(f"\nAll {len(json_files)} changed file(s) are valid and unique.")
           EOF

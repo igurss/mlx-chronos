@@ -1014,8 +1014,8 @@
       {
         key: "model",
         label: "Model",
-        sortKey: "model",
-        value: row => escapeHtml(row.model),
+        sortKey: "model_label",
+        value: row => escapeHtml(row.model_label),
       },
       {
         key: "tps",
@@ -1083,7 +1083,7 @@
         label: "Thermal",
         description: "macOS thermal state captured during the run; non-nominal values can indicate throttling risk.",
         sortKey: "thermal_state",
-        value: row => conditionValue(row.thermal_state),
+        value: row => safeConditionValue(row.thermal_state),
       },
       {
         key: "machine",
@@ -1237,7 +1237,7 @@
     function normalizeRow(row, index) {
       const benchmarkProfile = row.benchmark_profile;
       const timestamp = row.timestamp || "";
-      return {
+      const normalized = {
         ...row,
         _id: `row-${index}`,
         benchmark_profile: benchmarkProfile,
@@ -1246,6 +1246,40 @@
         macos_version: row.macos_version || "",
         model_reference_url: row.model_reference_url || "",
       };
+      normalized.model_key = modelIdentityKey(normalized);
+      normalized.model_label = modelVariantLabel(normalized);
+      return normalized;
+    }
+
+    function modelIdentityKey(row) {
+      return JSON.stringify([
+        row.model || "",
+        row.quantization || "",
+        row.model_format || "",
+        row.model_reference_url || "",
+        row.model_source || "",
+        row.model_revision || "",
+        row.model_weight_hash || "",
+        row.model_tokenizer_hash || "",
+        row.model_chat_template_hash || "",
+        row.model_architecture || "",
+        row.model_family || "",
+        row.model_parameter_size || "",
+      ]);
+    }
+
+    function modelVariantLabel(row) {
+      const qualifiers = [
+        row.quantization,
+        row.model_format,
+        (row.model_source || row.model_reference_url || "")
+          .replace(/^https?:\/\//, "")
+          .replace(/\/$/, ""),
+        row.model_revision ? `rev ${row.model_revision}` : "",
+      ].filter(Boolean);
+      return qualifiers.length
+        ? `${row.model} · ${qualifiers.join(" · ")}`
+        : String(row.model || "");
     }
 
     function initializeCompareControls() {
@@ -1265,13 +1299,16 @@
       compareProfileControl.hidden = profileOptions.length <= 1;
 
       const profileRows = defaultRows.filter(row => row.benchmark_profile === compareProfile.value);
-      const defaultModel = mostCommonByEngine(profileRows, "model");
-      const preferredModel = preferredCompareValue("model", compareModel.value) || defaultModel;
+      const defaultModel = mostCommonByEngine(profileRows, "model_key");
+      const requestedModel = preferredCompareValue("model", compareModel.value);
+      const preferredModel = profileRows.find(row =>
+        row.model_key === requestedModel || row.model === requestedModel
+      )?.model_key || defaultModel;
 
       setSelectOptions(
         compareModel,
-        uniqueSorted(profileRows.map(row => row.model)),
-        value => value,
+        uniqueSorted(profileRows.map(row => row.model_key)),
+        value => profileRows.find(row => row.model_key === value)?.model_label || value,
         preferredModel,
       );
       updateHardwareOptions();
@@ -1304,14 +1341,14 @@
     function rowsForCompareOptions() {
       return allRows.filter(row =>
         (!compareProfile.value || row.benchmark_profile === compareProfile.value) &&
-        (!compareModel.value || row.model === compareModel.value)
+        (!compareModel.value || row.model_key === compareModel.value)
       );
     }
 
     function currentCompareRows() {
       return allRows.filter(row =>
         row.benchmark_profile === compareProfile.value &&
-        row.model === compareModel.value &&
+        row.model_key === compareModel.value &&
         row.chip === compareChip.value &&
         String(row.memory_gb) === String(compareMemory.value)
       );
@@ -1335,7 +1372,7 @@
       updateShareUrl();
       const selected = [
         ...(compareProfileControl.hidden ? [] : [profileLabel(compareProfile.value || "baseline")]),
-        compareModel.value || "No model selected",
+        rows[0]?.model_label || "No model selected",
         compareChip.value || "No chip selected",
         compareMemory.value ? `${fmt(compareMemory.value, 0)} GB` : "No RAM selected",
       ];
@@ -1392,11 +1429,7 @@
 
       return [...groups.values()]
         .map(group => group.slice().sort(compareRunRecency)[0])
-        .sort((a, b) => numericSortValue(primaryThroughput(b)) - numericSortValue(primaryThroughput(a)));
-    }
-
-    function primaryThroughput(row) {
-      return row.decode_tps == null ? row.tps : row.decode_tps;
+        .sort((a, b) => numericSortValue(b.tps) - numericSortValue(a.tps));
     }
 
     function compareRunRecency(a, b) {
@@ -1443,6 +1476,10 @@
         ["Quantization", row.quantization],
         ["Model format", row.model_format || "not recorded"],
         ["Model reference", row.model_reference_url || "not recorded"],
+        ["Model source", row.model_source || "not recorded"],
+        ["Model revision", row.model_revision || "not recorded"],
+        ["Model family", row.model_family || "not recorded"],
+        ["Parameter size", row.model_parameter_size || "not recorded"],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],
@@ -1504,6 +1541,7 @@
       return allRows.filter(row => {
         const searchable = [
           row.model,
+          row.model_label,
           row.engine,
           row.chip,
           row.benchmark_profile,
@@ -1673,6 +1711,10 @@
 
     function conditionValue(value) {
       return value == null || value === "" ? "unknown" : String(value);
+    }
+
+    function safeConditionValue(value) {
+      return escapeHtml(conditionValue(value));
     }
 
     function fmt(value, decimals = 3) {
