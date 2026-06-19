@@ -15,12 +15,21 @@ def _source_tree_version() -> str | None:
     return match.group(1) if match else None
 
 
+def _resolve_version(
+    source_tree_version: str | None,
+    installed_version: str | None,
+) -> str:
+    """Resolve a version without duplicating release numbers in source code."""
+    return source_tree_version or installed_version or "unknown"
+
+
+_installed_version: str | None
 try:
     _installed_version = version("mlx-chronos")
 except PackageNotFoundError:
     _installed_version = None
 
-__version__ = _source_tree_version() or _installed_version or "0.2.1"
+__version__ = _resolve_version(_source_tree_version(), _installed_version)
 
 __all__ = ["__version__", "run_benchmark"]
 
