@@ -47,9 +47,9 @@ The public leaderboard is available at
 
 ### Current Release
 
-`0.2.1` keeps the stricter `0.2` public leaderboard format and fixes engine
-adapter compatibility for oMLX, mlx-lm, and vllm-mlx discovered during
-real-server validation.
+`0.3.0` adds guided benchmark workflows, update and preflight tools,
+reconstructible timing metadata, and stricter public leaderboard integrity
+checks while retaining internal protocol compatibility label `3`.
 
 ---
 
@@ -192,8 +192,10 @@ Default engine ports:
 | Engine | Default port |
 | --- | --- |
 | oMLX | `8000` |
+| Rapid-MLX | `8001` |
 | vllm-mlx | `8000` |
 | mlx-lm | `8080` |
+| Ollama | `11434` |
 
 oMLX and vllm-mlx both default to port `8000`. To avoid mislabeling results,
 mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot
@@ -225,6 +227,11 @@ metadata, hardware metadata, and an integrity seal.
   `top_p=1.0`.
 - Throughput is end-to-end request throughput, not pure decode speed. It
   includes request overhead, prefill, and decode.
+- Timed TTFT and throughput requests are never retried. A transient request
+  failure invalidates the run instead of becoming part of a published timing.
+- Cached TTFT is recorded only after cache priming completes successfully.
+- Decode throughput records first-content-to-stream-end elapsed time so the
+  value can be reconstructed from raw completion-token counts.
 - Throughput prompts intentionally vary to reduce cache artifacts, so run
   standard deviation includes workload variation plus system and engine noise.
 - If an engine cannot provide reliable `usage.completion_tokens`, the run falls
@@ -278,10 +285,18 @@ Public leaderboard submissions are stricter so rows remain comparable.
 
 - Throughput must use the engine response's `usage.completion_tokens`.
 - The result must include `model.reference_url`, a link to the model used.
+- The inference engine version must be known; `engine.version=unknown` is not
+  accepted for public comparison.
+- Hardware must report an Apple M-series chip, `arm64`, and a valid macOS
+  version; timestamps may not be more than 10 minutes in the future.
 - All warmup calls must complete successfully (`warmup_failures=0`).
+- System RAM, engine RSS, and continuous Foundation thermal monitoring must
+  complete without sampling errors.
 - macOS Low Power Mode must be disabled.
+- Decode throughput must include reconstructible raw decode elapsed time.
 - The JSON must pass `mlx-chronos submit --dry-run`.
 - The result must include a valid integrity seal.
+- The archive rejects duplicate integrity digests and duplicate run identities.
 - Custom token bounds, fallback token estimates, custom public-profile trial
   counts, short-output runs, and Low Power Mode runs are valid local records but
   are not accepted into the public leaderboard.
@@ -291,6 +306,8 @@ to detect incompatible result formats. Treat labels such as `1`, `2`, and `3`
 as implementation compatibility markers, not public protocol release versions.
 Model reference URLs point to the model page used for the run. Model pages can
 change over time when maintainers update files or tags.
+Leaderboard comparisons keep model name, quantization, format, provenance, and
+revision separate so distinct variants are not grouped together.
 
 ---
 

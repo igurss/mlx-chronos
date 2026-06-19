@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## [0.3.0] — 2026-06-19
+
+Minor release focused on guided CLI workflows, auditable measurements, and
+stricter public leaderboard integrity. Existing local results remain readable;
+new public submissions must include the additional timing, provenance, and
+monitor diagnostics required by the current policy.
+
 ### Features
 - Add `mlx-chronos wizard`, an interactive terminal menu built with
   questionary and Rich. The wizard covers common commands and provides a guided
@@ -9,9 +16,36 @@
   before execution.
 - Let the wizard load model IDs from a running engine server and select the
   benchmark or validation model from a menu, with manual entry only as fallback.
+- Add background PyPI update checks and `mlx-chronos upgrade`, with an
+  environment variable to disable automatic checks.
+- Add optional model preflight validation before measured benchmark phases.
 - Add optional `--model-url` metadata for local runs and require
   `model.reference_url` for new public leaderboard submissions.
-- Require public leaderboard submissions to complete warmup without failures.
+- Record raw decode elapsed time so decode throughput can be reconstructed and
+  validated from completion-token counts.
+- Preserve model provenance fields in the generated leaderboard index and
+  compare models by variant rather than name alone.
+- Print a concise throughput, TTFT, thermal, RAM, and warning summary after each
+  CLI benchmark.
+
+### Reliability and Integrity
+- Require public submissions to use known engine versions, Apple Silicon
+  metadata, plausible timestamps, clean warmup, and error-free RAM and thermal
+  monitoring.
+- Reject unsafe thermal-state strings, duplicate result digests, duplicate run
+  identities, and inconsistent phase timing or thermal-monitor metadata.
+- Do not retry timed TTFT or throughput streams, and stop cached-TTFT
+  measurement when cache priming fails.
+- Use Ollama server metadata as the authority for version, MLX format,
+  quantization, family, and parameter size; reject conflicting declarations.
+- Add bounded transient HTTP retries for untimed operations and atomic JSON and
+  Markdown report writes.
+- Record tracker sampling failures, retry failed hardware detection instead of
+  caching empty results, and improve benchmark condition warnings.
+- Escape leaderboard condition values, preserve model variants, and rank engine
+  comparisons consistently by end-to-end request throughput.
+- Add units to Markdown p95 values and require protocol phases to record their
+  connection mode explicitly.
 
 ### Bug Fixes
 - Keep the wizard open when an internal command fails, instead of letting
@@ -21,6 +55,15 @@
 - Suppress retry warning noise during passive engine server-status checks, so
   `mlx-chronos engines` reports installed/running state without scary HTTP
   retry logs when servers are simply offline.
+
+### Maintenance
+- Generate the public index through a tested Python module and add Ruff, mypy,
+  coverage, and frontend security checks to CI.
+- Keep `pyproject.toml` as the only manually maintained package-version source;
+  source and installed builds resolve it automatically without a stale numeric
+  fallback.
+- Expand CI and release smoke checks through Python 3.14 and document all
+  default engine ports and the tightened methodology.
 
 ## [0.2.1] — 2026-06-12
 

@@ -86,6 +86,9 @@ finish, a priming call loads that prompt into the engine cache. Cached TTFT
 trials then run consecutively so unrelated prompts do not evict or overwrite
 the cached prompt between measurements.
 
+If the priming call fails, the benchmark stops. A cached-TTFT value is never
+produced from a run whose priming state is unknown.
+
 The field is named `metrics.ttft_cached` in the v0.1 JSON schema. It means
 "fixed prompt after one priming request"; it does not guarantee that all
 engines implement identical KV-cache or prefix-cache behavior.
@@ -187,6 +190,11 @@ If an engine rejects `stream_options.include_usage`, mlx-Chronos retries the
 same streaming request without that option and records the run as a local
 fallback instead of failing the whole benchmark.
 
+This compatibility fallback is triggered only by an explicit unsupported-field
+response and starts a fresh timer. Transient failures in timed TTFT or
+throughput streams are not retried; the benchmark fails instead of including
+retry/backoff time in a metric.
+
 ### Decode Throughput
 
 When reliable completion-token usage is available, mlx-Chronos also records
@@ -195,11 +203,13 @@ client-observed decode throughput in:
 - `metrics.decode_tokens_per_second`
 - `metrics.decode_timing_source`
 - `trials.decode_tokens_per_second_raw`
+- `trials.decode_elapsed_seconds_raw`
 
 This is computed from the interval between first streamed content and the end
 of the stream. It still includes engine flush policy and any inter-token
 buffering or batching visible to the client. It is not an internal model/kernel
-decode measurement.
+decode measurement. Public validation reconstructs each decode-throughput
+value from completion tokens and raw decode elapsed time.
 
 If token usage is unavailable, decode throughput is left unavailable rather
 than estimated from word counts.
@@ -322,6 +332,9 @@ Warnings are informational and the run continues. Results record:
 
 Public leaderboard submissions must report Low Power Mode as `off`. Power
 source is retained in the full JSON but is not used as a leaderboard field.
+New public submissions also require error-free system RAM, engine RSS, and
+continuous Foundation thermal sampling. Sampling failures remain recorded for
+local diagnostics but make a run non-publishable.
 
 The continuous thermal monitor samples only the Foundation path during the run.
 mlx-Chronos intentionally does not run `powermetrics` repeatedly during the
@@ -356,6 +369,8 @@ state.
 ### Version Detection
 
 Engine versions are recorded in `engine.version` when local detection succeeds.
+Public leaderboard submissions require a known engine version; local runs may
+still record `unknown` when detection is unavailable.
 
 | Engine | Detection method |
 | --- | --- |
@@ -363,7 +378,7 @@ Engine versions are recorded in `engine.version` when local detection succeeds.
 | Rapid-MLX | `rapid-mlx version` |
 | vllm-mlx | installed package metadata, package `__version__`, then `/v1/models` metadata fallback |
 | mlx-lm | installed package metadata for `mlx-lm` |
-| Ollama | `ollama --version` |
+| Ollama | server `/api/version`, then `ollama --version` fallback |
 
 If detection fails, the result records `unknown` instead of blocking the run.
 Results also set `meta.engine_version_warning=true` so reports and the public
@@ -390,6 +405,9 @@ run. It calls `POST /api/show` for the requested model and requires
 MLX model weights. `gguf` models are rejected for public Ollama benchmark runs
 because they use the non-MLX model format and are not comparable with the MLX
 leaderboard entries.
+The response's quantization is treated as authoritative and must match the
+quantization requested on the mlx-Chronos command line. Family and parameter
+size are retained when Ollama reports them.
 
 ---
 
