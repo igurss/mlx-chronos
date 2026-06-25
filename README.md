@@ -47,9 +47,10 @@ The public leaderboard is available at
 
 ### Current Release
 
-`0.3.0` adds guided benchmark workflows, update and preflight tools,
-reconstructible timing metadata, and stricter public leaderboard integrity
-checks while retaining internal protocol compatibility label `3`.
+`0.3.1` simplifies public model identity metadata to model name,
+quantization, model format, and the required model reference URL, while keeping
+the guided workflows, timing metadata, and stricter leaderboard integrity
+checks introduced in `0.3.0`.
 
 ---
 
@@ -306,8 +307,8 @@ to detect incompatible result formats. Treat labels such as `1`, `2`, and `3`
 as implementation compatibility markers, not public protocol release versions.
 Model reference URLs point to the model page used for the run. Model pages can
 change over time when maintainers update files or tags.
-Leaderboard comparisons keep model name, quantization, format, provenance, and
-revision separate so distinct variants are not grouped together.
+Leaderboard comparisons keep model name, quantization, format, and model
+reference URL separate so distinct variants are not grouped together.
 
 ---
 

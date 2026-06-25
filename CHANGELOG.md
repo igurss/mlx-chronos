@@ -2,11 +2,33 @@
 
 ## Unreleased
 
+## [0.3.1] — 2026-06-25
+
+Patch release focused on simplifying public model identity metadata after
+`0.3.0` and tightening release validation. Public benchmark identity now stays
+limited to model name, quantization, model format, and the required model
+reference URL.
+
+### Bug Fixes
+- Remove optional model identity fields beyond `model.reference_url` from the
+  result schema, submitted archive files, generated leaderboard index, and
+  public leaderboard UI.
+- Stop recording Ollama `family` and `parameter_size` details in benchmark
+  result JSON; Ollama validation still verifies MLX format and quantization.
+- Regenerate the public leaderboard index without the removed model metadata
+  columns.
+
+### Maintenance
+- Add tests that prevent removed model metadata fields from returning to the
+  schema or generated public index.
+- Run Ruff, mypy, frontend tests, coverage, generated-index drift checks, and
+  `twine check` in the release workflow before publishing.
+
 ## [0.3.0] — 2026-06-19
 
 Minor release focused on guided CLI workflows, auditable measurements, and
 stricter public leaderboard integrity. Existing local results remain readable;
-new public submissions must include the additional timing, provenance, and
+new public submissions must include the additional timing, model-reference, and
 monitor diagnostics required by the current policy.
 
 ### Features
@@ -23,8 +45,8 @@ monitor diagnostics required by the current policy.
   `model.reference_url` for new public leaderboard submissions.
 - Record raw decode elapsed time so decode throughput can be reconstructed and
   validated from completion-token counts.
-- Preserve model provenance fields in the generated leaderboard index and
-  compare models by variant rather than name alone.
+- Compare model variants by name, quantization, format, and model reference URL
+  rather than name alone.
 - Print a concise throughput, TTFT, thermal, RAM, and warning summary after each
   CLI benchmark.
 
@@ -36,14 +58,14 @@ monitor diagnostics required by the current policy.
   identities, and inconsistent phase timing or thermal-monitor metadata.
 - Do not retry timed TTFT or throughput streams, and stop cached-TTFT
   measurement when cache priming fails.
-- Use Ollama server metadata as the authority for version, MLX format,
-  quantization, family, and parameter size; reject conflicting declarations.
+- Use Ollama server metadata as the authority for version, MLX format, and
+  quantization; reject conflicting declarations.
 - Add bounded transient HTTP retries for untimed operations and atomic JSON and
   Markdown report writes.
 - Record tracker sampling failures, retry failed hardware detection instead of
   caching empty results, and improve benchmark condition warnings.
-- Escape leaderboard condition values, preserve model variants, and rank engine
-  comparisons consistently by end-to-end request throughput.
+- Escape leaderboard condition values, preserve model URL variants, and rank
+  engine comparisons consistently by end-to-end request throughput.
 - Add units to Markdown p95 values and require protocol phases to record their
   connection mode explicitly.
 
@@ -103,10 +125,6 @@ not publishable under the 0.2 public leaderboard policy.
 - Redesign the leaderboard UI with a more distinctive mlx-Chronos visual style,
   a persistent light/dark theme toggle, fixed compare controls, cleaner raw
   data columns, and a non-clipped column picker.
-- Add optional structured model identity fields to the schema (`source`,
-  `revision`, weight/tokenizer/chat-template hashes, and architecture) so future
-  runs can carry stronger model provenance without making those fields mandatory
-  yet.
 
 ### Reliability
 - Reuse one persistent HTTP client across benchmark phases by default, reducing
