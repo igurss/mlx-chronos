@@ -740,8 +740,6 @@ def test_ollama_validate_model_backend_accepts_safetensors(mock_post):
     assert metadata == {
         "format": "safetensors",
         "quantization": "nvfp4",
-        "family": "qwen3",
-        "parameter_size": "4.0B",
     }
     assert mock_post.call_args.args[0] == "http://localhost:11434/api/show"
     assert mock_post.call_args.kwargs["json"] == {"model": "qwen3.5:4b-mlx"}

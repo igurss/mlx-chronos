@@ -17,13 +17,7 @@
   "model": {
     "name": "Qwen3.5-4B-OptiQ-4bit",
     "quantization": "4bit",
-    "reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit",
-    "source": null,
-    "revision": null,
-    "weight_hash": null,
-    "tokenizer_hash": null,
-    "chat_template_hash": null,
-    "architecture": null
+    "reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
   },
   "metrics": {
     "ttft_cold": {
@@ -223,6 +217,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "ba1928ad8152a5d89e491136be04468a02474a80c71a6861cbdb9cd175ccc97c"
+    "digest": "da5519244f828f4d04e4551a2ededa079ea5595ee29e0f2eb2805eff233da637"
   }
 }

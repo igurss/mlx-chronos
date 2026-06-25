@@ -17,13 +17,7 @@
   "model": {
     "name": "qwen3.5:4b-mlx",
     "quantization": "nvfp4",
-    "reference_url": "https://ollama.com/library/qwen3.5:4b-mlx",
-    "source": null,
-    "revision": null,
-    "weight_hash": null,
-    "tokenizer_hash": null,
-    "chat_template_hash": null,
-    "architecture": null
+    "reference_url": "https://ollama.com/library/qwen3.5:4b-mlx"
   },
   "metrics": {
     "ttft_cold": {
@@ -230,6 +224,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "cd93cc48649ab88656f8f425d250e28719d625bf5b62cdd2fd11188ebeaf1ca5"
+    "digest": "d140a1b96af5c91aae5c7c514e2965834764e91a823e305cde675cc9f42d5ae5"
   }
 }

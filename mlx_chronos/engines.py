@@ -1313,13 +1313,6 @@ class OllamaEngine(BaseEngine):
             "format": model_format,
             "quantization": raw_quantization.strip(),
         }
-        for response_key, metadata_key in (
-            ("family", "family"),
-            ("parameter_size", "parameter_size"),
-        ):
-            value = details.get(response_key)
-            if isinstance(value, str) and value.strip():
-                metadata[metadata_key] = value.strip()
         return metadata
 
     def get_version(self) -> str:

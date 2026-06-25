@@ -525,8 +525,8 @@ def test_run_benchmark_records_model_format(mock_detect, mock_get_engine):
 
     assert result["model"]["format"] == "safetensors"
     assert result["model"]["quantization"] == "nvfp4"
-    assert result["model"]["family"] == "qwen3"
-    assert result["model"]["parameter_size"] == "4.0B"
+    assert "family" not in result["model"]
+    assert "parameter_size" not in result["model"]
     mock_engine.validate_model_backend.assert_called_once_with("qwen3.5:4b-mlx")
     validate_integrity_seal(result)
 

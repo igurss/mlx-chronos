@@ -17,13 +17,7 @@
   "model": {
     "name": "Qwen3.5-4B-nvfp4",
     "quantization": "nvfp4",
-    "reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-nvfp4",
-    "source": null,
-    "revision": null,
-    "weight_hash": null,
-    "tokenizer_hash": null,
-    "chat_template_hash": null,
-    "architecture": null
+    "reference_url": "https://huggingface.co/mlx-community/Qwen3.5-4B-nvfp4"
   },
   "metrics": {
     "ttft_cold": {
@@ -230,6 +224,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "3e25694ccffd59f848da9f67d60efbacfec3db35f2a2487b4232e7846c64fdf8"
+    "digest": "a8d4ac117be225f54107c72dba44ec40324a836720a7ab8d477b7a679add1691"
   }
 }

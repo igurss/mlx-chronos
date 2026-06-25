@@ -17,13 +17,7 @@
   "model": {
     "name": "gemma-4-12B-it-4bit",
     "quantization": "4bit",
-    "reference_url": "https://huggingface.co/mlx-community/gemma-4-12B-it-4bit",
-    "source": null,
-    "revision": null,
-    "weight_hash": null,
-    "tokenizer_hash": null,
-    "chat_template_hash": null,
-    "architecture": null
+    "reference_url": "https://huggingface.co/mlx-community/gemma-4-12B-it-4bit"
   },
   "metrics": {
     "ttft_cold": {
@@ -223,6 +217,6 @@
     "schema": "mlx-chronos-integrity-v1",
     "algorithm": "sha256-canonical-json",
     "signed_payload": "benchmark-result-without-integrity",
-    "digest": "f703f2e67be9e1e3f52c8f50ca574d311939139cdb7c3f67d4c8aff2d45354fd"
+    "digest": "0db827666946a33ccb0b391309d73f8e6057622155486047334781f01f900c43"
   }
 }

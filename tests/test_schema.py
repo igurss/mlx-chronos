@@ -654,25 +654,34 @@ def test_quantization_is_normalized():
     assert result.model.quantization == "4bit"
 
 
-def test_model_accepts_optional_identity_metadata():
+def test_model_accepts_optional_format_metadata():
     data = EXAMPLE_RESULT.copy()
     data["model"] = {
         **data["model"],
         "format": "safetensors",
+    }
+
+    result = BenchmarkResult(**data)
+
+    assert result.model.format == "safetensors"
+
+
+def test_model_rejects_removed_identity_metadata():
+    data = EXAMPLE_RESULT.copy()
+    data["model"] = {
+        **data["model"],
         "source": "mlx-community/example",
         "revision": "abc123",
         "weight_hash": "sha256:weights",
         "tokenizer_hash": "sha256:tokenizer",
         "chat_template_hash": "sha256:template",
         "architecture": "qwen3",
+        "family": "qwen3",
+        "parameter_size": "4.0B",
     }
 
-    result = BenchmarkResult(**data)
-
-    assert result.model.source == "mlx-community/example"
-    assert result.model.format == "safetensors"
-    assert result.model.revision == "abc123"
-    assert result.model.architecture == "qwen3"
+    with pytest.raises(ValidationError):
+        BenchmarkResult(**data)
 
 
 def test_model_reference_url_is_normalized():

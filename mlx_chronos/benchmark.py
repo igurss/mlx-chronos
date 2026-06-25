@@ -728,10 +728,6 @@ def run_benchmark(
     }
     if model_format:
         model_metadata["format"] = model_format
-    for identity_field in ("family", "parameter_size"):
-        identity_value = model_backend_metadata.get(identity_field)
-        if identity_value:
-            model_metadata[identity_field] = identity_value
 
     result = {
         "hardware": hw,

@@ -55,7 +55,7 @@ test("untrusted condition text is escaped before HTML rendering", () => {
   assert.match(rendered, /&lt;img/);
 });
 
-test("model variants do not collapse quantization or provenance", () => {
+test("model variants do not collapse quantization or model reference URL", () => {
   const base = {
     model: "Example-4B",
     quantization: "4bit",

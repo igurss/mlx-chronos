@@ -195,38 +195,6 @@ class Model(ChronosBaseModel):
         None,
         description="Optional model weight/container format reported by the engine",
     )
-    source: Optional[str] = Field(
-        None,
-        description="Optional model source or repository identifier",
-    )
-    revision: Optional[str] = Field(
-        None,
-        description="Optional model source revision, commit, or tag",
-    )
-    weight_hash: Optional[str] = Field(
-        None,
-        description="Optional hash identifying the model weight files",
-    )
-    tokenizer_hash: Optional[str] = Field(
-        None,
-        description="Optional hash identifying tokenizer files",
-    )
-    chat_template_hash: Optional[str] = Field(
-        None,
-        description="Optional hash identifying the chat template",
-    )
-    architecture: Optional[str] = Field(
-        None,
-        description="Optional model architecture identifier",
-    )
-    family: Optional[str] = Field(
-        None,
-        description="Optional model family reported by the inference engine",
-    )
-    parameter_size: Optional[str] = Field(
-        None,
-        description="Optional model parameter-size label reported by the engine",
-    )
 
     @field_validator("name")
     @classmethod
@@ -246,19 +214,9 @@ class Model(ChronosBaseModel):
     def normalize_quantization(cls, value: str) -> str:
         return normalize_model_quantization(value)
 
-    @field_validator(
-        "format",
-        "source",
-        "revision",
-        "weight_hash",
-        "tokenizer_hash",
-        "chat_template_hash",
-        "architecture",
-        "family",
-        "parameter_size",
-    )
+    @field_validator("format")
     @classmethod
-    def normalize_optional_identity_field(cls, value: str | None) -> str | None:
+    def normalize_optional_format(cls, value: str | None) -> str | None:
         if value is None:
             return None
         normalized = value.strip()

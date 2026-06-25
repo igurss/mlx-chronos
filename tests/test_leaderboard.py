@@ -38,23 +38,22 @@ def test_archive_rejects_resealed_duplicate_run_identity(tmp_path):
         load_archive_results(tmp_path)
 
 
-def test_index_preserves_model_identity_fields(tmp_path):
+def test_index_exposes_only_public_model_identity_fields(tmp_path):
     result = copy.deepcopy(EXAMPLE_RESULT)
-    result["model"].update(
-        {
-            "source": "mlx-community/example",
-            "revision": "abc123",
-            "weight_hash": "sha256:weights",
-            "architecture": "qwen3",
-        }
-    )
+    result["model"]["format"] = "safetensors"
     write_result(tmp_path / "result.json", result)
 
     row = build_results_index(tmp_path)["results"][0]
-    assert row["model_source"] == "mlx-community/example"
-    assert row["model_revision"] == "abc123"
-    assert row["model_weight_hash"] == "sha256:weights"
-    assert row["model_architecture"] == "qwen3"
+    assert row["model_reference_url"] == result["model"]["reference_url"]
+    assert row["model_format"] == "safetensors"
+    assert "model_source" not in row
+    assert "model_revision" not in row
+    assert "model_weight_hash" not in row
+    assert "model_tokenizer_hash" not in row
+    assert "model_chat_template_hash" not in row
+    assert "model_architecture" not in row
+    assert "model_family" not in row
+    assert "model_parameter_size" not in row
 
 
 def test_index_contains_public_policy_metadata(tmp_path):
