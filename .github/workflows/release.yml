@@ -41,12 +41,54 @@ jobs:
           python -m mlx_chronos.cli engines
           python -c "from mlx_chronos.detect import detect_hardware; print(detect_hardware())"
 
+      - name: Validate leaderboard JavaScript syntax
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('docs/index.html', 'utf8');
+          const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+            .map(match => match[1]);
+          for (const script of scripts) new Function(script);
+          NODE
+
+      - name: Run frontend behavior and security tests
+        run: node --test tests/frontend.test.cjs
+
       - name: Run tests
         run: pytest
 
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package
+        run: python -m pip install -e ".[test]"
+
+      - name: Lint
+        run: ruff check mlx_chronos tests
+
+      - name: Type check
+        run: mypy
+
+      - name: Enforce coverage
+        run: pytest --cov --cov-report=term-missing
+
+      - name: Verify generated leaderboard index is current
+        run: |
+          python -m mlx_chronos.leaderboard
+          git diff --exit-code docs/results_index.json
+
   build:
     name: Build distributions
-    needs: test
+    needs: [test, quality]
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -57,8 +99,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install build
-        run: python -m pip install --upgrade build
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
 
       - name: Verify tag matches project version
         env:
@@ -81,6 +123,9 @@ jobs:
 
       - name: Build source and wheel distributions
         run: python -m build
+
+      - name: Check distributions
+        run: python -m twine check dist/*
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4

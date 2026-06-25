@@ -33,8 +33,19 @@ def test_tests_workflow_covers_leaderboard_and_python_314():
     assert "detect_hardware" in text
 
 
-def test_release_workflow_tests_python_314():
-    assert "'3.14'" in workflow_text("release.yml")
+def test_release_workflow_runs_full_quality_gates():
+    text = workflow_text("release.yml")
+
+    assert "'3.14'" in text
+    assert "Validate leaderboard JavaScript syntax" in text
+    assert "node --test tests/frontend.test.cjs" in text
+    assert "ruff check mlx_chronos tests" in text
+    assert "mypy" in text
+    assert "pytest --cov" in text
+    assert "python -m mlx_chronos.leaderboard" in text
+    assert "git diff --exit-code docs/results_index.json" in text
+    assert "python -m twine check dist/*" in text
+    assert "needs: [test, quality]" in text
 
 
 def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
@@ -119,6 +130,21 @@ def test_leaderboard_html_does_not_hardcode_standard_token_default():
     assert "model_reference_url" in html
     assert "Model format" in html
     assert "Model reference" in html
+    for removed_field in (
+        "model_source",
+        "model_revision",
+        "model_weight_hash",
+        "model_tokenizer_hash",
+        "model_chat_template_hash",
+        "model_architecture",
+        "model_family",
+        "model_parameter_size",
+        "Model source",
+        "Model revision",
+        "Model family",
+        "Parameter size",
+    ):
+        assert removed_field not in html
     assert "macos_version" in html
     assert "warmup failures=0" in html
     assert "project default trial counts, token bounds, and warmup policy" in html
