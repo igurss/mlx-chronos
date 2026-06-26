@@ -15,6 +15,7 @@ from mlx_chronos.wizard import (
     BACK_TO_MENU,
     MANUAL_MODEL_ENTRY,
     RunWizardConfig,
+    WizardCallbacks,
     WizardAbort,
     WizardBackToMenu,
     WizardSession,
@@ -39,6 +40,7 @@ def test_run_wizard_config_builds_run_namespace():
         model="mlx-community/test-model",
         quantization="nvfp4",
         model_url="https://huggingface.co/mlx-community/test-model",
+        publishable=True,
         profile="sustained",
         trials=2,
         max_tokens=500,
@@ -59,6 +61,7 @@ def test_run_wizard_config_builds_run_namespace():
     assert args.model == "mlx-community/test-model"
     assert args.quantization == "nvfp4"
     assert args.model_url == "https://huggingface.co/mlx-community/test-model"
+    assert args.publishable is True
     assert args.profile == "sustained"
     assert args.trials == 2
     assert args.max_tokens == 500
@@ -112,6 +115,21 @@ def test_validate_run_config_rejects_invalid_model_url():
     assert errors == ["model reference URL must be an http(s) URL"]
 
 
+def test_validate_run_config_rejects_incomplete_publishable_config():
+    errors = validate_run_config(
+        RunWizardConfig(
+            model="test",
+            publishable=True,
+            min_tokens=80,
+            connection_mode="per_request",
+        )
+    )
+
+    assert "publishable runs require a model reference URL" in errors
+    assert "publishable runs do not allow min tokens" in errors
+    assert "publishable runs require persistent HTTP connections" in errors
+
+
 def test_wizard_model_url_prompt_validates_inline():
     captured = {}
 
@@ -161,6 +179,21 @@ def test_build_run_command_contains_only_needed_default_flags():
     assert "--trials" not in parts
     assert "--max-tokens" not in parts
     assert "--ram-sample-interval" not in parts
+
+
+def test_build_run_command_includes_publishable_flag():
+    command = build_run_command(
+        RunWizardConfig(
+            engine="omlx",
+            model="Qwen3.5-4B-OptiQ-4bit",
+            model_url="https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit",
+            publishable=True,
+        )
+    )
+
+    parts = shlex.split(command)
+    assert "--publishable" in parts
+    assert "--model-url" in parts
 
 
 def test_build_run_command_quotes_paths_and_notes():
@@ -254,10 +287,46 @@ def test_wizard_ask_model_selects_model_from_server():
 
 def test_wizard_ask_engine_can_return_to_main_menu():
     session = object.__new__(WizardSession)
+    session._engine_choices = lambda: [("oMLX", "omlx")]
     session._select = lambda *_args, **_kwargs: BACK_TO_MENU
 
     with pytest.raises(WizardBackToMenu):
         session._ask_engine(allow_back=True)
+
+
+def test_wizard_engine_choices_rank_ready_engines_first(monkeypatch):
+    class FakeEngine:
+        def __init__(self, installed, running, base_url):
+            self._installed = installed
+            self._running = running
+            self._base_url = base_url
+
+        def is_installed(self):
+            return self._installed
+
+        def is_server_running(self):
+            return self._running
+
+        def base_url(self):
+            return self._base_url
+
+    engines = {
+        "omlx": FakeEngine(False, False, "http://localhost:10240/v1"),
+        "rapid-mlx": FakeEngine(True, False, "http://localhost:10241/v1"),
+        "vllm-mlx": FakeEngine(True, True, "http://localhost:8000/v1"),
+        "mlx-lm": FakeEngine(False, False, "http://localhost:8080/v1"),
+        "ollama": FakeEngine(False, False, "http://localhost:11434/v1"),
+    }
+    monkeypatch.setattr("mlx_chronos.wizard.get_engine", engines.__getitem__)
+
+    session = object.__new__(WizardSession)
+    choices = session._engine_choices()
+
+    assert choices[0][1] == "vllm-mlx"
+    assert "running at http://localhost:8000/v1" in choices[0][0]
+    assert choices[1][1] == "rapid-mlx"
+    assert "installed, server not running" in choices[1][0]
+    assert choices[-1][1] == "ollama"
 
 
 def test_wizard_ask_model_can_return_from_model_menu():
@@ -337,6 +406,90 @@ def test_wizard_required_text_supports_back_command():
 
     with pytest.raises(WizardBackToMenu):
         session._ask_required_text("Model", allow_back=True)
+
+
+def test_wizard_required_model_url_prompt_validates_inline():
+    captured = {}
+
+    class FakeQuestionary:
+        def text(self, *args, **kwargs):
+            del args
+            captured.update(kwargs)
+            return object()
+
+    session = object.__new__(WizardSession)
+    session.questionary = FakeQuestionary()
+    session.style = None
+    session._ask = lambda _prompt: " https://huggingface.co/org/model "
+
+    assert session._ask_required_model_url("Model reference URL", None) == (
+        "https://huggingface.co/org/model"
+    )
+    assert captured["validate"]("") == (
+        "Model reference URL is required for public submissions."
+    )
+
+
+def test_wizard_prompt_run_config_prepares_publishable_defaults():
+    session = object.__new__(WizardSession)
+    session._ask_engine = lambda **_kwargs: "omlx"
+    session._ask_model = lambda *_args, **_kwargs: "org/test-model"
+    session._ask_required_text = lambda *_args, **_kwargs: "4bit"
+    session._ask_profile = lambda **_kwargs: "baseline"
+    session._confirm = lambda *_args, **_kwargs: True
+    session._ask_required_model_url = lambda *_args, **_kwargs: (
+        "https://huggingface.co/org/test-model"
+    )
+    session._checkbox = lambda *_args, **_kwargs: []
+
+    config = session._prompt_run_config(
+        RunWizardConfig(
+            trials=1,
+            max_tokens=50,
+            min_tokens=10,
+            connection_mode="per_request",
+        )
+    )
+
+    assert config.engine == "omlx"
+    assert config.model == "org/test-model"
+    assert config.publishable is True
+    assert config.preflight is True
+    assert config.model_url == "https://huggingface.co/org/test-model"
+    assert config.trials is None
+    assert config.max_tokens is None
+    assert config.min_tokens is None
+    assert config.connection_mode == "persistent"
+
+
+def test_wizard_doctor_flow_passes_publishable_context():
+    captured = {}
+    confirmations = iter([True, True, True])
+    session = object.__new__(WizardSession)
+    session.callbacks = WizardCallbacks(
+        run=lambda _args: None,
+        doctor=lambda args: captured.setdefault("args", args),
+        validate=lambda _args: None,
+        models=lambda _args: None,
+        engines=lambda _args: None,
+        submit=lambda _args: None,
+        upgrade=lambda _args: None,
+    )
+    session._confirm = lambda *_args, **_kwargs: next(confirmations)
+    session._ask_engine = lambda: "omlx"
+    session._ask_model = lambda engine: f"{engine}/test-model"
+    session._ask_optional_model_url = lambda *_args, **_kwargs: (
+        "https://huggingface.co/omlx/test-model"
+    )
+    session._call_command = lambda callback, args: callback(args)
+
+    session._doctor_flow()
+
+    args = captured["args"]
+    assert args.engine == "omlx"
+    assert args.model == "omlx/test-model"
+    assert args.model_url == "https://huggingface.co/omlx/test-model"
+    assert args.publishable is True
 
 
 def test_wizard_run_flow_catches_cancel_and_returns_to_menu():

@@ -13,9 +13,14 @@ import httpx
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import (
     _emit_result_warnings,
+    _ensure_publishable_run_args,
     _log_result_summary,
+    _log_publishability_summary,
     _maybe_start_update_check,
+    _publishability_fix,
+    _publishable_environment_errors,
     _should_start_update_check,
+    cmd_doctor,
     cmd_models,
     cmd_run,
     cmd_submit,
@@ -181,6 +186,13 @@ def test_main_submit_command():
         with patch("mlx_chronos.cli.cmd_submit") as mock_submit:
             main()
             mock_submit.assert_called_once()
+
+
+def test_main_doctor_command():
+    with patch.object(sys, "argv", ["mlx-chronos", "doctor"]):
+        with patch("mlx_chronos.cli.cmd_doctor") as mock_doctor:
+            main()
+            mock_doctor.assert_called_once()
 
 
 def test_main_upgrade_command():
@@ -580,6 +592,164 @@ def test_cmd_run_format_all_calls_reporters():
         mock_md.return_value.save.assert_called_once_with(EXAMPLE_RESULT, expected_dir)
 
 
+def test_cmd_run_publishable_requires_model_url(capsys):
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        model_url=None,
+        publishable=True,
+        trials=None,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=None,
+        min_tokens=None,
+        format="json",
+        output_dir=None,
+        connection_mode="persistent",
+        preflight=False,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+
+    assert exc.value.code == 2
+    assert "--publishable requires --model-url" in capsys.readouterr().err
+
+
+def test_ensure_publishable_run_args_reports_all_conflicts(capsys):
+    args = Namespace(publishable=True, model_url=None, format="markdown", preflight=False)
+
+    with pytest.raises(SystemExit) as exc:
+        _ensure_publishable_run_args(
+            args,
+            profile="baseline",
+            trials=1,
+            max_tokens=50,
+            min_tokens=10,
+            connection_mode="per_request",
+        )
+
+    err = capsys.readouterr().err
+    assert exc.value.code == 2
+    assert "--publishable requires baseline trials" in err
+    assert "--publishable requires baseline --max-tokens" in err
+    assert "--publishable does not allow --min-tokens" in err
+    assert "--publishable requires --connection-mode persistent" in err
+    assert "--publishable requires --model-url" in err
+    assert "--publishable requires JSON output" in err
+    assert args.preflight is False
+
+
+def test_publishable_environment_errors_accepts_clean_apple_silicon_metadata():
+    assert _publishable_environment_errors(
+        {
+            "architecture": "arm64",
+            "chip": "Apple M2 Pro",
+            "macos_version": "14.5.1",
+            "low_power_mode": "off",
+        }
+    ) == []
+
+
+def test_publishable_environment_errors_explains_untrusted_host_metadata():
+    errors = _publishable_environment_errors(
+        {
+            "architecture": "x86_64",
+            "chip": "Intel Xeon",
+            "macos_version": "unknown",
+            "low_power_mode": "on",
+        }
+    )
+
+    assert errors == [
+        "Apple Silicon architecture arm64 required; got 'x86_64'",
+        "Apple M-series chip required; got 'Intel Xeon'",
+        "valid macOS version required; got 'unknown'",
+        "Low Power Mode must be off for public leaderboard submissions; got 'on'",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error", "fix"),
+    [
+        ("model.reference_url missing", "rerun with --model-url"),
+        ("known engine version required", "restart or update the engine"),
+        ("Low Power Mode is on", "disable Low Power Mode"),
+        ("warmup_failures=1", "engine is stable"),
+        ("usage.completion_tokens missing", "returns usage.completion_tokens"),
+        ("model.format must be safetensors", "Ollama MLX safetensors"),
+        ("trial count mismatch", "standard public profile"),
+        ("thermal monitor unavailable", "thermal extra"),
+        ("RAM monitoring failed", "RAM and thermal monitors"),
+        ("unexpected blocker", "mlx-chronos doctor --publishable"),
+    ],
+)
+def test_publishability_fix_maps_blockers_to_actionable_guidance(error, fix):
+    assert fix in _publishability_fix(error)
+
+
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_run_publishable_forces_preflight_and_standard_shape(
+    mock_detect,
+    mock_get_engine,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+        "power_source": "ac_power",
+        "low_power_mode": "off",
+    }
+    mock_engine = MagicMock()
+    mock_engine.is_installed.return_value = True
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+    mock_engine.list_model_ids.return_value = ["Qwen3.5-4B-OptiQ-4bit"]
+    mock_engine.resolve_listed_model_id.return_value = "Qwen3.5-4B-OptiQ-4bit"
+    mock_engine.validate_model_backend.return_value = {}
+    mock_engine.validate_completion_request.return_value = "Qwen3.5-4B-OptiQ-4bit"
+    mock_get_engine.return_value = mock_engine
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        model_url="https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit",
+        publishable=True,
+        trials=None,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=None,
+        min_tokens=None,
+        format="json",
+        output_dir=None,
+        connection_mode="persistent",
+        preflight=False,
+    )
+
+    with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT) as mock_run, \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
+         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+        mock_json.return_value.save.return_value = Path("results/local/test.json")
+
+        cmd_run(args)
+
+    assert args.preflight is True
+    assert mock_run.call_args.kwargs["trials"] == PUBLIC_BASELINE_TRIALS
+    assert mock_run.call_args.kwargs["throughput_max_tokens"] == 100
+    assert mock_run.call_args.kwargs["throughput_min_tokens"] is None
+    mock_engine.validate_completion_request.assert_called_once()
+
+
 def test_cmd_run_passes_model_url():
     args = Namespace(
         engine="omlx",
@@ -930,6 +1100,89 @@ def test_log_result_summary_collects_result_warnings(caplog):
     assert "system RAM monitor errors" in caplog.text
     assert "thermal state fair" in caplog.text
     assert "battery power" in caplog.text
+
+
+def test_log_publishability_summary_reports_ready_result(caplog):
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    assert _log_publishability_summary(EXAMPLE_RESULT, Path("results/local/result.json")) is True
+
+    assert "Leaderboard readiness" in caplog.text
+    assert "Status     : ready" in caplog.text
+    assert "mlx-chronos submit --file results/local/result.json --dry-run" in caplog.text
+
+
+def test_log_publishability_summary_reports_actionable_blocker(caplog):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["model"].pop("reference_url")
+    result = seal_result(result)
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    assert _log_publishability_summary(result, Path("results/local/result.json")) is False
+
+    assert "Status     : local-only" in caplog.text
+    assert "model.reference_url" in caplog.text
+    assert "rerun with --model-url" in caplog.text
+
+
+@patch("mlx_chronos.cli.get_benchmark_condition_warnings", return_value=[])
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_doctor_reports_publishable_ready(
+    mock_detect,
+    mock_get_engine,
+    _mock_warnings,
+    caplog,
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+        "power_source": "ac_power",
+        "low_power_mode": "off",
+    }
+    mock_engine = MagicMock()
+    mock_engine.is_installed.return_value = True
+    mock_engine.is_server_running.return_value = True
+    mock_engine.base_url.return_value = "http://localhost:8000/v1"
+    mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.list_model_ids.return_value = ["org/test-model"]
+    mock_engine.resolve_listed_model_id.return_value = "org/test-model"
+    mock_engine.validate_model_backend.return_value = {}
+    mock_engine.validate_completion_request.return_value = "org/test-model"
+    mock_get_engine.return_value = mock_engine
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_doctor(
+        Namespace(
+            engine="omlx",
+            model="org/test-model",
+            model_url="https://huggingface.co/org/test-model",
+            publishable=True,
+        )
+    )
+
+    assert "Ready for a publishable run" in caplog.text
+    assert "mlx-chronos run --publishable --engine omlx" in caplog.text
+
+
+def test_cmd_doctor_requires_engine_for_model(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cmd_doctor(
+            Namespace(
+                engine=None,
+                model="org/test-model",
+                model_url=None,
+                publishable=False,
+            )
+        )
+
+    assert exc.value.code == 2
+    assert "--model requires --engine" in capsys.readouterr().err
 
 
 def test_load_publishable_result_rejects_tampered_integrity(tmp_path):

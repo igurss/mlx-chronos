@@ -91,6 +91,7 @@ class RunWizardConfig:
     model: str = ""
     quantization: str = "4bit"
     model_url: str | None = None
+    publishable: bool = False
     profile: str = BENCHMARK_PROFILE_BASELINE
     trials: int | None = None
     max_tokens: int | None = None
@@ -109,6 +110,7 @@ class RunWizardConfig:
             model=self.model,
             quantization=self.quantization,
             model_url=self.model_url,
+            publishable=self.publishable,
             trials=self.trials,
             notes=self.notes,
             ram_sample_interval=self.ram_sample_interval,
@@ -126,6 +128,7 @@ class RunWizardConfig:
 @dataclass(frozen=True)
 class WizardCallbacks:
     run: CommandCallback
+    doctor: CommandCallback
     validate: CommandCallback
     models: CommandCallback
     engines: CommandCallback
@@ -159,6 +162,24 @@ def validate_run_config(config: RunWizardConfig) -> list[str]:
         normalize_model_reference_url(config.model_url)
     except ValueError as exc:
         errors.append(str(exc))
+    if config.publishable:
+        expected_trials, expected_max_tokens = resolved_run_defaults(
+            replace(config, trials=None, max_tokens=None)
+        )
+        if config.model_url is None:
+            errors.append("publishable runs require a model reference URL")
+        if config.trials is not None and config.trials != expected_trials:
+            errors.append(
+                f"publishable {config.profile} runs require {expected_trials} trials"
+            )
+        if config.max_tokens is not None and config.max_tokens != expected_max_tokens:
+            errors.append(
+                f"publishable {config.profile} runs require max tokens={expected_max_tokens}"
+            )
+        if config.min_tokens is not None:
+            errors.append("publishable runs do not allow min tokens")
+        if config.connection_mode != CONNECTION_MODE_PERSISTENT:
+            errors.append("publishable runs require persistent HTTP connections")
     if config.profile not in PROFILE_DESCRIPTIONS:
         errors.append(
             "profile must be one of "
@@ -200,6 +221,8 @@ def build_run_command(config: RunWizardConfig) -> str:
         "--profile",
         config.profile,
     ]
+    if config.publishable:
+        parts.append("--publishable")
     if config.model_url:
         parts.extend(["--model-url", config.model_url])
     if config.trials is not None:
@@ -309,6 +332,7 @@ class WizardSession:
                     "What do you want to do?",
                     [
                         ("Run benchmark", "run"),
+                        ("Doctor: diagnose setup", "doctor"),
                         ("Validate setup", "validate"),
                         ("List models for an engine", "models"),
                         ("List engine status", "engines"),
@@ -320,6 +344,9 @@ class WizardSession:
                 if action == "run":
                     if self._run_benchmark_flow():
                         return
+                elif action == "doctor":
+                    self._doctor_flow()
+                    self._pause()
                 elif action == "validate":
                     self._validate_flow()
                     self._pause()
@@ -394,6 +421,23 @@ class WizardSession:
             ),
             profile=self._ask_profile(default=config.profile, allow_back=True),
         )
+        publishable = self._confirm(
+            "Prepare this run for public leaderboard submission?",
+            default=True,
+        )
+        config = replace(config, publishable=publishable, preflight=publishable)
+        if publishable:
+            config = replace(
+                config,
+                model_url=self._ask_required_model_url(
+                    "Model reference URL required for public submission",
+                    config.model_url,
+                ),
+                trials=None,
+                max_tokens=None,
+                min_tokens=None,
+                connection_mode=CONNECTION_MODE_PERSISTENT,
+            )
 
         optional_settings = self._checkbox(
             "Customize optional run settings",
@@ -557,6 +601,7 @@ class WizardSession:
             ("Engine", config.engine),
             ("Model", config.model),
             ("Quantization", config.quantization),
+            ("Publishable", "yes" if config.publishable else "no"),
             ("Model URL", _format_optional(config.model_url, "not set")),
             ("Profile", config.profile),
             (
@@ -612,6 +657,33 @@ class WizardSession:
             model = self._ask_model(engine)
         self._call_command(self.callbacks.validate, Namespace(engine=engine, model=model))
 
+    def _doctor_flow(self) -> None:
+        publishable = self._confirm(
+            "Check public leaderboard readiness?",
+            default=True,
+        )
+        engine = None
+        model = None
+        model_url = None
+        if self._confirm("Inspect a specific engine?", default=True):
+            engine = self._ask_engine()
+            if self._confirm("Validate model access too?", default=publishable):
+                model = self._ask_model(engine)
+        if publishable:
+            model_url = self._ask_optional_model_url(
+                "Model reference URL (blank to show it as missing)",
+                None,
+            )
+        self._call_command(
+            self.callbacks.doctor,
+            Namespace(
+                engine=engine,
+                model=model,
+                model_url=model_url,
+                publishable=publishable,
+            ),
+        )
+
     def _models_flow(self) -> None:
         engine = self._ask_engine()
         self._call_command(self.callbacks.models, Namespace(engine=engine))
@@ -649,10 +721,7 @@ class WizardSession:
         )
 
     def _ask_engine(self, default: str = "omlx", allow_back: bool = False) -> str:
-        choices = [
-            (f"{name} - {ENGINE_DESCRIPTIONS.get(name, 'engine')}", name)
-            for name in ENGINES
-        ]
+        choices = self._engine_choices()
         if allow_back:
             choices.append(("Back to main menu", BACK_TO_MENU))
         selected = self._select(
@@ -663,6 +732,35 @@ class WizardSession:
         if selected == BACK_TO_MENU:
             raise WizardBackToMenu
         return selected
+
+    def _engine_choices(self) -> list[tuple[str, str]]:
+        ranked = []
+        for index, name in enumerate(ENGINES):
+            status = "unknown"
+            rank = 2
+            try:
+                engine = get_engine(name)
+                if engine.is_installed():
+                    if engine.is_server_running():
+                        status = f"running at {engine.base_url()}"
+                        rank = 0
+                    else:
+                        status = "installed, server not running"
+                        rank = 1
+                else:
+                    status = "not installed"
+            except Exception as exc:
+                status = f"status check failed: {exc}"
+                rank = 3
+            ranked.append((rank, index, name, status))
+        ranked.sort()
+        return [
+            (
+                f"{name} - {ENGINE_DESCRIPTIONS.get(name, 'engine')} ({status})",
+                name,
+            )
+            for _, _, name, status in ranked
+        ]
 
     def _ask_model(
         self,
@@ -849,6 +947,24 @@ class WizardSession:
             validate=self._optional_model_url_validator(),
         )
 
+    def _ask_required_model_url(
+        self,
+        message: str,
+        default: str | None,
+    ) -> str:
+        value = self._ask(
+            self.questionary.text(
+                message,
+                default=default or "",
+                validate=self._required_model_url_validator(),
+                style=self.style,
+            )
+        )
+        normalized = normalize_model_reference_url(str(value).strip())
+        if normalized is None:
+            raise WizardAbort("model reference URL is required")
+        return normalized
+
     def _ask_optional_int(
         self,
         message: str,
@@ -967,6 +1083,20 @@ class WizardSession:
         def validate(text: str) -> bool | str:
             try:
                 normalize_model_reference_url(text)
+            except ValueError as exc:
+                return str(exc)
+            return True
+
+        return validate
+
+    @staticmethod
+    def _required_model_url_validator() -> Callable[[str], bool | str]:
+        def validate(text: str) -> bool | str:
+            stripped = text.strip()
+            if not stripped:
+                return "Model reference URL is required for public submissions."
+            try:
+                normalize_model_reference_url(stripped)
             except ValueError as exc:
                 return str(exc)
             return True

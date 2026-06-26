@@ -16,6 +16,7 @@ Mac, the shortest path is:
 
 ```bash
 pip install mlx-chronos
+mlx-chronos doctor
 mlx-chronos wizard
 ```
 
@@ -30,6 +31,7 @@ Prefer a direct command instead of the wizard:
 mlx-chronos engines
 mlx-chronos models --engine omlx
 mlx-chronos run \
+  --publishable \
   --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \
   --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
@@ -153,14 +155,16 @@ Set `MLX_CHRONOS_DISABLE_UPDATE_CHECK=1` to disable the automatic check.
 ### 4. Inspect Your Engine
 
 ```bash
+mlx-chronos doctor
 mlx-chronos engines
 mlx-chronos models --engine omlx
 mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 ```
 
-Use `mlx-chronos engines` first if you are not sure which supported server is
-installed or currently reachable. Then use `mlx-chronos models` to copy the
-exact model ID exposed by that server.
+Use `mlx-chronos doctor` first if you are not sure what is missing. It checks
+hardware, supported engines, running servers, model access, model URL readiness,
+and public leaderboard blockers. Then use `mlx-chronos models` to copy the
+exact model ID exposed by a running server.
 
 ### 5. Use the Interactive Wizard
 
@@ -181,14 +185,19 @@ starting a run.
 
 ```bash
 mlx-chronos run \
+  --publishable \
   --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \
   --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
 ```
 
-Results are written to `results/local/` by default. The model URL is optional
-for private local experiments, but required if you want the result to pass the
-public leaderboard checks.
+Results are written to `results/local/` by default. `--publishable` fails fast
+unless the run uses public leaderboard settings: standard profile shape, JSON
+output, persistent HTTP connections, model URL, preflight validation, and Low
+Power Mode off. Leave it out for private local experiments.
+
+After every run, mlx-Chronos prints whether the result is ready for the public
+leaderboard or local-only, including the first blocker and the concrete fix.
 
 ### 7. Validate a Result Before Submitting
 
@@ -205,6 +214,11 @@ If validation passes, you can submit the JSON through a pull request under
 ```bash
 # Open the guided terminal flow
 mlx-chronos wizard
+
+# Diagnose local setup and public leaderboard blockers
+mlx-chronos doctor --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" \
+  --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit" \
+  --publishable
 
 # Write both JSON and Markdown outputs
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all
@@ -237,12 +251,14 @@ mlx-chronos run --engine omlx \
 | Command | Purpose |
 | --- | --- |
 | `mlx-chronos --version` | Print the installed package version |
+| `mlx-chronos doctor` | Diagnose hardware, engines, server status, model access, and public-submission blockers |
 | `mlx-chronos wizard` | Open an interactive menu for common commands and guided benchmark setup |
 | `mlx-chronos upgrade` | Check PyPI and upgrade the current Python environment if a newer release exists |
 | `mlx-chronos engines` | List supported engines and local installed/running status |
 | `mlx-chronos models --engine <name>` | List model IDs exposed by a running engine server |
 | `mlx-chronos validate --engine <name> --model <model>` | Validate hardware, engine, server, and optional model access |
 | `mlx-chronos run --engine <name> --model <model>` | Run a benchmark and save local result files |
+| `mlx-chronos run --publishable --engine <name> --model <model> --model-url <url>` | Run only if public leaderboard settings are satisfied |
 | `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |
 | `mlx-chronos submit --file <result.json>` | Send a validated result to the maintainer inbox |
 
@@ -384,7 +400,7 @@ reference URL separate so distinct variants are not grouped together.
 
 ### Pull Request Workflow
 
-1. Run `mlx-chronos run` on your Mac.
+1. Run `mlx-chronos run --publishable` on your Mac.
 2. Find the generated JSON in `results/local/`.
 3. Validate it locally:
 

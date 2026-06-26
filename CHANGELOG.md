@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Features
+- Add `mlx-chronos doctor` to diagnose Apple Silicon readiness, supported
+  engine status, running servers, model access, model reference URLs, and public
+  leaderboard blockers from one command.
+- Add `mlx-chronos run --publishable` to fail fast unless a run uses public
+  leaderboard settings, including the required model URL, JSON output,
+  persistent connections, preflight validation, and Low Power Mode off.
+- Add an actionable post-run leaderboard-readiness summary that reports whether
+  the result is ready to submit or local-only, including the first blocker and
+  a concrete fix.
+- Make the wizard more guided for public submissions by surfacing the doctor
+  flow, prioritizing running engines, requiring model URLs for publishable runs,
+  and generating equivalent `--publishable` commands.
+
 ## [0.3.1] — 2026-06-25
 
 Patch release focused on simplifying public model identity metadata after

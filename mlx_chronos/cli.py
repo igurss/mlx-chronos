@@ -5,9 +5,12 @@ import os
 import json
 import time
 import subprocess
+import re
 
 from pathlib import Path
 from datetime import datetime, timezone
+from pydantic import ValidationError
+
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.benchmark import (
     BENCHMARK_PROFILE_BASELINE,
@@ -18,8 +21,10 @@ from mlx_chronos.benchmark import (
 )
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
+from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.reporters import BaseReporter, JSONReporter, MarkdownReporter
+from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
     DEFAULT_SUBMITTER_EMAIL,
@@ -28,6 +33,7 @@ from mlx_chronos.submit import (
     SubmissionError,
     load_publishable_result,
     submit_result_file,
+    validate_publishable_result,
 )
 from mlx_chronos.updates import (
     DEFAULT_UPDATE_CHECK_TIMEOUT,
@@ -40,6 +46,7 @@ from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     MAX_TRIALS,
+    PUBLIC_BASELINE_TRIALS,
     RECENT_BENCHMARK_WARNING_SECONDS,
     SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
@@ -127,6 +134,161 @@ def _resolve_profile_defaults(args) -> tuple[str, int, int]:
         default_trials if trials is None else trials,
         default_max_tokens if max_tokens is None else max_tokens,
     )
+
+
+def _publishable_profile_shape(profile: str) -> tuple[int, int]:
+    if profile == BENCHMARK_PROFILE_SUSTAINED:
+        return SUSTAINED_TRIALS, SUSTAINED_THROUGHPUT_MAX_TOKENS
+    return PUBLIC_BASELINE_TRIALS, DEFAULT_THROUGHPUT_MAX_TOKENS
+
+
+def _ensure_publishable_run_args(
+    args,
+    *,
+    profile: str,
+    trials: int,
+    max_tokens: int,
+    min_tokens: int | None,
+    connection_mode: str,
+) -> tuple[int, int, int | None, str]:
+    if not getattr(args, "publishable", False):
+        return trials, max_tokens, min_tokens, connection_mode
+
+    errors = []
+    expected_trials, expected_max_tokens = _publishable_profile_shape(profile)
+    if trials != expected_trials:
+        errors.append(
+            f"--publishable requires {profile} trials={expected_trials}; got {trials}"
+        )
+    if max_tokens != expected_max_tokens:
+        errors.append(
+            f"--publishable requires {profile} --max-tokens={expected_max_tokens}; "
+            f"got {max_tokens}"
+        )
+    if min_tokens is not None:
+        errors.append("--publishable does not allow --min-tokens")
+    if connection_mode != CONNECTION_MODE_PERSISTENT:
+        errors.append("--publishable requires --connection-mode persistent")
+    if not getattr(args, "model_url", None):
+        errors.append("--publishable requires --model-url")
+    if getattr(args, "format", "json") == "markdown":
+        errors.append("--publishable requires JSON output; use --format json or --format all")
+
+    if errors:
+        print("Error: publishable run configuration is not valid:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        print(
+            "Fix: remove conflicting overrides or use the standard public profile "
+            "defaults.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+    args.preflight = True
+    return expected_trials, expected_max_tokens, None, CONNECTION_MODE_PERSISTENT
+
+
+def _publishable_environment_errors(hardware: dict) -> list[str]:
+    errors = []
+    architecture = str(hardware.get("architecture", "")).strip().lower()
+    if architecture != "arm64":
+        errors.append(f"Apple Silicon architecture arm64 required; got {architecture!r}")
+    chip = str(hardware.get("chip", ""))
+    if re.fullmatch(r"Apple M\d+(?: (?:Pro|Max|Ultra))?", chip) is None:
+        errors.append(f"Apple M-series chip required; got {chip!r}")
+    macos_version = str(hardware.get("macos_version", ""))
+    if re.fullmatch(r"\d+(?:\.\d+){1,2}", macos_version) is None:
+        errors.append(f"valid macOS version required; got {macos_version!r}")
+    low_power_mode = hardware.get("low_power_mode")
+    if low_power_mode != "off":
+        errors.append(
+            "Low Power Mode must be off for public leaderboard submissions; "
+            f"got {low_power_mode!r}"
+        )
+    return errors
+
+
+def _ensure_publishable_environment() -> None:
+    try:
+        hardware = detect_hardware()
+    except Exception as exc:
+        print(f"Error: could not detect hardware for --publishable: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    errors = _publishable_environment_errors(hardware)
+    if errors:
+        print("Error: current machine is not ready for a publishable run:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        print(
+            "Fix: use an Apple Silicon Mac, disable Low Power Mode, and rerun "
+            "`mlx-chronos doctor --publishable`.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
+def _publishability_errors(result: dict) -> list[str]:
+    errors = []
+    try:
+        validate_integrity_seal(result)
+    except IntegrityError as exc:
+        errors.append(f"integrity seal failed: {exc}")
+
+    try:
+        parsed = BenchmarkResult.model_validate(result)
+    except ValidationError as exc:
+        errors.append(f"schema validation failed: {exc}")
+    else:
+        try:
+            validate_publishable_result(parsed)
+        except SubmissionError as exc:
+            errors.append(str(exc))
+    return errors
+
+
+def _publishability_fix(error: str) -> str:
+    if "model.reference_url" in error:
+        return "rerun with --model-url pointing to the model page you used."
+    if "known engine version" in error or "engine.version" in error:
+        return "restart or update the engine so mlx-chronos can detect its version."
+    if "Low Power Mode" in error or "lowpowermode" in error:
+        return "disable Low Power Mode in macOS Battery settings and rerun."
+    if "warmup_failures" in error:
+        return "make sure the engine is stable, then rerun the benchmark."
+    if "usage.completion_tokens" in error:
+        return "use an engine/server that returns usage.completion_tokens."
+    if "model.format" in error or "safetensors" in error:
+        return "use an Ollama MLX safetensors model and rerun."
+    if "trial count" in error or "max_tokens" in error or "min_tokens" in error:
+        return "rerun with --publishable or the standard public profile settings."
+    if "thermal" in error:
+        return "install the thermal extra if needed and rerun with working Foundation thermal sampling."
+    if "RAM monitoring" in error or "monitor" in error:
+        return "rerun after closing interfering processes so RAM and thermal monitors complete cleanly."
+    return "run `mlx-chronos doctor --publishable` for the next concrete check."
+
+
+def _log_publishability_summary(result: dict, json_path: Path | None) -> bool:
+    errors = _publishability_errors(result)
+    logger.info("")
+    logger.info("  Leaderboard readiness")
+    if not errors:
+        logger.info("  Status     : ready")
+        if json_path is not None:
+            logger.info("  Validate   : mlx-chronos submit --file %s --dry-run", json_path)
+            logger.info("  Submit PR  : copy that JSON into results/submitted/ and open a PR")
+        else:
+            logger.info("  Next       : rerun with --format json or --format all before submitting")
+        return True
+
+    logger.info("  Status     : local-only")
+    logger.info("  Blocker    : %s", errors[0])
+    logger.info("  Fix        : %s", _publishability_fix(errors[0]))
+    if len(errors) > 1:
+        logger.info("  More       : %d additional issue(s) may remain", len(errors) - 1)
+    return False
 
 
 def _emit_result_warnings(result: dict) -> None:
@@ -284,6 +446,17 @@ def cmd_run(args):
         print("Error: --model must not be empty.", file=sys.stderr)
         raise SystemExit(2)
 
+    trials, max_tokens, min_tokens, connection_mode = _ensure_publishable_run_args(
+        args,
+        profile=profile,
+        trials=trials,
+        max_tokens=max_tokens,
+        min_tokens=min_tokens,
+        connection_mode=connection_mode,
+    )
+    if getattr(args, "publishable", False):
+        _ensure_publishable_environment()
+
     results_dir = args.output_dir or Path.cwd() / "results" / "local"
     elapsed_since_last = _elapsed_since_last_result(results_dir)
     if elapsed_since_last is not None:
@@ -340,16 +513,20 @@ def cmd_run(args):
 
     _emit_result_warnings(result)
     _log_result_summary(result)
-    reporters: list[BaseReporter] = []
+    reporters: list[tuple[str, BaseReporter]] = []
     if args.format in ("json", "all"):
-        reporters.append(JSONReporter())
+        reporters.append(("json", JSONReporter()))
     if args.format in ("markdown", "all"):
-        reporters.append(MarkdownReporter())
-        
-    for reporter in reporters:
+        reporters.append(("markdown", MarkdownReporter()))
+
+    json_path = None
+    for report_format, reporter in reporters:
         path = reporter.save(result, results_dir)
+        if report_format == "json":
+            json_path = path
         logger.info(f"Result saved to: {path}")
-        
+
+    _log_publishability_summary(result, json_path)
     logger.info("\nDone.")
 
 
@@ -363,6 +540,166 @@ def cmd_engines(args):
         status = "running" if running else ("installed" if installed else "not installed")
         logger.info(f"  {name:<15} {status:<13} {engine.base_url()}")
     logger.info("")
+
+
+def cmd_doctor(args):
+    """Diagnose the local setup and suggest the next useful command."""
+    model = args.model.strip() if args.model is not None else None
+    if args.model is not None and not model:
+        print("Error: --model must not be empty.", file=sys.stderr)
+        raise SystemExit(2)
+    if model and args.engine is None:
+        print("Error: --model requires --engine.", file=sys.stderr)
+        raise SystemExit(2)
+
+    failures = 0
+    running_engines: list[str] = []
+    selected_engine = args.engine
+    selected_engine_ready = False
+
+    logger.info("\nmlx-chronos doctor:\n")
+
+    hardware = None
+    try:
+        hardware = detect_hardware()
+        log_validation_check(
+            "ok",
+            "Apple Silicon host",
+            (
+                f"{hardware['chip']} / {hardware['memory_gb']} GB / "
+                f"macOS {hardware['macos_version']} / {hardware.get('architecture')}"
+            ),
+        )
+        for warning in get_benchmark_condition_warnings(hardware):
+            log_validation_check("warn", warning.label, warning.detail)
+    except Exception as exc:
+        failures += 1
+        log_validation_check("fail", "hardware detection", str(exc))
+
+    if args.publishable and hardware is not None:
+        for error in _publishable_environment_errors(hardware):
+            failures += 1
+            log_validation_check("fail", "publishable environment", error)
+
+    logger.info("")
+    logger.info("Engines:")
+    engine_names = [selected_engine] if selected_engine else list(ENGINES)
+    for name in engine_names:
+        engine = get_engine(name)
+        installed = engine.is_installed()
+        if not installed:
+            status = "fail" if selected_engine else "skip"
+            log_validation_check(status, f"{name} installed", "not installed")
+            if selected_engine:
+                failures += 1
+            continue
+
+        version = engine.get_version()
+        running = engine.is_server_running()
+        if running:
+            running_engines.append(name)
+            selected_engine_ready = selected_engine == name or selected_engine is None
+        status = "ok" if running else ("fail" if selected_engine else "warn")
+        detail = f"{version} at {engine.base_url()}"
+        log_validation_check(status, f"{name} server", detail if running else f"not running at {engine.base_url()}")
+        if selected_engine and not running:
+            failures += 1
+        if selected_engine and version == "unknown":
+            failures += 1 if args.publishable else 0
+            log_validation_check(
+                "fail" if args.publishable else "warn",
+                "engine version",
+                "known engine version is required for public leaderboard submissions",
+            )
+
+    if selected_engine and selected_engine_ready:
+        engine = get_engine(selected_engine)
+        try:
+            model_ids = engine.list_model_ids()
+            detail = f"{len(model_ids)} model(s)" if model_ids else "server returned no models"
+            log_validation_check("ok" if model_ids else "warn", "model list", detail)
+        except RuntimeError as exc:
+            model_ids = []
+            failures += 1
+            log_validation_check("fail", "model list", str(exc))
+
+        if model:
+            resolved_model = engine.resolve_listed_model_id(model, model_ids)
+            if resolved_model is None:
+                log_validation_check(
+                    "warn",
+                    "model listed",
+                    f"{model} was not found in /models; trying backend/request checks",
+                )
+            else:
+                log_validation_check("ok", "model listed", resolved_model)
+
+            backend_failed = False
+            try:
+                model_backend_metadata = engine.validate_model_backend(model)
+                if engine.requires_model_backend_validation is True:
+                    model_format = model_backend_metadata.get("format", "unknown")
+                    log_validation_check("ok", "model backend", f"format={model_format}")
+            except RuntimeError as exc:
+                backend_failed = True
+                failures += 1
+                log_validation_check("fail", "model backend", str(exc))
+
+            if not backend_failed:
+                try:
+                    request_model = engine.validate_completion_request(model)
+                    log_validation_check("ok", "completion request", request_model)
+                except RuntimeError as exc:
+                    failures += 1
+                    log_validation_check("fail", "completion request", str(exc))
+        elif args.publishable:
+            failures += 1
+            log_validation_check("fail", "model", "--publishable doctor requires --model")
+
+    model_url = getattr(args, "model_url", None)
+    if args.publishable:
+        if not model_url:
+            failures += 1
+            log_validation_check("fail", "model reference URL", "pass --model-url")
+        else:
+            try:
+                from mlx_chronos.model_reference import normalize_model_reference_url
+
+                normalized_url = normalize_model_reference_url(model_url)
+                log_validation_check("ok", "model reference URL", normalized_url or "")
+            except ValueError as exc:
+                failures += 1
+                log_validation_check("fail", "model reference URL", str(exc))
+
+    logger.info("")
+    if args.publishable and failures == 0 and selected_engine and model and model_url:
+        logger.info("Ready for a publishable run.")
+        logger.info(
+            "Next: mlx-chronos run --publishable --engine %s --model %s --model-url %s",
+            selected_engine,
+            model,
+            model_url,
+        )
+    elif selected_engine and selected_engine_ready and model is None:
+        logger.info("Next: mlx-chronos models --engine %s", selected_engine)
+    elif selected_engine and selected_engine_ready and model is not None:
+        logger.info(
+            "Next: mlx-chronos run --engine %s --model %s%s",
+            selected_engine,
+            model,
+            f" --model-url {model_url}" if model_url else "",
+        )
+    elif running_engines:
+        first_running = running_engines[0]
+        logger.info("Next: mlx-chronos models --engine %s", first_running)
+    else:
+        logger.info("Next: start a supported engine server, then run `mlx-chronos doctor` again.")
+
+    if failures:
+        logger.info("\nDoctor found %d blocking issue(s).", failures)
+        raise SystemExit(1)
+
+    logger.info("\nDoctor completed.")
 
 
 def cmd_models(args):
@@ -599,6 +936,7 @@ def cmd_wizard(args):
 
     callbacks = WizardCallbacks(
         run=cmd_run,
+        doctor=cmd_doctor,
         validate=cmd_validate,
         models=cmd_models,
         engines=cmd_engines,
@@ -735,12 +1073,49 @@ def main():
         ),
     )
     run_parser.add_argument(
+        "--publishable",
+        action="store_true",
+        help=(
+            "Fail fast unless the run uses public-leaderboard settings. Requires "
+            "--model-url, standard profile defaults, JSON output, persistent "
+            "connections, Low Power Mode off, and preflight validation."
+        ),
+    )
+    run_parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
         help="Directory for result files (default: ./results/local)",
     )
     run_parser.set_defaults(func=cmd_run)
+
+    # --- doctor ---
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Diagnose local setup and print the next useful command",
+    )
+    doctor_parser.add_argument(
+        "--engine",
+        choices=list(ENGINES.keys()),
+        default=None,
+        help="Optional engine to inspect in depth",
+    )
+    doctor_parser.add_argument(
+        "--model",
+        default=None,
+        help="Optional model name to validate with the selected engine",
+    )
+    doctor_parser.add_argument(
+        "--model-url",
+        default=None,
+        help="Model reference URL to validate for publishable runs",
+    )
+    doctor_parser.add_argument(
+        "--publishable",
+        action="store_true",
+        help="Check additional public-leaderboard readiness requirements",
+    )
+    doctor_parser.set_defaults(func=cmd_doctor)
 
     # --- engines ---
     engines_parser = subparsers.add_parser(
