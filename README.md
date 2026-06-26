@@ -4,15 +4,50 @@
 > Run a reproducible benchmark, save a sealed JSON result, and compare engines across Macs.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/igurss/mlx-chronos/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/mlx-chronos.svg)](https://pypi.org/project/mlx-chronos/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-green.svg)](https://python.org)
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1_|_M2_|_M3_|_M4_|_M5-black?logo=apple)](https://apple.com)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 
+## Start Here
+
+If you already have a supported local engine server running on an Apple Silicon
+Mac, the shortest path is:
+
+```bash
+pip install mlx-chronos
+mlx-chronos wizard
+```
+
+The wizard walks through engine selection, model selection, benchmark profile,
+output format, cooldown, preflight validation, notes, and the model reference
+URL needed for public leaderboard submissions. Before starting a run, it shows
+the equivalent `mlx-chronos run ...` command so you can reuse it later.
+
+Prefer a direct command instead of the wizard:
+
+```bash
+mlx-chronos engines
+mlx-chronos models --engine omlx
+mlx-chronos run \
+  --engine omlx \
+  --model "Qwen3.5-4B-OptiQ-4bit" \
+  --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
+```
+
+Results are saved as sealed JSON files under `results/local/` by default. To
+check whether a result is ready for the public leaderboard:
+
+```bash
+mlx-chronos submit --file results/local/your-result.json --dry-run
+```
+
 ## Contents
 
+- [Start Here](#start-here)
+- [Quick Start](#quick-start)
 - [Overview](#overview)
 - [Supported Engines](#supported-engines)
-- [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
 - [Configuration](#configuration)
 - [Benchmark Protocol](#benchmark-protocol)
@@ -74,7 +109,19 @@ checks introduced in `0.3.0`.
 
 ## Quick Start
 
-### 1. Install
+### 1. Prerequisites
+
+You need:
+
+- an Apple Silicon Mac;
+- Python 3.10 or newer;
+- one supported engine server already running locally;
+- a model loaded or exposed by that engine.
+
+`mlx-chronos` talks to an existing OpenAI-compatible local server. It does not
+start, install, or download model weights for the engine.
+
+### 2. Install
 
 ```bash
 pip install mlx-chronos
@@ -86,7 +133,7 @@ Optional thermal-state support through macOS Foundation/PyObjC:
 pip install "mlx-chronos[thermal]"
 ```
 
-### 2. Check Version and Updates
+### 3. Check Version and Updates
 
 ```bash
 mlx-chronos --version
@@ -103,7 +150,7 @@ mlx-chronos upgrade
 
 Set `MLX_CHRONOS_DISABLE_UPDATE_CHECK=1` to disable the automatic check.
 
-### 3. Inspect Your Engine
+### 4. Inspect Your Engine
 
 ```bash
 mlx-chronos engines
@@ -111,7 +158,11 @@ mlx-chronos models --engine omlx
 mlx-chronos validate --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
 ```
 
-### 4. Use the Interactive Wizard
+Use `mlx-chronos engines` first if you are not sure which supported server is
+installed or currently reachable. Then use `mlx-chronos models` to copy the
+exact model ID exposed by that server.
+
+### 5. Use the Interactive Wizard
 
 ```bash
 mlx-chronos wizard
@@ -126,17 +177,35 @@ equivalent `mlx-chronos run ...` command so the same configuration can be reused
 in scripts. You can return to the main menu from benchmark setup without
 starting a run.
 
-### 5. Run a Benchmark Manually
+### 6. Run a Benchmark Manually
 
 ```bash
-mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit"
+mlx-chronos run \
+  --engine omlx \
+  --model "Qwen3.5-4B-OptiQ-4bit" \
+  --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
 ```
 
-Results are written to `results/local/` by default.
+Results are written to `results/local/` by default. The model URL is optional
+for private local experiments, but required if you want the result to pass the
+public leaderboard checks.
 
-### 6. Useful Run Options
+### 7. Validate a Result Before Submitting
 
 ```bash
+mlx-chronos submit --file results/local/your-result.json --dry-run
+```
+
+If validation passes, you can submit the JSON through a pull request under
+`results/submitted/` or send it through the maintainer inbox with
+`mlx-chronos submit --file ...`.
+
+### 8. Useful Run Options
+
+```bash
+# Open the guided terminal flow
+mlx-chronos wizard
+
 # Write both JSON and Markdown outputs
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --format all
 
@@ -302,9 +371,8 @@ Public leaderboard submissions are stricter so rows remain comparable.
   counts, short-output runs, and Low Power Mode runs are valid local records but
   are not accepted into the public leaderboard.
 
-Result JSON also contains internal benchmark-protocol labels used by validators
-to detect incompatible result formats. Treat labels such as `1`, `2`, and `3`
-as implementation compatibility markers, not public protocol release versions.
+Result JSON also contains validator-only compatibility metadata used to detect
+incompatible result formats. Users do not need to set or manage that metadata.
 Model reference URLs point to the model page used for the run. Model pages can
 change over time when maintainers update files or tags.
 Leaderboard comparisons keep model name, quantization, format, and model
