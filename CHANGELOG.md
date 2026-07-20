@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.4.0] — 2026-07-20
 
 ### Features
 - Add `mlx-chronos doctor` to diagnose Apple Silicon readiness, supported

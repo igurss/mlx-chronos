@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mlx-chronos"
-version = "0.3.1"
+version = "0.4.0"
 description = "Benchmark suite and community leaderboard for local LLM inference on Apple Silicon"
 readme = "README.md"
 requires-python = ">=3.10"
