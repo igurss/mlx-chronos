@@ -1,0 +1,233 @@
+{
+  "hardware": {
+    "chip": "Apple M5 Pro",
+    "machine_model": "Mac17,9",
+    "memory_gb": 64.0,
+    "macos_version": "26.5.2",
+    "python_version": "3.14.6",
+    "architecture": "arm64",
+    "thermal_state": "nominal",
+    "power_source": "ac_power",
+    "low_power_mode": "off"
+  },
+  "engine": {
+    "name": "omlx",
+    "version": "0.5.1"
+  },
+  "model": {
+    "name": "gemma-4-e4b-it-4bit",
+    "quantization": "4bit",
+    "reference_url": "https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit",
+    "format": null
+  },
+  "metrics": {
+    "ttft_cold": {
+      "mean": 0.177,
+      "stddev": 0.007,
+      "min": 0.168,
+      "max": 0.185
+    },
+    "ttft_cached": {
+      "mean": 0.176,
+      "stddev": 0.007,
+      "min": 0.165,
+      "max": 0.182
+    },
+    "tokens_per_second": {
+      "mean": 71.346,
+      "stddev": 1.648,
+      "min": 69.3,
+      "max": 73.26
+    },
+    "request_tokens_per_second": {
+      "mean": 71.346,
+      "stddev": 1.648,
+      "min": 69.3,
+      "max": 73.26
+    },
+    "decode_tokens_per_second": {
+      "mean": 88.5,
+      "stddev": 2.615,
+      "min": 85.12,
+      "max": 91.84
+    },
+    "decode_timing_source": "client_stream",
+    "ram_peak_gb": 5.963,
+    "ram_is_process_rss": true,
+    "ram_measurement_method": "process_rss",
+    "system_ram_peak_gb": 36.595,
+    "system_ram_peak_percent": 57.2,
+    "token_count_source": "usage.completion_tokens"
+  },
+  "trials": {
+    "count": 5,
+    "ttft_cold_raw": [
+      0.168,
+      0.184,
+      0.185,
+      0.174,
+      0.174
+    ],
+    "ttft_cached_raw": [
+      0.165,
+      0.182,
+      0.175,
+      0.179,
+      0.179
+    ],
+    "tokens_per_second_raw": [
+      72.73,
+      71.12,
+      73.26,
+      69.3,
+      70.32
+    ],
+    "throughput_elapsed_seconds_raw": [
+      1.375,
+      1.406,
+      1.365,
+      1.443,
+      1.422
+    ],
+    "decode_tokens_per_second_raw": [
+      90.08,
+      88.47,
+      91.84,
+      85.12,
+      86.99
+    ],
+    "decode_elapsed_seconds_raw": [
+      1.099,
+      1.119,
+      1.078,
+      1.163,
+      1.138
+    ],
+    "completion_tokens_raw": [
+      100,
+      100,
+      100,
+      100,
+      100
+    ],
+    "throughput_progress_samples_raw": null
+  },
+  "meta": {
+    "chronos_version": "0.4.0",
+    "timestamp": "2026-07-21T09:01:15.658973Z",
+    "benchmark_profile": "baseline",
+    "ram_sample_interval_seconds": 0.05,
+    "elapsed_since_last_benchmark_seconds": 40264.858,
+    "cooldown_seconds": 0.0,
+    "benchmark_protocol": {
+      "name": "baseline",
+      "version": "3",
+      "warmup": {
+        "prompts": [
+          "Describe one practical reason local inference can be useful on a laptop."
+        ],
+        "requested_max_tokens": 30,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": false,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      },
+      "ttft_cold": {
+        "prompts": [
+          "What is the capital of Australia?",
+          "Explain what a transformer neural network is in one sentence.",
+          "What does RAM stand for in computing?",
+          "Describe the difference between a CPU and a GPU briefly.",
+          "What is the boiling point of water in Celsius?"
+        ],
+        "requested_max_tokens": 1,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": false,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      },
+      "ttft_cached": {
+        "prompts": [
+          "Explain the concept of unified memory in Apple Silicon in one sentence."
+        ],
+        "requested_max_tokens": 1,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": false,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      },
+      "throughput": {
+        "prompts": [
+          "Explain in detail how the attention mechanism works in transformer neural networks, including the role of queries, keys, and values.",
+          "Explain how a transformer decoder processes a user prompt from token embedding through final text generation.",
+          "Describe the main performance tradeoffs between prompt prefill and token-by-token decode in local language model serving.",
+          "Explain how quantization changes memory use and arithmetic behavior when running a language model on Apple Silicon.",
+          "Describe how unified memory can affect model loading, cache growth, and inference throughput on a Mac."
+        ],
+        "requested_max_tokens": 100,
+        "requested_min_tokens": null,
+        "request_mode": "streaming",
+        "stream_usage_requested": true,
+        "connection_mode": "persistent",
+        "generation_parameters": {
+          "temperature": 0.0,
+          "top_p": 1.0
+        },
+        "input_tokens": null,
+        "input_token_count_source": "unavailable"
+      }
+    },
+    "phase_timings_seconds": {
+      "warmup": 1.046,
+      "ttft_cold": 0.887,
+      "cache_priming": 0.166,
+      "ttft_cached": 0.88,
+      "throughput": 7.013,
+      "total_runtime": 10.032
+    },
+    "thermal_monitor": {
+      "sample_interval_seconds": 1.0,
+      "source": "foundation",
+      "start_state": "nominal",
+      "end_state": "nominal",
+      "worst_state": "nominal",
+      "samples": 11,
+      "changed_during_run": false,
+      "non_nominal_observed": false,
+      "non_nominal_phases": [],
+      "sampling_errors": 0
+    },
+    "warmup_failures": 0,
+    "system_ram_monitor_errors": 0,
+    "engine_ram_monitor_errors": 0,
+    "word_fallback_warning": false,
+    "engine_version_warning": false,
+    "sustained_throttling_warning": false,
+    "cached_ttft_warning": true,
+    "notes": null
+  },
+  "integrity": {
+    "schema": "mlx-chronos-integrity-v1",
+    "algorithm": "sha256-canonical-json",
+    "signed_payload": "benchmark-result-without-integrity",
+    "digest": "78efe3e1b2d34e50c054cf4e7d7eb9b2ffa2a906230ac7e555d4e16fee5e42c5"
+  }
+}
