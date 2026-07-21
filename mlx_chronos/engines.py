@@ -476,6 +476,17 @@ class BaseEngine(ABC):
 
         return False
 
+    def _stream_chunk_has_terminal_token(self, chunk: dict) -> bool:
+        """Return whether a capped stream generated a token without visible text.
+
+        Reasoning models can spend the only requested token on hidden reasoning,
+        so Ollama may return an empty content delta together with length.
+        """
+        choices = chunk.get("choices")
+        if not choices or not isinstance(choices[0], dict):
+            return False
+        return choices[0].get("finish_reason") == "length"
+
     def _extract_stream_text(self, chunk: dict) -> str:
         choices = chunk.get("choices")
         if not choices:
@@ -670,7 +681,9 @@ class BaseEngine(ABC):
                     except json.JSONDecodeError:
                         continue
 
-                    if self._stream_chunk_has_content(chunk):
+                    if self._stream_chunk_has_content(chunk) or (
+                        self._stream_chunk_has_terminal_token(chunk)
+                    ):
                         return round(time.perf_counter() - start, 3)
         except httpx.HTTPError as exc:
             raise RuntimeError(

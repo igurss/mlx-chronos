@@ -1117,6 +1117,52 @@ def test_measure_ttft_uses_provided_http_client(mock_stream):
 
 
 @contextmanager
+def mock_stream_response_reasoning_only_length(*args, **kwargs):
+    class MockResponse:
+        def raise_for_status(self):
+            pass
+        def iter_lines(self):
+            yield 'data: {"choices": [{"delta": {"role": "assistant"}}]}'
+            yield 'data: {"choices": [{"delta": {"content": ""}, "finish_reason": "length"}]}'
+            yield 'data: [DONE]'
+    yield MockResponse()
+
+@patch("httpx.stream", side_effect=mock_stream_response_reasoning_only_length)
+def test_measure_ttft_reasoning_only_length_succeeds(mock_stream):
+    """A reasoning model can spend the only max_tokens=1 token on hidden
+    reasoning; Ollama then reports empty content with finish_reason=length
+    instead of visible text. This should still yield a TTFT rather than
+    raising, since the terminal chunk marks the moment that one token was
+    produced regardless of whether its text was surfaced (see issue #37).
+    """
+    engine = OMLXEngine()
+    with patch("time.perf_counter", side_effect=[0.0, 0.5]):
+        ttft = engine.measure_ttft("hello")
+        assert ttft == 0.5
+
+
+@pytest.mark.parametrize(
+    "chunk",
+    [
+        {},
+        {"choices": []},
+        {"choices": [None]},
+        {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+        {"choices": [{"delta": {}, "finish_reason": None}]},
+    ],
+)
+def test_stream_chunk_has_terminal_token_false_cases(chunk):
+    engine = OMLXEngine()
+    assert engine._stream_chunk_has_terminal_token(chunk) is False
+
+
+def test_stream_chunk_has_terminal_token_true_for_length():
+    engine = OMLXEngine()
+    chunk = {"choices": [{"delta": {"content": ""}, "finish_reason": "length"}]}
+    assert engine._stream_chunk_has_terminal_token(chunk) is True
+
+
+@contextmanager
 def mock_stream_response_empty(*args, **kwargs):
     class MockResponse:
         def raise_for_status(self):
