@@ -208,6 +208,18 @@ def get_low_power_mode() -> str:
     except Exception:
         return "unavailable_error"
 
+    # Some Macs drop the legacy binary `lowpowermode` key from `pmset -g` in
+    # favor of the tri-state `powermode` key (0=Automatic, 1=Low Power,
+    # 2=High Power). Not documented by Apple anywhere we could find, but
+    # confirmed correlated with High Power Mode hardware support (Apple
+    # lists only specific chips/models for it) rather than the macOS
+    # version: cross-checked on a MacBook Air M2 (no High Power Mode ->
+    # `lowpowermode` present) and a MacBook Pro M5 Pro (has High Power Mode
+    # -> only `powermode` present). See GitHub issue #36. We deliberately
+    # don't branch on model/chip here — trying the legacy key first and
+    # falling back only if it's absent works on both without needing to
+    # track which chips Apple adds to that list over time.
+    power_mode = None
     for line in f"{result.stdout}\n{result.stderr}".splitlines():
         parts = line.strip().lower().split()
         if len(parts) >= 2 and parts[0] == "lowpowermode":
@@ -216,6 +228,13 @@ def get_low_power_mode() -> str:
             if parts[-1] == "0":
                 return "off"
             return "unavailable_parse_error"
+        if len(parts) >= 2 and parts[0] == "powermode":
+            power_mode = parts[-1]
+
+    if power_mode == "1":
+        return "on"
+    if power_mode in {"0", "2"}:
+        return "off"
     return "unavailable_parse_error"
 
 

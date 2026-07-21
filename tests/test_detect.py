@@ -240,3 +240,51 @@ def test_low_power_mode_detects_enabled(monkeypatch):
     monkeypatch.setattr("subprocess.run", fake_run)
 
     assert get_low_power_mode() == "on"
+
+
+def test_low_power_mode_detects_disabled(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return MagicMock(stdout=" lowpowermode         0\n", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    assert get_low_power_mode() == "off"
+
+
+def test_low_power_mode_falls_back_to_powermode_when_low_active(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return MagicMock(stdout=" powermode            1\n", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    assert get_low_power_mode() == "on"
+
+
+@pytest.mark.parametrize("value", ["0", "2"])
+def test_low_power_mode_falls_back_to_powermode_when_not_low(monkeypatch, value):
+    def fake_run(cmd, **kwargs):
+        return MagicMock(stdout=f" powermode            {value}\n", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    assert get_low_power_mode() == "off"
+
+
+def test_low_power_mode_prefers_legacy_key_when_both_present(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return MagicMock(
+            stdout=" powermode            2\n lowpowermode         1\n", stderr=""
+        )
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    assert get_low_power_mode() == "on"
+
+
+def test_low_power_mode_unavailable_when_neither_key_present(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        return MagicMock(stdout=" sleep                10\n", stderr="")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    assert get_low_power_mode() == "unavailable_parse_error"
