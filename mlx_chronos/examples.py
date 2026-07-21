@@ -54,7 +54,7 @@ EXAMPLE_RESULT = {
         "completion_tokens_raw": [100, 100, 100, 100, 100],
     },
     "meta": {
-        "chronos_version": "0.4.0",
+        "chronos_version": "0.4.1",
         "timestamp": "2026-06-08T12:00:00Z",
         "benchmark_profile": "baseline",
         "ram_sample_interval_seconds": 0.05,
@@ -174,6 +174,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "0db423d680b7faa137d8c2cc3849fa64d70f7db048f2a191565c1fd15e3d31ec",
+        "digest": "02d3b146c81821ad8830a8bba957d9617a461bdd617424b2029a7824624d6b73",
     },
 }

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.1] — 2026-07-21
+
+Patch release fixing two hardware/backend-specific detection bugs reported
+by the community.
+
+### Bug Fixes
+- Detect Low Power Mode via the `powermode` key as a fallback when the
+  legacy `lowpowermode` key is absent from `pmset -g`. Affects Macs with
+  High Power Mode hardware support (e.g. MacBook Pro M4 Pro/M5 Pro), not
+  tied to a specific macOS version. Reported and fixed by
+  [@umigliore](https://github.com/umigliore) (#36).
+- Accept a terminal `finish_reason=length` chunk without visible text as a
+  valid TTFT signal. Reasoning models (e.g. Gemma 4) can spend the only
+  `max_tokens=1` token on hidden reasoning; Ollama's OpenAI-compatible
+  endpoint then returns no visible content at all. Reported, diagnosed, and
+  fixed by [@umigliore](https://github.com/umigliore) (#37).
+
 ## [0.4.0] — 2026-07-20
 
 ### Features
