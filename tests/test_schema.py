@@ -46,6 +46,8 @@ def test_valid_schema():
     assert result.metrics.system_ram_peak_gb == 7.22
     assert result.metrics.system_ram_peak_percent == 90.2
     assert result.trials.completion_tokens_raw == [100, 100, 100, 100, 100]
+    assert result.trials.finish_reasons_raw == ["length"] * 5
+    assert result.meta.cache_validation.source == "inferred"
     assert result.trials.throughput_elapsed_seconds_raw == [
         5.411,
         5.473,
@@ -73,6 +75,32 @@ def test_valid_schema():
     )
     assert result.integrity.schema_name == "mlx-chronos-integrity-v1"
     validate_integrity_seal(EXAMPLE_RESULT)
+
+
+def test_schema_allows_legacy_results_without_new_diagnostic_fields():
+    data = EXAMPLE_RESULT.copy()
+    data["trials"] = data["trials"].copy()
+    data["meta"] = data["meta"].copy()
+    data["trials"].pop("finish_reasons_raw")
+    data["meta"].pop("cache_validation")
+
+    result = BenchmarkResult(**data)
+
+    assert result.trials.finish_reasons_raw is None
+    assert result.meta.cache_validation is None
+
+
+def test_cache_validation_rejects_inferred_api_claims():
+    data = EXAMPLE_RESULT.copy()
+    data["meta"] = data["meta"].copy()
+    data["meta"]["cache_validation"] = {
+        "source": "inferred",
+        "cold_cache_cleared": True,
+        "cached_prefix_hit_verified": False,
+    }
+
+    with pytest.raises(ValidationError, match="inferred cache validation"):
+        BenchmarkResult(**data)
 
 
 @pytest.mark.parametrize(
@@ -598,6 +626,7 @@ def test_p95_is_required_for_large_trial_sets():
     data["trials"]["ttft_cached_raw"] = raw_values
     data["trials"]["tokens_per_second_raw"] = raw_values
     data["trials"]["completion_tokens_raw"] = [100] * P95_MIN_TRIALS
+    data["trials"]["finish_reasons_raw"] = ["length"] * P95_MIN_TRIALS
     data["trials"]["throughput_elapsed_seconds_raw"] = [5.0] * P95_MIN_TRIALS
     data["trials"]["decode_tokens_per_second_raw"] = None
     data["trials"]["decode_elapsed_seconds_raw"] = None

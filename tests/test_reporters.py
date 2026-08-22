@@ -114,6 +114,7 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Throughput elapsed seconds:** 5.411, 5.473, 5.402, 5.411, 5.417" in content
     assert "**Decode throughput:** 18.7, 18.49, 18.73, 18.69, 18.66" in content
     assert "**Completion tokens:** 100, 100, 100, 100, 100" in content
+    assert "**Finish reasons:** length, length, length, length, length" in content
 
 def test_markdown_reporter_handles_missing_ram_fields(tmp_path):
     result = copy.deepcopy(EXAMPLE_RESULT)

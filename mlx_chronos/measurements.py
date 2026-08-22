@@ -15,3 +15,4 @@ class ThroughputMeasurement:
     decode_elapsed_seconds: float | None = None
     decode_timing_source: str = DECODE_TIMING_UNAVAILABLE
     progress_samples: tuple[dict, ...] = ()
+    finish_reason: str | None = None

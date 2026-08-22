@@ -165,6 +165,13 @@ class MarkdownReporter(BaseReporter):
                 "- **Warning:** cached TTFT is close to cold TTFT; prompt/KV "
                 "cache reuse may not have occurred.\n"
             )
+        cache_validation = meta.get("cache_validation") or {}
+        if cache_validation.get("source") == "engine_cache_api":
+            hit_verified = cache_validation.get("cached_prefix_hit_verified")
+            md += (
+                "- **Cache validation:** engine cache API cleared before cold trials; "
+                f"cached prefix hit verified: {'yes' if hit_verified else 'no'}\n"
+            )
         if meta.get("elapsed_since_last_benchmark_seconds") is not None:
             md += (
                 "- **Elapsed since prior result:** "
@@ -286,13 +293,14 @@ class MarkdownReporter(BaseReporter):
                 ("Throughput elapsed seconds", trials.get("throughput_elapsed_seconds_raw")),
                 ("Decode throughput", trials.get("decode_tokens_per_second_raw")),
                 ("Completion tokens", trials.get("completion_tokens_raw")),
+                ("Finish reasons", trials.get("finish_reasons_raw")),
             ]
             if values
         ]
         if raw_sections:
             md += "\n## Raw Trials\n"
             for label, values in raw_sections:
-                rendered_values = ", ".join(f"{value:g}" for value in values)
+                rendered_values = ", ".join(str(value) for value in values)
                 md += f"- **{label}:** {rendered_values}\n"
 
         progress_samples = trials.get("throughput_progress_samples_raw")

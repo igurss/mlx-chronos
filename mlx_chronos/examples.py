@@ -52,6 +52,7 @@ EXAMPLE_RESULT = {
         "decode_tokens_per_second_raw": [18.7, 18.49, 18.73, 18.69, 18.66],
         "decode_elapsed_seconds_raw": [5.294, 5.354, 5.286, 5.297, 5.305],
         "completion_tokens_raw": [100, 100, 100, 100, 100],
+        "finish_reasons_raw": ["length", "length", "length", "length", "length"],
     },
     "meta": {
         "chronos_version": "0.4.1",
@@ -87,6 +88,11 @@ EXAMPLE_RESULT = {
         "engine_version_warning": False,
         "sustained_throttling_warning": False,
         "cached_ttft_warning": False,
+        "cache_validation": {
+            "source": "inferred",
+            "cold_cache_cleared": False,
+            "cached_prefix_hit_verified": False,
+        },
         "benchmark_protocol": {
             "name": "baseline",
             "version": "3",
@@ -174,6 +180,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "02d3b146c81821ad8830a8bba957d9617a461bdd617424b2029a7824624d6b73",
+        "digest": "d2c3ec0d221ab33d25d4c4e8c389e279335b0308692e7b4e51c83e98111e835b",
     },
 }

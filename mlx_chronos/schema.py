@@ -50,6 +50,14 @@ DecodeTimingSource = Literal[
     "unavailable",
     "client_stream",
 ]
+CacheValidationSource = Literal[
+    "inferred",
+    "engine_cache_api",
+]
+FinishReason = Annotated[
+    str,
+    Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$"),
+]
 RequestMode = Literal[
     "streaming",
     "non_streaming",
@@ -379,6 +387,13 @@ class Trials(ChronosBaseModel):
             "For word_fallback results this is an estimated output word count."
         ),
     )
+    finish_reasons_raw: Optional[list[Optional[FinishReason]]] = Field(
+        None,
+        description=(
+            "Server finish_reason values for each throughput trial when the "
+            "stream provides them"
+        ),
+    )
     throughput_progress_samples_raw: Optional[list[list[ThroughputProgressSample]]] = Field(
         None,
         description=(
@@ -403,6 +418,8 @@ class Trials(ChronosBaseModel):
             lengths.add(len(self.decode_elapsed_seconds_raw))
         if self.throughput_progress_samples_raw is not None:
             lengths.add(len(self.throughput_progress_samples_raw))
+        if self.finish_reasons_raw is not None:
+            lengths.add(len(self.finish_reasons_raw))
         if lengths != {self.count}:
             raise ValueError("trials.count must match all raw metric list lengths")
         if (
@@ -598,6 +615,33 @@ class ThermalMonitor(ChronosBaseModel):
         return self
 
 
+class CacheValidation(ChronosBaseModel):
+    """Evidence collected for cold/cached prefix-cache handling."""
+
+    source: CacheValidationSource = Field(
+        "inferred",
+        description="Whether cache behavior was inferred or observed through an engine API",
+    )
+    cold_cache_cleared: bool = Field(
+        False,
+        description="Whether an engine cache-control API confirmed clearing before cold trials",
+    )
+    cached_prefix_hit_verified: bool = Field(
+        False,
+        description="Whether an engine-reported prefix-cache hit increased during cached trials",
+    )
+
+    @model_validator(mode="after")
+    def validate_cache_validation(self):
+        if self.source == "inferred" and (
+            self.cold_cache_cleared or self.cached_prefix_hit_verified
+        ):
+            raise ValueError("inferred cache validation cannot claim API verification")
+        if self.cached_prefix_hit_verified and not self.cold_cache_cleared:
+            raise ValueError("verified cached prefix hit requires a cleared cold cache")
+        return self
+
+
 class Meta(ChronosBaseModel):
     chronos_version: str = Field(..., min_length=1, description="mlx-chronos version used")
     timestamp: datetime = Field(..., description="Timestamp of the benchmark run")
@@ -660,6 +704,10 @@ class Meta(ChronosBaseModel):
     cached_ttft_warning: bool = Field(
         ...,
         description="True when cached TTFT is close to cold TTFT",
+    )
+    cache_validation: Optional[CacheValidation] = Field(
+        None,
+        description="Optional cache-control and cache-hit verification evidence",
     )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
 

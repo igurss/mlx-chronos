@@ -42,6 +42,7 @@ def throughput_measurement(
     decode_tps: float | None = None,
     decode_elapsed: float | None = None,
     progress_samples: tuple[dict, ...] = (),
+    finish_reason: str | None = None,
 ) -> ThroughputMeasurement:
     return ThroughputMeasurement(
         request_tokens_per_second=tps,
@@ -56,6 +57,7 @@ def throughput_measurement(
         ),
         decode_timing_source="client_stream" if decode_tps is not None else "unavailable",
         progress_samples=progress_samples,
+        finish_reason=finish_reason,
     )
 
 
@@ -328,6 +330,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         tps=20.0,
         tokens=100,
         elapsed=5.0,
+        finish_reason="length",
     )
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.get_server_pid.return_value = 12345
@@ -373,6 +376,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["metrics"]["system_ram_peak_gb"] == 6.0
     assert result["metrics"]["system_ram_peak_percent"] == 75.0
     assert result["trials"]["completion_tokens_raw"] == [100, 100]
+    assert result["trials"]["finish_reasons_raw"] == ["length", "length"]
     assert result["trials"]["throughput_elapsed_seconds_raw"] == [5.0, 5.0]
     assert result["meta"]["phase_timings_seconds"]["total_runtime"] >= 0
     assert result["meta"]["benchmark_profile"] == "baseline"
@@ -381,6 +385,11 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     assert result["meta"]["engine_version_warning"] is False
     assert result["meta"]["sustained_throttling_warning"] is False
     assert result["meta"]["cached_ttft_warning"] is False
+    assert result["meta"]["cache_validation"] == {
+        "source": "inferred",
+        "cold_cache_cleared": False,
+        "cached_prefix_hit_verified": False,
+    }
     assert result["trials"]["throughput_progress_samples_raw"] is None
     assert set(result["meta"]["phase_timings_seconds"]) == {
         "warmup",
@@ -478,6 +487,52 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         )
     ]
     assert len({id(client) for client in clients}) == 1
+
+
+@patch("mlx_chronos.benchmark.get_engine")
+@patch("mlx_chronos.benchmark.detect_hardware")
+def test_run_benchmark_records_verified_engine_cache_evidence(
+    mock_detect, mock_get_engine
+):
+    FakeThermalStateTracker.instances = []
+    mock_detect.return_value = {
+        "chip": "Apple M2",
+        "machine_model": "Mac14,2",
+        "memory_gb": 8.0,
+        "macos_version": "14.0",
+        "python_version": "3.11",
+        "architecture": "arm64",
+        "thermal_state": "nominal",
+    }
+    mock_engine = MagicMock()
+    mock_engine.name = "rapid-mlx"
+    mock_engine.measure_ttft.side_effect = [0.5, 0.1, 0.1]
+    mock_engine.measure_throughput.return_value = throughput_measurement(
+        tokens=100, elapsed=5.0, finish_reason="length"
+    )
+    mock_engine.get_version.return_value = "0.7.0"
+    mock_engine.get_server_pid.return_value = None
+    mock_engine.clear_cache_for_benchmark.return_value = True
+    mock_engine.prefix_cache_hit_count.side_effect = [4, 5]
+    mock_get_engine.return_value = mock_engine
+
+    with patch("mlx_chronos.benchmark.ThermalStateTracker", FakeThermalStateTracker):
+        result = run_benchmark(
+            engine_name="rapid-mlx",
+            model_name="served-model",
+            model_quantization="4bit",
+            trials=1,
+        )
+
+    assert result["meta"]["cache_validation"] == {
+        "source": "engine_cache_api",
+        "cold_cache_cleared": True,
+        "cached_prefix_hit_verified": True,
+    }
+    assert result["meta"]["cached_ttft_warning"] is False
+    assert result["trials"]["finish_reasons_raw"] == ["length"]
+    mock_engine.clear_cache_for_benchmark.assert_called_once()
+    assert mock_engine.prefix_cache_hit_count.call_count == 2
 
 
 @patch("mlx_chronos.benchmark.get_engine")

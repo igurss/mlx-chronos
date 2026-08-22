@@ -1301,6 +1301,7 @@ def resize_result_trials(result: dict, count: int) -> None:
         "decode_tokens_per_second_raw",
         "decode_elapsed_seconds_raw",
         "completion_tokens_raw",
+        "finish_reasons_raw",
     ):
         result["trials"][key] = result["trials"][key][:count]
     if result["trials"].get("throughput_progress_samples_raw") is not None:
@@ -1335,6 +1336,7 @@ def expand_result_to_six_trials(result: dict) -> None:
         "decode_tokens_per_second_raw",
         "decode_elapsed_seconds_raw",
         "completion_tokens_raw",
+        "finish_reasons_raw",
     ):
         result["trials"][key].append(result["trials"][key][-1])
     if result["trials"].get("throughput_progress_samples_raw") is not None:

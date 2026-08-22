@@ -316,8 +316,14 @@ metadata, hardware metadata, and an integrity seal.
 - Timed TTFT and throughput requests are never retried. A transient request
   failure invalidates the run instead of becoming part of a published timing.
 - Cached TTFT is recorded only after cache priming completes successfully.
+- Rapid-MLX uses exact IDs returned by `/v1/models`; short suffixes are not
+  resolved automatically because aliases can be ambiguous in multi-model serving.
+- When Rapid-MLX exposes cache-control evidence, the result records whether
+  the cold cache was cleared and whether cached prefix reuse was verified.
 - Decode throughput records first-content-to-stream-end elapsed time so the
   value can be reconstructed from raw completion-token counts.
+- Throughput raw trials also retain the server `finish_reason` when supplied,
+  so natural EOS can be distinguished from a `max_tokens` limit.
 - Throughput prompts intentionally vary to reduce cache artifacts, so run
   standard deviation includes workload variation plus system and engine noise.
 - If an engine cannot provide reliable `usage.completion_tokens`, the run falls

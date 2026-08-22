@@ -147,6 +147,21 @@ class BaseEngine(ABC):
     def _request_model_name(self, model: str) -> str:
         return model.strip() or "default"
 
+    def clear_cache_for_benchmark(self, client: httpx.Client | None = None) -> bool:
+        """Clear an engine cache before cold trials when the engine supports it.
+
+        ``False`` means that no cache-control capability is available.  The
+        default deliberately makes no HTTP request so engines without a
+        documented control-plane API retain the established benchmark flow.
+        """
+        del client
+        return False
+
+    def prefix_cache_hit_count(self, client: httpx.Client | None = None) -> int | None:
+        """Return a documented prefix-cache hit counter, when available."""
+        del client
+        return None
+
     def _request_context(
         self,
         action: str,
@@ -487,6 +502,17 @@ class BaseEngine(ABC):
             return False
         return choices[0].get("finish_reason") == "length"
 
+    def _extract_stream_finish_reason(self, chunk: dict) -> str | None:
+        """Return the terminal reason supplied by an OpenAI-style stream."""
+        choices = chunk.get("choices")
+        if not choices or not isinstance(choices[0], dict):
+            return None
+        reason = choices[0].get("finish_reason")
+        if not isinstance(reason, str):
+            return None
+        normalized = reason.strip()
+        return normalized or None
+
     def _extract_stream_text(self, chunk: dict) -> str:
         choices = chunk.get("choices")
         if not choices:
@@ -744,6 +770,7 @@ class BaseEngine(ABC):
             stream_finished_at = None
             completion_text_parts = []
             completion_tokens = None
+            finish_reason = None
             progress_samples: list[dict] = []
             next_progress_sample_at = progress_sample_interval_tokens
 
@@ -787,6 +814,10 @@ class BaseEngine(ABC):
                         usage_tokens = self._extract_stream_usage_tokens(chunk)
                         if usage_tokens is not None:
                             completion_tokens = usage_tokens
+
+                        chunk_finish_reason = self._extract_stream_finish_reason(chunk)
+                        if chunk_finish_reason is not None:
+                            finish_reason = chunk_finish_reason
 
                         if self._stream_chunk_has_content(chunk):
                             if first_token_at is None:
@@ -897,6 +928,7 @@ class BaseEngine(ABC):
             decode_elapsed_seconds=rounded_decode_elapsed,
             decode_timing_source=decode_source,
             progress_samples=tuple(finalized_progress_samples),
+            finish_reason=finish_reason,
         )
 
     def measure_tokens_per_second(
@@ -996,16 +1028,92 @@ class RapidMLXEngine(BaseEngine):
             return self._model_id_cache[model]
 
         try:
-            resolved = self._match_listed_model_id(
-                requested=model,
-                request_model=model,
-                model_ids=self.list_model_ids(),
-            )
+            model_ids = self.list_model_ids()
         except RuntimeError:
             return None
-        if resolved is not None:
-            self._model_id_cache[model] = resolved
-        return resolved
+        if model not in model_ids:
+            return None
+        self._model_id_cache[model] = model
+        return model
+
+    def resolve_listed_model_id(
+        self,
+        model: str,
+        model_ids: list[str] | None = None,
+    ) -> str | None:
+        """Resolve Rapid-MLX models only by exact server-advertised ID.
+
+        Rapid-MLX can advertise both a serving alias and a resolved ID.  A
+        suffix is therefore not a stable identity in a multi-model server.
+        Callers can still use any ID that the server advertises, but a manual
+        shorthand is never silently mapped to the first suffix match.
+        """
+        requested = model.strip()
+        if not requested:
+            return None
+        model_ids = self.list_model_ids() if model_ids is None else model_ids
+        return requested if requested in model_ids else None
+
+    def _cache_management_json(
+        self,
+        client: httpx.Client | None,
+        method: str,
+        path: str,
+    ) -> dict | None:
+        """Best-effort read/control call for Rapid-MLX's optional cache API."""
+        url = f"{self.base_url()}{path}"
+        try:
+            request = client.request if client is not None else httpx.request
+            response = request(method, url, timeout=3.0)
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.debug("Rapid-MLX cache API unavailable at %s: %s", url, exc)
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _prefix_cache_hits_from_payload(payload: dict) -> int | None:
+        """Extract only an explicitly labelled prefix-cache hit counter.
+
+        Do not traverse arbitrary nested values: `/v1/cache/stats` may expose
+        image-cache counters, which would not validate text prefix reuse.
+        """
+        top_level_hits = payload.get("prefix_cache_hits")
+        if (
+            isinstance(top_level_hits, int)
+            and not isinstance(top_level_hits, bool)
+            and top_level_hits >= 0
+        ):
+            return top_level_hits
+
+        candidates = []
+        for key in ("prefix_cache", "memory_aware_cache", "paged_cache", "cache"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                candidates.append(value)
+        for candidate in candidates:
+            for key in ("prefix_cache_hits", "cache_hits", "hits", "hit_count"):
+                value = candidate.get(key)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    return value
+        return None
+
+    def clear_cache_for_benchmark(self, client: httpx.Client | None = None) -> bool:
+        payload = self._cache_management_json(client, "POST", "/cache/clear")
+        return payload is not None and payload.get("scheduler_cache_cleared") is True
+
+    def prefix_cache_hit_count(self, client: httpx.Client | None = None) -> int | None:
+        # Older Rapid-MLX releases documented this endpoint; newer releases
+        # can surface text prefix-cache counters through `/v1/status` instead.
+        for path in ("/cache/stats", "/status"):
+            payload = self._cache_management_json(client, "GET", path)
+            if payload is None:
+                continue
+            hits = self._prefix_cache_hits_from_payload(payload)
+            if hits is not None:
+                return hits
+        return None
 
     def _request_model_name(self, model: str) -> str:
         model_name = os.path.expanduser(super()._request_model_name(model))

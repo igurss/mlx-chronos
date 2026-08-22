@@ -214,6 +214,21 @@ def test_measure_throughput_returns_structured_measurement(mock_stream):
     assert measurement.token_count_source == "usage.completion_tokens"
     assert measurement.elapsed_seconds == 1.5
     assert measurement.decode_tokens_per_second == 149.0
+
+
+@patch("httpx.stream")
+def test_measure_throughput_records_terminal_finish_reason(mock_stream):
+    lines = completion_stream(content="hello", completion_tokens=100)
+    lines.insert(
+        -1,
+        'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}',
+    )
+    mock_stream.return_value = stream_response(lines)
+
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
+        measurement = OMLXEngine().measure_throughput("test prompt")
+
+    assert measurement.finish_reason == "stop"
     assert measurement.decode_timing_source == "client_stream"
 
 
@@ -1014,8 +1029,73 @@ def test_rapid_mlx_resolve_model_id(mock_get):
 
     engine = RapidMLXEngine()
     resolved = engine._resolve_model_id("test")
-    assert resolved == "local/model/test"
-    assert engine._model_id_cache["test"] == "local/model/test"
+    assert resolved is None
+    assert engine._model_id_cache == {}
+
+
+@patch("httpx.get")
+def test_rapid_mlx_resolve_model_id_requires_exact_server_id(mock_get):
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "data": [{"id": "local/model/test"}]
+    }
+    mock_get.return_value = mock_response
+
+    engine = RapidMLXEngine()
+
+    assert engine._resolve_model_id("local/model/test") == "local/model/test"
+    assert engine._model_id_cache == {"local/model/test": "local/model/test"}
+
+
+def test_rapid_mlx_resolve_listed_model_id_rejects_ambiguous_suffix():
+    engine = RapidMLXEngine()
+    model_ids = ["org-a/model", "org-b/model"]
+
+    assert engine.resolve_listed_model_id("model", model_ids) is None
+    assert engine.resolve_listed_model_id("org-a/model", model_ids) == "org-a/model"
+
+
+def _json_response(payload):
+    response = MagicMock()
+    response.json.return_value = payload
+    return response
+
+
+def test_rapid_mlx_clears_cache_only_when_server_confirms_prefix_cache_clear():
+    client = MagicMock()
+    client.request.return_value = _json_response(
+        {"status": "ok", "scheduler_cache_cleared": True}
+    )
+
+    assert RapidMLXEngine().clear_cache_for_benchmark(client) is True
+    client.request.assert_called_once_with(
+        "POST", "http://localhost:8001/v1/cache/clear", timeout=3.0
+    )
+
+
+def test_rapid_mlx_does_not_treat_image_cache_hits_as_prefix_cache_hits():
+    assert RapidMLXEngine._prefix_cache_hits_from_payload(
+        {"multimodal_kv_cache": {"hits": 9}}
+    ) is None
+    assert RapidMLXEngine._prefix_cache_hits_from_payload({"hits": 9}) is None
+
+
+def test_rapid_mlx_reads_prefix_cache_hits_from_status_when_stats_lack_them():
+    client = MagicMock()
+    client.request.side_effect = [
+        _json_response({"model_type": "llm"}),
+        _json_response({"cache": {"hits": 7}}),
+    ]
+
+    assert RapidMLXEngine().prefix_cache_hit_count(client) == 7
+    assert client.request.call_args_list[0].args[:2] == (
+        "GET",
+        "http://localhost:8001/v1/cache/stats",
+    )
+    assert client.request.call_args_list[1].args[:2] == (
+        "GET",
+        "http://localhost:8001/v1/status",
+    )
 
 @patch("httpx.get")
 def test_rapid_mlx_model_id_cache_is_instance_scoped(mock_get):

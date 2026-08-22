@@ -327,6 +327,13 @@ def _result_warning_labels(result: dict) -> list[str]:
     ):
         if meta.get(field):
             labels.append(label)
+    cache_validation = meta.get("cache_validation")
+    if (
+        isinstance(cache_validation, dict)
+        and cache_validation.get("source") == "engine_cache_api"
+        and cache_validation.get("cached_prefix_hit_verified") is False
+    ):
+        labels.append("cached prefix reuse not verified by engine API")
     if meta.get("warmup_failures", 0):
         labels.append("warmup failures")
     if meta.get("system_ram_monitor_errors", 0):
@@ -616,7 +623,11 @@ def cmd_doctor(args):
         engine = get_engine(selected_engine)
         try:
             model_ids = engine.list_model_ids()
-            detail = f"{len(model_ids)} model(s)" if model_ids else "server returned no models"
+            detail = (
+                f"{len(model_ids)} model identifier(s)"
+                if model_ids
+                else "server returned no models"
+            )
             log_validation_check("ok" if model_ids else "warn", "model list", detail)
         except RuntimeError as exc:
             model_ids = []
@@ -789,7 +800,11 @@ def cmd_validate(args):
     if failures == 0:
         try:
             model_ids = engine.list_model_ids()
-            detail = f"{len(model_ids)} model(s)" if model_ids else "no models listed"
+            detail = (
+                f"{len(model_ids)} model identifier(s)"
+                if model_ids
+                else "no models listed"
+            )
             log_validation_check("ok", "model list", detail)
         except RuntimeError as exc:
             failures += 1

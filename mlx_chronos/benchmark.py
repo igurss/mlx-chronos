@@ -440,7 +440,14 @@ def run_benchmark(
     decode_timing_sources = []
     token_count_sources = []
     completion_tokens_trials = []
+    finish_reasons_trials = []
     throughput_progress_samples_trials = []
+    cache_validation = {
+        "source": "inferred",
+        "cold_cache_cleared": False,
+        "cached_prefix_hit_verified": False,
+    }
+    cache_hits_before_cached_trials = None
     warmup_calls = 2
     warmup_failures = 0
 
@@ -510,6 +517,13 @@ def run_benchmark(
 
             thermal_tracker.set_phase("ttft_cold")
             with _record_phase_duration(phase_timings, "ttft_cold"):
+                if engine.clear_cache_for_benchmark(client=http_client) is True:
+                    cache_validation = {
+                        "source": "engine_cache_api",
+                        "cold_cache_cleared": True,
+                        "cached_prefix_hit_verified": False,
+                    }
+                    logger.info("Cleared engine prefix cache before cold TTFT trials.")
                 logger.info("Running cold TTFT trials...")
                 for i in range(trials):
                     cold_prompt = COLD_PROMPTS[i]
@@ -536,6 +550,10 @@ def run_benchmark(
                         "cache priming failed; cached TTFT cannot be measured "
                         f"reliably: {exc}"
                     ) from exc
+                if cache_validation["source"] == "engine_cache_api":
+                    cache_hits_before_cached_trials = engine.prefix_cache_hit_count(
+                        client=http_client
+                    )
                 logger.info("  Done.\n")
 
             thermal_tracker.set_phase("ttft_cached")
@@ -550,6 +568,24 @@ def run_benchmark(
                             client=http_client,
                         )
                     )
+
+                if (
+                    cache_validation["source"] == "engine_cache_api"
+                    and cache_hits_before_cached_trials is not None
+                ):
+                    cache_hits_after_cached_trials = engine.prefix_cache_hit_count(
+                        client=http_client
+                    )
+                    if cache_hits_after_cached_trials is not None:
+                        cache_validation["cached_prefix_hit_verified"] = (
+                            cache_hits_after_cached_trials
+                            > cache_hits_before_cached_trials
+                        )
+                        if not cache_validation["cached_prefix_hit_verified"]:
+                            logger.warning(
+                                "Rapid-MLX cache API reported no prefix-cache hit "
+                                "during cached TTFT trials."
+                            )
 
             thermal_tracker.set_phase("throughput")
             with _record_phase_duration(phase_timings, "throughput"):
@@ -585,6 +621,7 @@ def run_benchmark(
                     )
                     token_count_sources.append(token_source)
                     completion_tokens_trials.append(completion_tokens)
+                    finish_reasons_trials.append(measurement.finish_reason)
                     throughput_progress_samples_trials.append(
                         list(measurement.progress_samples)
                     )
@@ -769,6 +806,7 @@ def run_benchmark(
                 else None
             ),
             "completion_tokens_raw": completion_tokens_trials,
+            "finish_reasons_raw": finish_reasons_trials,
             "throughput_progress_samples_raw": (
                 throughput_progress_samples_trials
                 if any(throughput_progress_samples_trials)
@@ -803,6 +841,7 @@ def run_benchmark(
             "engine_version_warning": engine_version_warning,
             "sustained_throttling_warning": sustained_throttling_warning,
             "cached_ttft_warning": cached_ttft_warning,
+            "cache_validation": cache_validation,
             "benchmark_protocol": build_benchmark_protocol(
                 trials,
                 throughput_max_tokens,

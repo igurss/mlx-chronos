@@ -99,6 +99,13 @@ prompt/KV cache for that run. For local diagnostics,
 `MLX_CHRONOS_CACHED_TTFT_RATIO` can override the warning ratio. This changes
 only the warning threshold, not the measured values.
 
+For engines with a documented cache-control API, mlx-Chronos may additionally
+record `meta.cache_validation`. This evidence is optional and never changes a
+timing value: `cold_cache_cleared` means the engine confirmed a clear before
+cold trials, while `cached_prefix_hit_verified` is true only when a dedicated
+text prefix-cache hit counter increases during cached trials. An API without
+such a counter remains unverified rather than being inferred from latency.
+
 ### Interpreting TTFT Across Engines
 
 TTFT is observed client-side latency. mlx-Chronos starts timing before the HTTP
@@ -189,6 +196,12 @@ fall back to a word-based estimate are marked as `word_fallback` or `mixed` in
 If an engine rejects `stream_options.include_usage`, mlx-Chronos retries the
 same streaming request without that option and records the run as a local
 fallback instead of failing the whole benchmark.
+
+When the final streaming choice supplies `finish_reason`, it is recorded per
+throughput trial in `trials.finish_reasons_raw`. This is diagnostic provenance:
+the count remains the engine-reported `usage.completion_tokens`, while the
+field distinguishes natural EOS (for example `stop`) from a `max_tokens` limit
+(`length`).
 
 This compatibility fallback is triggered only by an explicit unsupported-field
 response and starts a fresh timer. Transient failures in timed TTFT or
