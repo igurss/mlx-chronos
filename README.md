@@ -440,39 +440,6 @@ for detailed contributor instructions.
 
 ---
 
-## Roadmap
-
-### Completed
-
-- [x] Core benchmark runner with repeated trials, warmup, cache priming, and phase-separated metrics
-- [x] Engine support for oMLX, Rapid-MLX, vllm-mlx, mlx-lm, and Ollama
-- [x] Hardware detection for chip, machine model, memory, macOS, Python, architecture, and thermal state
-- [x] Strict JSON schema validation with raw-trial consistency checks
-- [x] Continuous system RAM peak sampling, with post-warmup engine RSS kept as a diagnostic field
-- [x] Preflight validation for engine, server, and model access
-- [x] GitHub Actions validation for submitted results
-- [x] PR-based result submissions with automatic `result-submission`, `code`, and `documentation` labels
-- [x] GitHub Pages leaderboard with model/chip/RAM engine comparison and configurable raw-data columns
-- [x] JSON and Markdown result export
-- [x] `mlx-chronos submit` for sending validated JSON results to the maintainer inbox
-- [x] Warnings for battery mode, Low Power Mode, non-nominal thermal state, and unavailable thermal state
-- [x] Integration tests against mock OpenAI-compatible servers
-- [x] Larger fixed cold-prompt pool with optional p95 reporting for larger runs
-- [x] Request-throughput timing metadata and client-observed streaming decode throughput
-- [x] Phase timing metadata and lightweight continuous thermal monitoring
-- [x] Sustained benchmark profile, cooldown metadata, and strict local-vs-public leaderboard policy
-- [x] Public submission trust model with lightweight anti-spoofing checks
-- [x] External contributor workflow for code PRs and leaderboard result submissions
-- [x] CLI update notifications and `mlx-chronos upgrade`
-
-### Future
-
-- [ ] Evaluate a clearer TTFT naming model without breaking the v0.1 JSON contract
-- [ ] Add tool-calling success-rate benchmarks
-- [ ] Collect more results from M3, M4, and M5 systems
-
----
-
 ## License
 
 Apache 2.0. See [LICENSE](https://github.com/igurss/mlx-chronos/blob/main/LICENSE).
