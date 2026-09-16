@@ -6,6 +6,7 @@ import psutil
 
 from mlx_chronos.constants import DEFAULT_RAM_SAMPLE_INTERVAL, THERMAL_STATE_ORDER
 from mlx_chronos.detect import get_thermal_state_from_foundation
+from mlx_chronos.numeric import require_finite_positive
 
 DEFAULT_CHILD_PROCESS_REFRESH_INTERVAL = 30.0
 
@@ -26,10 +27,14 @@ class RAMTracker:
         target_pid: int | None = None,
         child_refresh_interval: float | None = DEFAULT_CHILD_PROCESS_REFRESH_INTERVAL,
     ):
+        require_finite_positive(interval, name="interval")
         self.pid = target_pid if target_pid is not None else os.getpid()
         self.interval = interval
-        if child_refresh_interval is not None and child_refresh_interval <= 0:
-            raise ValueError("child_refresh_interval must be greater than 0 when set")
+        if child_refresh_interval is not None:
+            require_finite_positive(
+                child_refresh_interval,
+                name="child_refresh_interval",
+            )
         self.child_refresh_interval = child_refresh_interval
         self._process = psutil.Process(self.pid)
         self._child_processes: list[psutil.Process] = []
@@ -114,6 +119,7 @@ class SystemRAMTracker:
     """Continuously samples total system RAM usage during the benchmark."""
 
     def __init__(self, interval: float = DEFAULT_RAM_SAMPLE_INTERVAL):
+        require_finite_positive(interval, name="interval")
         self.interval = interval
         self.peak_used_bytes = 0
         self.peak_percent = 0.0
@@ -176,6 +182,7 @@ class ThermalStateTracker:
     """
 
     def __init__(self, interval: float = 1.0, sampler=None):
+        require_finite_positive(interval, name="interval")
         self.interval = interval
         self.sampler = sampler or get_thermal_state_from_foundation
         self._phase = "setup"

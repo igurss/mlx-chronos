@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from mlx_chronos.updates import (
     UpdateCheckResult,
     check_for_update,
@@ -40,6 +42,12 @@ def test_fetch_latest_version_reads_pypi_json(monkeypatch):
     monkeypatch.setattr("mlx_chronos.updates.urlopen", fake_urlopen)
 
     assert fetch_latest_version(timeout=0.5, url="https://example.test/pypi.json") == "0.2.2"
+
+
+@pytest.mark.parametrize("timeout", [float("nan"), float("inf"), float("-inf")])
+def test_fetch_latest_version_rejects_non_finite_timeout(timeout):
+    with pytest.raises(ValueError, match="timeout must be a finite number"):
+        fetch_latest_version(timeout=timeout)
 
 
 def test_fetch_latest_version_rejects_malformed_pypi_json(monkeypatch):

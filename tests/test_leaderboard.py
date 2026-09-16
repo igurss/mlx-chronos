@@ -8,6 +8,7 @@ from mlx_chronos.integrity import seal_result
 from mlx_chronos.leaderboard import (
     DuplicateResultError,
     build_results_index,
+    check_results_index,
     load_archive_results,
     main,
     write_results_index,
@@ -80,6 +81,39 @@ def test_write_results_index_writes_json_file(tmp_path):
     assert json.loads(output.read_text(encoding="utf-8"))["results"][0][
         "engine"
     ] == "omlx"
+
+
+def test_check_results_index_rejects_stale_file(tmp_path):
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    write_result(results_dir / "result.json", copy.deepcopy(EXAMPLE_RESULT))
+    output = tmp_path / "index.json"
+    output.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="stale"):
+        check_results_index(results_dir, output)
+
+
+def test_leaderboard_cli_check_reports_stale_file(tmp_path, capsys):
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    write_result(results_dir / "result.json", copy.deepcopy(EXAMPLE_RESULT))
+    output = tmp_path / "index.json"
+    output.write_text("{}\n", encoding="utf-8")
+
+    assert main(["--results-dir", str(results_dir), "--output", str(output), "--check"]) == 1
+    assert "Error:" in capsys.readouterr().err
+
+
+def test_leaderboard_cli_check_succeeds_for_current_index(tmp_path, capsys):
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    write_result(results_dir / "result.json", copy.deepcopy(EXAMPLE_RESULT))
+    output = tmp_path / "index.json"
+    write_results_index(results_dir, output)
+
+    assert main(["--results-dir", str(results_dir), "--output", str(output), "--check"]) == 0
+    assert "Leaderboard index is current (1 results)." in capsys.readouterr().out
 
 
 def test_leaderboard_cli_main_generates_requested_output(tmp_path, capsys):

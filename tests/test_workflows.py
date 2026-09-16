@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 
 from mlx_chronos.constants import (
     DEFAULT_THROUGHPUT_MAX_TOKENS,
@@ -23,12 +24,14 @@ def test_tests_workflow_covers_leaderboard_and_python_314():
 
     assert "docs/index.html" in text
     assert ".github/workflows/*.yml" in text
+    assert text.count("README.md") == 2
     assert "'3.14'" in text
     assert "Validate leaderboard JavaScript syntax" in text
     assert "node --test tests/frontend.test.cjs" in text
     assert "ruff check mlx_chronos tests" in text
     assert "mypy" in text
     assert "pytest --cov" in text
+    assert "python -m mlx_chronos.leaderboard --check" in text
     assert "python -m mlx_chronos.detect" not in text
     assert "detect_hardware" in text
 
@@ -92,6 +95,20 @@ def test_readme_lists_every_default_engine_port():
         ("Ollama", "11434"),
     ):
         assert f"| {engine} | `{port}` |" in readme
+
+
+def test_readme_current_release_matches_pyproject_version():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    project_version = re.search(r'^version = "([^"]+)"$', pyproject, re.MULTILINE)
+    readme_version = re.search(
+        r"### Current Release\n\n`([^`]+)`",
+        readme,
+    )
+
+    assert project_version is not None
+    assert readme_version is not None
+    assert readme_version.group(1) == project_version.group(1)
 
 
 def test_update_leaderboard_workflow_uses_publishable_result_policy():

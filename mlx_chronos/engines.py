@@ -31,6 +31,7 @@ from mlx_chronos.measurements import (
     ThroughputMeasurement,
 )
 from mlx_chronos.http_retry import request_with_retry, stream_with_retry
+from mlx_chronos.numeric import require_finite_non_negative
 
 logger = logging.getLogger("mlx_chronos")
 
@@ -402,6 +403,7 @@ class BaseEngine(ABC):
         return {}
 
     def wait_for_server(self, timeout: int = 60) -> bool:
+        require_finite_non_negative(timeout, name="timeout")
         start = time.perf_counter()
         while time.perf_counter() - start < timeout:
             if self.is_server_running():

@@ -84,10 +84,9 @@ The public leaderboard is available at
 
 ### Current Release
 
-`0.3.1` simplifies public model identity metadata to model name,
-quantization, model format, and the required model reference URL, while keeping
-the guided workflows, timing metadata, and stricter leaderboard integrity
-checks introduced in `0.3.0`.
+`0.4.1` fixes Low Power Mode detection on newer MacBook Pro hardware and
+accepts terminal `finish_reason=length` responses as a valid TTFT signal for
+reasoning models.
 
 ---
 

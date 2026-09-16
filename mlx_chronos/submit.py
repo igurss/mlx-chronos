@@ -23,6 +23,7 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.http_retry import request_with_retry
+from mlx_chronos.numeric import require_finite_positive
 from mlx_chronos.protocol import (
     BASELINE_PROTOCOL_VERSION,
     CONNECTION_MODE_PERSISTENT,
@@ -436,6 +437,10 @@ def submit_result_file(
     result: BenchmarkResult | None = None,
 ) -> BenchmarkResult:
     """Send a validated result JSON file to a maintainer inbox endpoint."""
+    try:
+        require_finite_positive(timeout, name="timeout")
+    except ValueError as exc:
+        raise SubmissionError(str(exc)) from exc
     endpoint = endpoint.strip()
     if not endpoint:
         raise SubmissionError(

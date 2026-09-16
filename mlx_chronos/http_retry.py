@@ -11,6 +11,8 @@ from typing import TypeVar
 
 import httpx
 
+from mlx_chronos.numeric import require_finite_non_negative
+
 
 DEFAULT_HTTP_RETRY_ATTEMPTS = 3
 DEFAULT_HTTP_RETRY_BACKOFF_SECONDS = 0.25
@@ -30,10 +32,8 @@ def _validate_retry_settings(
 ) -> None:
     if attempts < 1:
         raise ValueError("attempts must be at least 1")
-    if backoff_seconds < 0:
-        raise ValueError("backoff_seconds must be non-negative")
-    if max_backoff_seconds < 0:
-        raise ValueError("max_backoff_seconds must be non-negative")
+    require_finite_non_negative(backoff_seconds, name="backoff_seconds")
+    require_finite_non_negative(max_backoff_seconds, name="max_backoff_seconds")
 
 
 def _retry_delay(

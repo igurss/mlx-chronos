@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/*.yml'
+      - 'README.md'
       - 'docs/index.html'
       - 'docs/results_index.json'
       - 'mlx_chronos/**'
@@ -15,6 +16,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/*.yml'
+      - 'README.md'
       - 'docs/index.html'
       - 'docs/results_index.json'
       - 'mlx_chronos/**'
@@ -87,6 +89,9 @@ jobs:
 
       - name: Install package
         run: pip install -e ".[test]"
+
+      - name: Verify checked-in leaderboard index is current
+        run: python -m mlx_chronos.leaderboard --check
 
       - name: Lint
         run: ruff check mlx_chronos tests

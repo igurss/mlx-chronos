@@ -22,6 +22,10 @@ from mlx_chronos.benchmark import (
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
+from mlx_chronos.numeric import (
+    require_finite_non_negative,
+    require_finite_positive,
+)
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.reporters import BaseReporter, JSONReporter, MarkdownReporter
 from mlx_chronos.schema import BenchmarkResult
@@ -55,6 +59,21 @@ from mlx_chronos.constants import (
 
 
 logger = logging.getLogger("mlx_chronos")
+
+
+def _require_cli_number(
+    value: object,
+    *,
+    option: str,
+    positive: bool,
+) -> None:
+    """Validate a numeric CLI option and report argparse-style errors."""
+    try:
+        validator = require_finite_positive if positive else require_finite_non_negative
+        validator(value, name=option)
+    except ValueError as exc:
+        print(f"Error: {exc}.", file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 def _should_start_update_check(command: str | None, stream=None) -> bool:
@@ -434,9 +453,11 @@ def cmd_run(args):
     if trials > MAX_TRIALS:
         print(f"Error: --trials must be <= {MAX_TRIALS}.", file=sys.stderr)
         raise SystemExit(2)
-    if args.ram_sample_interval <= 0:
-        print("Error: --ram-sample-interval must be greater than 0.", file=sys.stderr)
-        raise SystemExit(2)
+    _require_cli_number(
+        args.ram_sample_interval,
+        option="--ram-sample-interval",
+        positive=True,
+    )
     if max_tokens < 1:
         print("Error: --max-tokens must be at least 1.", file=sys.stderr)
         raise SystemExit(2)
@@ -446,9 +467,11 @@ def cmd_run(args):
     if min_tokens is not None and min_tokens > max_tokens:
         print("Error: --min-tokens must be <= --max-tokens.", file=sys.stderr)
         raise SystemExit(2)
-    if cooldown_seconds < 0:
-        print("Error: --cooldown-seconds must be non-negative.", file=sys.stderr)
-        raise SystemExit(2)
+    _require_cli_number(
+        cooldown_seconds,
+        option="--cooldown-seconds",
+        positive=False,
+    )
     if not args.model.strip():
         print("Error: --model must not be empty.", file=sys.stderr)
         raise SystemExit(2)
@@ -855,9 +878,7 @@ def cmd_validate(args):
 
 def cmd_submit(args):
     """Validate and submit a benchmark result to the maintainer inbox."""
-    if args.timeout <= 0:
-        print("Error: --timeout must be greater than 0.", file=sys.stderr)
-        raise SystemExit(2)
+    _require_cli_number(args.timeout, option="--timeout", positive=True)
 
     try:
         raw, result = load_publishable_result(args.file)
@@ -903,9 +924,7 @@ def cmd_submit(args):
 
 def cmd_upgrade(args):
     """Upgrade mlx-chronos from PyPI when a newer release is available."""
-    if args.timeout <= 0:
-        print("Error: --timeout must be greater than 0.", file=sys.stderr)
-        raise SystemExit(2)
+    _require_cli_number(args.timeout, option="--timeout", positive=True)
 
     result = check_for_update(timeout=args.timeout)
     if result.error:

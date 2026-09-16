@@ -27,6 +27,10 @@ from mlx_chronos.measurements import (
     ThroughputMeasurement,
 )
 from mlx_chronos.model_reference import normalize_model_reference_url
+from mlx_chronos.numeric import (
+    require_finite_non_negative,
+    require_finite_positive,
+)
 from mlx_chronos.protocol import (
     CACHED_TTFT_PROMPT,
     COLD_PROMPTS,
@@ -303,8 +307,7 @@ def run_benchmark(
         )
     if trials < 1:
         raise ValueError("trials must be at least 1")
-    if ram_sample_interval <= 0:
-        raise ValueError("ram_sample_interval must be greater than 0")
+    require_finite_positive(ram_sample_interval, name="ram_sample_interval")
     if throughput_max_tokens < 1:
         raise ValueError("throughput_max_tokens must be at least 1")
     if throughput_min_tokens is not None and throughput_min_tokens < 1:
@@ -314,13 +317,13 @@ def run_benchmark(
         and throughput_min_tokens > throughput_max_tokens
     ):
         raise ValueError("throughput_min_tokens must be <= throughput_max_tokens")
-    if (
-        elapsed_since_last_benchmark_seconds is not None
-        and elapsed_since_last_benchmark_seconds < 0
-    ):
-        raise ValueError("elapsed_since_last_benchmark_seconds must be non-negative")
-    if cooldown_seconds is not None and cooldown_seconds < 0:
-        raise ValueError("cooldown_seconds must be non-negative")
+    if elapsed_since_last_benchmark_seconds is not None:
+        require_finite_non_negative(
+            elapsed_since_last_benchmark_seconds,
+            name="elapsed_since_last_benchmark_seconds",
+        )
+    if cooldown_seconds is not None:
+        require_finite_non_negative(cooldown_seconds, name="cooldown_seconds")
     if (
         progress_sample_interval_tokens is not None
         and progress_sample_interval_tokens < 1

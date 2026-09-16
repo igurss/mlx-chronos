@@ -1299,6 +1299,43 @@ def test_run_benchmark_rejects_empty_model_name():
         )
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize(
+    ("field", "expected_message"),
+    [
+        ("ram_sample_interval", "ram_sample_interval must be a finite number"),
+        (
+            "elapsed_since_last_benchmark_seconds",
+            "elapsed_since_last_benchmark_seconds must be a finite number",
+        ),
+        ("cooldown_seconds", "cooldown_seconds must be a finite number"),
+    ],
+)
+def test_run_benchmark_rejects_non_finite_timing_values(value, field, expected_message):
+    with pytest.raises(ValueError, match=expected_message):
+        run_benchmark(
+            engine_name="omlx",
+            model_name="org/test-model",
+            model_quantization="4bit",
+            trials=1,
+            **{field: value},
+        )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize(
+    "tracker",
+    [
+        lambda value: RAMTracker(interval=value),
+        lambda value: SystemRAMTracker(interval=value),
+        lambda value: ThermalStateTracker(interval=value),
+    ],
+)
+def test_trackers_reject_non_finite_intervals(value, tracker):
+    with pytest.raises(ValueError, match="interval must be a finite number"):
+        tracker(value)
+
+
 def test_run_benchmark_rejects_invalid_model_reference_url():
     with pytest.raises(ValueError, match="model reference URL"):
         run_benchmark(

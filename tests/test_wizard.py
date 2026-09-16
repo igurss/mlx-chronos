@@ -109,6 +109,27 @@ def test_validate_run_config_allows_min_tokens_against_profile_default():
     assert validate_run_config(RunWizardConfig(model="test", min_tokens=80)) == []
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_validate_run_config_rejects_non_finite_timing_values(value):
+    errors = validate_run_config(
+        RunWizardConfig(
+            model="test",
+            ram_sample_interval=value,
+            cooldown_seconds=value,
+        )
+    )
+
+    assert "RAM sample interval must be a finite number greater than 0" in errors
+    assert "cooldown seconds must be a finite number greater than or equal to 0" in errors
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_wizard_float_validator_rejects_non_finite_values(value):
+    validator = WizardSession._float_validator(0.0)
+
+    assert validator(value) == "Enter a finite number."
+
+
 def test_validate_run_config_rejects_invalid_model_url():
     errors = validate_run_config(RunWizardConfig(model="test", model_url="not-a-url"))
 

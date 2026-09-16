@@ -72,7 +72,21 @@ def test_cmd_run_invalid_ram_interval(capsys):
     with pytest.raises(SystemExit) as exc:
         cmd_run(args)
     assert exc.value.code == 2
-    assert "Error: --ram-sample-interval must be greater than 0." in capsys.readouterr().err
+    assert (
+        "Error: --ram-sample-interval must be a finite number greater than 0."
+        in capsys.readouterr().err
+    )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_cmd_run_rejects_non_finite_ram_interval(value, capsys):
+    args = Namespace(trials=1, ram_sample_interval=value, format="json")
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+
+    assert exc.value.code == 2
+    assert "--ram-sample-interval must be a finite number" in capsys.readouterr().err
 
 def test_cmd_run_invalid_model(capsys):
     args = Namespace(trials=1, ram_sample_interval=0.1, model="  ", format="json")
@@ -137,7 +151,30 @@ def test_cmd_run_invalid_cooldown(capsys):
     with pytest.raises(SystemExit) as exc:
         cmd_run(args)
     assert exc.value.code == 2
-    assert "Error: --cooldown-seconds must be non-negative." in capsys.readouterr().err
+    assert (
+        "Error: --cooldown-seconds must be a finite number greater than or equal to 0."
+        in capsys.readouterr().err
+    )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_cmd_run_rejects_non_finite_cooldown(value, capsys):
+    args = Namespace(
+        trials=1,
+        ram_sample_interval=0.1,
+        max_tokens=100,
+        min_tokens=None,
+        cooldown_seconds=value,
+        profile="baseline",
+        model="test",
+        format="json",
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+
+    assert exc.value.code == 2
+    assert "--cooldown-seconds must be a finite number" in capsys.readouterr().err
 
 def test_cmd_validate_invalid_model(capsys):
     args = Namespace(engine="omlx", model="  ")
@@ -317,7 +354,16 @@ def test_cmd_upgrade_invalid_timeout(capsys):
         cmd_upgrade(Namespace(timeout=0))
 
     assert exc.value.code == 2
-    assert "Error: --timeout must be greater than 0." in capsys.readouterr().err
+    assert "Error: --timeout must be a finite number greater than 0." in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_cmd_upgrade_rejects_non_finite_timeout(value, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cmd_upgrade(Namespace(timeout=value))
+
+    assert exc.value.code == 2
+    assert "--timeout must be a finite number" in capsys.readouterr().err
 
 @patch("mlx_chronos.cli.get_engine")
 def test_cmd_models_lists_engine_models(mock_get_engine, caplog):
@@ -1022,7 +1068,38 @@ def test_cmd_submit_invalid_timeout(capsys):
         cmd_submit(args)
 
     assert exc.value.code == 2
-    assert "Error: --timeout must be greater than 0." in capsys.readouterr().err
+    assert "Error: --timeout must be a finite number greater than 0." in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_cmd_submit_rejects_non_finite_timeout(value, capsys):
+    args = Namespace(
+        file=Path("result.json"),
+        endpoint=None,
+        email=None,
+        timeout=value,
+        dry_run=True,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_submit(args)
+
+    assert exc.value.code == 2
+    assert "--timeout must be a finite number" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_submit_result_file_rejects_non_finite_timeout(value):
+    result = BenchmarkResult.model_validate(EXAMPLE_RESULT)
+
+    with pytest.raises(SubmissionError, match="timeout must be a finite number"):
+        submit_result_file(
+            Path("result.json"),
+            "https://example.test/submit",
+            timeout=value,
+            raw=b"{}",
+            result=result,
+        )
 
 def test_cmd_submit_uses_default_endpoint(tmp_path, monkeypatch):
     monkeypatch.delenv("MLX_CHRONOS_SUBMIT_ENDPOINT", raising=False)

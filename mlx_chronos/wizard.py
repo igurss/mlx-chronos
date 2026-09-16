@@ -27,6 +27,11 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.model_reference import normalize_model_reference_url
+from mlx_chronos.numeric import (
+    is_finite_number,
+    require_finite_non_negative,
+    require_finite_positive,
+)
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.updates import DEFAULT_UPDATE_CHECK_TIMEOUT
 
@@ -201,10 +206,22 @@ def validate_run_config(config: RunWizardConfig) -> list[str]:
             "connection mode must be one of "
             f"{', '.join(sorted(VALID_CONNECTION_MODES))}"
         )
-    if config.ram_sample_interval <= 0:
-        errors.append("RAM sample interval must be greater than 0")
-    if config.cooldown_seconds < 0:
-        errors.append("cooldown seconds must be non-negative")
+    for value, name, validator in (
+        (
+            config.ram_sample_interval,
+            "RAM sample interval",
+            require_finite_positive,
+        ),
+        (
+            config.cooldown_seconds,
+            "cooldown seconds",
+            require_finite_non_negative,
+        ),
+    ):
+        try:
+            validator(value, name=name)
+        except ValueError as exc:
+            errors.append(str(exc))
     return errors
 
 
@@ -1111,6 +1128,8 @@ class WizardSession:
                 value = float(stripped)
             except ValueError:
                 return "Enter a number."
+            if not is_finite_number(value):
+                return "Enter a finite number."
             if value < min_value:
                 return f"Enter a value >= {min_value:g}."
             return True

@@ -77,3 +77,12 @@ def test_retry_rejects_negative_backoff(field):
     kwargs = {field: -1.0}
     with pytest.raises(ValueError, match=field):
         request_with_retry(lambda: None, action="request", **kwargs)
+
+
+@pytest.mark.parametrize("field", ["backoff_seconds", "max_backoff_seconds"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_retry_rejects_non_finite_backoff(field, value):
+    kwargs = {field: value}
+
+    with pytest.raises(ValueError, match=f"{field} must be a finite number"):
+        request_with_retry(lambda: None, action="request", **kwargs)

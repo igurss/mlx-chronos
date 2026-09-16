@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from mlx_chronos import __version__ as VERSION
+from mlx_chronos.numeric import require_finite_positive
 
 
 PROJECT_NAME = "mlx-chronos"
@@ -75,6 +76,7 @@ def fetch_latest_version(
     url: str = PYPI_JSON_URL,
 ) -> str:
     """Fetch the latest published version from PyPI's JSON API."""
+    require_finite_positive(timeout, name="timeout")
     request = Request(
         url,
         headers={
@@ -141,6 +143,7 @@ def start_background_update_check(
     stream=None,
 ) -> threading.Thread:
     """Start a non-blocking update check and notify only when an update exists."""
+    require_finite_positive(timeout, name="timeout")
     output = sys.stderr if stream is None else stream
 
     def worker() -> None:

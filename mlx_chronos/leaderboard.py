@@ -6,6 +6,7 @@ import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import sys
 from typing import Iterable
 
 from mlx_chronos.constants import (
@@ -160,9 +161,31 @@ def build_results_index(results_dir: Path) -> dict[str, object]:
     }
 
 
-def write_results_index(results_dir: Path, output: Path) -> int:
+def _serialized_results_index(results_dir: Path) -> tuple[dict[str, object], str]:
     payload = build_results_index(results_dir)
-    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return payload, json.dumps(payload, indent=2) + "\n"
+
+
+def write_results_index(results_dir: Path, output: Path) -> int:
+    payload, serialized = _serialized_results_index(results_dir)
+    output.write_text(serialized, encoding="utf-8")
+    results = payload["results"]
+    if not isinstance(results, list):
+        raise TypeError("generated results index must contain a results list")
+    return len(results)
+
+
+def check_results_index(results_dir: Path, output: Path) -> int:
+    """Return the result count when ``output`` is the current generated index."""
+    payload, expected = _serialized_results_index(results_dir)
+    try:
+        actual = output.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"could not read {output}: {exc}") from exc
+    if actual != expected:
+        raise ValueError(
+            f"{output} is stale; run `python -m mlx_chronos.leaderboard` and commit it"
+        )
     results = payload["results"]
     if not isinstance(results, list):
         raise TypeError("generated results index must contain a results list")
@@ -173,7 +196,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, default=Path("results/submitted"))
     parser.add_argument("--output", type=Path, default=Path("docs/results_index.json"))
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail when --output differs from the index generated from --results-dir",
+    )
     args = parser.parse_args(argv)
+    if args.check:
+        try:
+            count = check_results_index(args.results_dir, args.output)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Leaderboard index is current ({count} results).")
+        return 0
     count = write_results_index(args.results_dir, args.output)
     print(f"Generated index with {count} results.")
     return 0
