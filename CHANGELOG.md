@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- Add opt-in contributor attribution, `run --repeat`, and local `compare` and
+  `history` commands.
+- Record whole-system RAM baseline, rise and swap growth as diagnostics without
+  treating the rise as engine-only memory use.
+- Add experimental LM Studio support, gated on both MLX model format and the
+  runtime that serves a probe request.
+- Add filtered leaderboard CSV/JSON export, a request-throughput comparison
+  chart, and link-preview metadata.
+
+### Fixes and maintenance
+- Correct the Compare table emphasis and sustained-throughput early window.
+- Keep anonymous inbox submissions unattributed by default.
+- Check result-submission PR scope before installing code from the PR in CI.
+
 ## [0.4.1] — 2026-07-21
 
 Patch release fixing two hardware/backend-specific detection bugs reported
