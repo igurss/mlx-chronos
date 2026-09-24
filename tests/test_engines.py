@@ -12,6 +12,7 @@ from mlx_chronos.constants import (
     VALID_ENGINE_NAMES,
 )
 from mlx_chronos.engines import (
+    LMStudioEngine,
     ENGINES,
     OMLXEngine,
     MLXLMEngine,
@@ -1260,3 +1261,151 @@ def test_measure_ttft_no_content_raises(mock_stream):
         match="stream ended before a valid content token was received",
     ):
         engine.measure_ttft("hello")
+
+
+def _lmstudio_model_payload(**overrides):
+    payload = {
+        "id": "qwen3.5-4b-nvfp4",
+        "object": "model",
+        "type": "llm",
+        "publisher": "mlx-community",
+        "arch": "qwen3",
+        "compatibility_type": "mlx",
+        "quantization": "4bit",
+        "state": "loaded",
+        "max_context_length": 32768,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _lmstudio_runtime(**overrides):
+    runtime = {
+        "name": "mlx-mac-arm64-apple-metal",
+        "version": "0.9.1",
+        "supported_formats": ["mlx"],
+    }
+    runtime.update(overrides)
+    return runtime
+
+
+def test_lmstudio_accepts_an_mlx_model_served_by_the_mlx_runtime():
+    engine = LMStudioEngine()
+
+    with patch.object(
+        LMStudioEngine, "_native_model_payload", return_value=_lmstudio_model_payload()
+    ), patch.object(LMStudioEngine, "_runtime_probe", return_value=_lmstudio_runtime()):
+        metadata = engine.validate_model_backend("qwen3.5-4b-nvfp4")
+
+    assert metadata == {"format": "mlx", "quantization": "4bit"}
+    # The runtime version is what determines performance, so it becomes the
+    # recorded engine version instead of "unknown".
+    assert engine.get_version() == "0.9.1"
+
+
+def test_lmstudio_rejects_a_gguf_model():
+    engine = LMStudioEngine()
+
+    with patch.object(
+        LMStudioEngine,
+        "_native_model_payload",
+        return_value=_lmstudio_model_payload(compatibility_type="gguf"),
+    ), patch.object(LMStudioEngine, "_runtime_probe") as mock_probe:
+        with pytest.raises(RuntimeError, match="llama.cpp backend"):
+            engine.validate_model_backend("meta-llama-3.1-8b-instruct")
+
+    # The model check fails before any generation request is made.
+    mock_probe.assert_not_called()
+
+
+def test_lmstudio_rejects_an_mlx_model_served_by_the_llama_cpp_runtime():
+    # compatibility_type describes the weights, not which runtime answered, so
+    # an MLX build served through llama.cpp must still be refused.
+    engine = LMStudioEngine()
+    llama_runtime = _lmstudio_runtime(
+        name="llama.cpp-mac-arm64-apple-metal-advsimd",
+        supported_formats=["gguf"],
+    )
+
+    with patch.object(
+        LMStudioEngine, "_native_model_payload", return_value=_lmstudio_model_payload()
+    ), patch.object(LMStudioEngine, "_runtime_probe", return_value=llama_runtime):
+        with pytest.raises(RuntimeError, match="does not support MLX"):
+            engine.validate_model_backend("qwen3.5-4b-nvfp4")
+
+    assert engine.get_version() == "unknown"
+
+
+def test_lmstudio_rejects_a_response_without_runtime_evidence():
+    engine = LMStudioEngine()
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+
+    with patch.object(LMStudioEngine, "_http_post", return_value=response):
+        with pytest.raises(RuntimeError, match="no evidence that MLX served"):
+            engine._runtime_probe("qwen3.5-4b-nvfp4")
+
+
+def test_lmstudio_rejects_a_probe_for_a_different_model():
+    engine = LMStudioEngine()
+    response = MagicMock(status_code=200)
+    response.json.return_value = {
+        "model": "another-model",
+        "model_info": {"format": "mlx"},
+        "runtime": _lmstudio_runtime(),
+    }
+
+    with patch.object(LMStudioEngine, "_http_post", return_value=response):
+        with pytest.raises(RuntimeError, match="different model"):
+            engine._runtime_probe("qwen3.5-4b-nvfp4")
+
+
+def test_lmstudio_rejects_a_probe_reporting_gguf_weights():
+    engine = LMStudioEngine()
+    response = MagicMock(status_code=200)
+    response.json.return_value = {
+        "model": "qwen3.5-4b-nvfp4",
+        "model_info": {"format": "gguf"},
+        "runtime": _lmstudio_runtime(),
+    }
+
+    with patch.object(LMStudioEngine, "_http_post", return_value=response):
+        with pytest.raises(RuntimeError, match="did not identify MLX model weights"):
+            engine._runtime_probe("qwen3.5-4b-nvfp4")
+
+
+def test_lmstudio_rejects_a_model_without_a_compatibility_type():
+    engine = LMStudioEngine()
+    payload = _lmstudio_model_payload()
+    payload.pop("compatibility_type")
+
+    with patch.object(LMStudioEngine, "_native_model_payload", return_value=payload):
+        with pytest.raises(RuntimeError, match="compatibility_type is missing"):
+            engine.validate_model_backend("qwen3.5-4b-nvfp4")
+
+
+def test_lmstudio_runtime_support_falls_back_to_the_runtime_name():
+    assert LMStudioEngine._runtime_supports_mlx({"name": "mlx-mac-arm64"}) is True
+    assert LMStudioEngine._runtime_supports_mlx({"name": "llama.cpp-mac"}) is False
+    assert LMStudioEngine._runtime_supports_mlx({"name": "not-mlx-runtime"}) is False
+    assert LMStudioEngine._runtime_supports_mlx({}) is False
+
+
+def test_lmstudio_identity_requires_the_native_api_namespace():
+    engine = LMStudioEngine()
+
+    with patch.object(
+        LMStudioEngine, "_native_models_payload", return_value={"data": []}
+    ):
+        assert engine._server_identity_matches() is True
+
+    # Another OpenAI-compatible server on port 1234 must not be labelled as
+    # The native API check reduces false positives from other /v1 servers.
+    with patch.object(LMStudioEngine, "_native_models_payload", return_value=None):
+        assert engine._server_identity_matches() is False
+
+
+def test_lmstudio_uses_its_own_port_environment_variable(monkeypatch):
+    assert LMStudioEngine().port == 1234
+    monkeypatch.setenv("MLX_CHRONOS_LMSTUDIO_PORT", "1235")
+    assert LMStudioEngine().port == 1235

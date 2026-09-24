@@ -431,6 +431,7 @@ still record `unknown` when detection is unavailable.
 | vllm-mlx | installed package metadata, package `__version__`, then `/v1/models` metadata fallback |
 | mlx-lm | installed package metadata for `mlx-lm` |
 | Ollama | server `/api/version`, then `ollama --version` fallback |
+| LM Studio | version of the runtime that answered the MLX backend probe below |
 
 If detection fails, the result records `unknown` instead of blocking the run.
 Results also set `meta.engine_version_warning=true` so reports and the public
@@ -460,6 +461,32 @@ leaderboard entries.
 The response's quantization is treated as authoritative and must match the
 quantization requested on the mlx-Chronos command line. Family and parameter
 size are retained when Ollama reports them.
+
+### LM Studio: MLX-Only Gate
+
+LM Studio ships two runtimes on Apple Silicon — MLX and llama.cpp — and this
+project is scoped to MLX engines only. A model name alone does not say which
+runtime will answer a request, so mlx-Chronos gates acceptance twice before any
+measured call:
+
+1. `GET /api/v0/models/{model}` must report `compatibility_type: "mlx"`. This
+   describes the weights, not the runtime, so it is necessary but not
+   sufficient.
+2. A tiny non-streaming completion through `POST /api/v0/chat/completions`
+   must come back with a `runtime` block whose `supported_formats` (or,
+   failing that, whose `name`) confirms MLX. This describes what actually
+   answered.
+
+A GGUF model is rejected at step 1 without ever reaching step 2. An MLX model
+whose runtime was switched to llama.cpp inside LM Studio is rejected at step 2.
+`engine.version` for LM Studio records the MLX runtime version returned by
+that probe, not the LM Studio application version, because the runtime is what
+determines the measured performance.
+
+This experimental integration uses the documented v0 endpoints because the
+completion response exposes both model and active-runtime evidence. LM Studio
+recommends its newer v1 API for new clients, but a migration here requires
+equivalent runtime proof and is not a mechanical endpoint substitution.
 
 ---
 

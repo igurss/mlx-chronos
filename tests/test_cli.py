@@ -544,6 +544,33 @@ def test_cmd_validate_reports_ollama_model_backend(
 
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_validate_reports_lmstudio_runtime_version_after_probe(
+    mock_detect, mock_get_engine, caplog
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2", "memory_gb": 8.0, "macos_version": "14.0"
+    }
+    engine = mock_get_engine.return_value
+    engine.is_installed.return_value = True
+    engine.is_server_running.return_value = True
+    engine.base_url.return_value = "http://localhost:1234/v1"
+    engine.list_model_ids.return_value = ["model-mlx"]
+    engine.resolve_listed_model_id.return_value = "model-mlx"
+    engine.requires_model_backend_validation = True
+    engine.validate_model_backend.return_value = {"format": "mlx"}
+    engine.get_version.return_value = "0.9.1"
+    engine.validate_completion_request.return_value = "model-mlx"
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_validate(Namespace(engine="lmstudio", model="model-mlx"))
+
+    assert "[ok] MLX runtime version: 0.9.1" in caplog.text
+    assert "version detection failed" not in caplog.text
+    engine.get_version.assert_called_once()
+
+
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
 def test_cmd_validate_fails_ollama_gguf_backend(
     mock_detect,
     mock_get_engine,
@@ -1315,6 +1342,36 @@ def test_cmd_doctor_reports_publishable_ready(
 
     assert "Ready for a publishable run" in caplog.text
     assert "mlx-chronos run --publishable --engine omlx" in caplog.text
+
+
+@patch("mlx_chronos.cli.get_benchmark_condition_warnings", return_value=[])
+@patch("mlx_chronos.cli.get_engine")
+@patch("mlx_chronos.cli.detect_hardware")
+def test_cmd_doctor_defers_lmstudio_version_until_backend_probe(
+    mock_detect, mock_get_engine, _mock_warnings, caplog
+):
+    mock_detect.return_value = {
+        "chip": "Apple M2", "memory_gb": 8.0, "macos_version": "14.0"
+    }
+    engine = mock_get_engine.return_value
+    engine.is_installed.return_value = True
+    engine.is_server_running.return_value = True
+    engine.base_url.return_value = "http://localhost:1234/v1"
+    engine.list_model_ids.return_value = ["model-mlx"]
+    engine.resolve_listed_model_id.return_value = "model-mlx"
+    engine.requires_model_backend_validation = True
+    engine.validate_model_backend.return_value = {"format": "mlx"}
+    engine.get_version.return_value = "0.9.1"
+    engine.validate_completion_request.return_value = "model-mlx"
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+
+    cmd_doctor(Namespace(
+        engine="lmstudio", model="model-mlx", model_url=None, publishable=False
+    ))
+
+    assert "[ok] MLX runtime version: 0.9.1" in caplog.text
+    assert "[warn] engine version" not in caplog.text
+    engine.get_version.assert_called_once()
 
 
 def test_cmd_doctor_requires_engine_for_model(capsys):

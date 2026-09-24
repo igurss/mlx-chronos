@@ -11,15 +11,20 @@ import httpx
 import psutil
 from abc import ABC, abstractmethod
 
+from urllib.parse import quote
+
 from mlx_chronos.constants import (
     BENCHMARK_REQUEST_TEMPERATURE,
     BENCHMARK_REQUEST_TOP_P,
+    ENGINE_NAME_LM_STUDIO,
     ENGINE_NAME_MLX_LM,
     ENGINE_NAME_OLLAMA,
     ENGINE_NAME_OMLX,
     ENGINE_NAME_RAPID_MLX,
     ENGINE_NAME_VLLM_MLX,
     ERROR_RESPONSE_BODY_LIMIT,
+    LM_STUDIO_MLX_COMPATIBILITY_TYPE,
+    LM_STUDIO_REJECTED_COMPATIBILITY_TYPES,
     OLLAMA_MLX_MODEL_FORMATS,
     OLLAMA_REJECTED_MODEL_FORMATS,
     TOKEN_COUNT_SOURCE_USAGE,
@@ -1454,6 +1459,275 @@ class OllamaEngine(BaseEngine):
             return "unknown"
 
 
+# ─── LM Studio ────────────────────────────────────────────────────────────────
+
+class LMStudioEngine(BaseEngine):
+    """LM Studio, restricted to its MLX runtime.
+
+    LM Studio ships two runtimes on Apple Silicon: llama.cpp for GGUF weights and
+    MLX for MLX weights. Only the MLX one is in scope here, so acceptance is
+    gated twice:
+
+    1. ``GET /api/v0/models/{model}`` must report ``compatibility_type: "mlx"``,
+       which says the weights are an MLX build.
+    2. A tiny non-streaming completion through ``/api/v0/chat/completions`` must
+       come back from a runtime whose ``supported_formats`` include MLX, which
+       says the MLX runtime is the one that actually served the request.
+
+    The first check alone is not sufficient: it describes the model, not the
+    runtime that answered. The probe also yields the runtime version, which is
+    what ``engine.version`` records — more specific than the LM Studio app
+    version, and the thing that actually determines performance.
+    """
+
+    name = ENGINE_NAME_LM_STUDIO
+    default_port = 1234
+    expected_process_names = ("lm studio", "lms", "llmster", "lm-studio")
+    requires_model_backend_validation = True
+
+    def __init__(self, port: int | None = None):
+        super().__init__(port=port)
+        self._runtime_version: str | None = None
+
+    def port_env_var(self) -> str:
+        return "MLX_CHRONOS_LMSTUDIO_PORT"
+
+    def native_url(self) -> str:
+        return f"{self.root_url()}/api/v0"
+
+    def is_installed(self) -> bool:
+        # LM Studio is a desktop app; the headless daemon ships the `lms` CLI.
+        # Neither is required to be on PATH when the server is already running,
+        # so a reachable native endpoint also counts as installed.
+        if shutil.which("lms") is not None or shutil.which("llmster") is not None:
+            return True
+        return self._native_models_payload() is not None
+
+    def _native_models_payload(self) -> dict | None:
+        try:
+            response = self._http_get(
+                f"{self.native_url()}/models",
+                timeout=2.0,
+                action="native model list",
+                log_retries=False,
+            )
+            if response.status_code != 200:
+                return None
+            payload = response.json()
+        except Exception:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _server_identity_matches(self) -> bool:
+        # The native namespace and expected payload reduce false identification.
+        payload = self._native_models_payload()
+        return isinstance(payload, dict) and isinstance(payload.get("data"), list)
+
+    def _native_model_payload(self, model: str) -> dict:
+        request_model = self._request_model_name(model)
+        url = f"{self.native_url()}/models/{quote(request_model, safe='')}"
+        action = "verify model backend"
+        try:
+            response = self._http_get(url, timeout=10.0, action=action)
+            response.raise_for_status()
+            data = response.json()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                self._request_error_message(
+                    action, url, exc, model=model, request_model=request_model
+                )
+            ) from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                self._invalid_json_message(
+                    action, url, model=model, request_model=request_model
+                )
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "invalid model response: response must be a JSON object",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+        return data
+
+    def _runtime_probe(self, model: str) -> dict:
+        """Run a one-token native completion to learn which runtime answered."""
+        request_model = self._request_model_name(model)
+        url = f"{self.native_url()}/chat/completions"
+        action = "verify active runtime"
+        payload = {
+            "model": request_model,
+            "messages": [{"role": "user", "content": "Reply with one word: ok"}],
+            "max_tokens": 1,
+            "stream": False,
+            "temperature": BENCHMARK_REQUEST_TEMPERATURE,
+            "top_p": BENCHMARK_REQUEST_TOP_P,
+        }
+        try:
+            response = self._http_post(
+                url, json_payload=payload, timeout=60.0, action=action
+            )
+            response.raise_for_status()
+            data = response.json()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                self._request_error_message(
+                    action, url, exc, model=model, request_model=request_model
+                )
+            ) from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                self._invalid_json_message(
+                    action, url, model=model, request_model=request_model
+                )
+            ) from exc
+
+        if isinstance(data, dict) and isinstance(data.get("model"), str):
+            if data["model"] != request_model:
+                raise RuntimeError(
+                    self._invalid_response_message(
+                        action,
+                        url,
+                        f"probe returned a different model {data['model']!r}",
+                        model=model,
+                        request_model=request_model,
+                    )
+                )
+        model_info = data.get("model_info") if isinstance(data, dict) else None
+        if isinstance(model_info, dict) and isinstance(model_info.get("format"), str):
+            if model_info["format"].strip().lower() != LM_STUDIO_MLX_COMPATIBILITY_TYPE:
+                raise RuntimeError(
+                    self._invalid_response_message(
+                        action,
+                        url,
+                        "probe response did not identify MLX model weights",
+                        model=model,
+                        request_model=request_model,
+                    )
+                )
+        runtime = data.get("runtime") if isinstance(data, dict) else None
+        if not isinstance(runtime, dict):
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    (
+                        "could not verify the active LM Studio runtime: the "
+                        "response carried no 'runtime' block, so there is no "
+                        "evidence that MLX served the request"
+                    ),
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+        return runtime
+
+    @staticmethod
+    def _runtime_supports_mlx(runtime: dict) -> bool:
+        formats = runtime.get("supported_formats")
+        if isinstance(formats, list) and formats:
+            return any(
+                isinstance(entry, str)
+                and entry.strip().lower() == LM_STUDIO_MLX_COMPATIBILITY_TYPE
+                for entry in formats
+            )
+        # Fall back to the runtime name only when formats are absent.
+        name = runtime.get("name")
+        return (
+            isinstance(name, str)
+            and name.strip().lower().startswith(LM_STUDIO_MLX_COMPATIBILITY_TYPE)
+        )
+
+    def validate_model_backend(self, model: str) -> dict[str, str]:
+        request_model = self._request_model_name(model)
+        url = f"{self.native_url()}/models"
+        action = "verify model backend"
+        data = self._native_model_payload(model)
+
+        raw_type = data.get("compatibility_type")
+        if not isinstance(raw_type, str) or not raw_type.strip():
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "could not verify the LM Studio backend: compatibility_type "
+                    "is missing",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+        compatibility_type = raw_type.strip().lower()
+        if compatibility_type in LM_STUDIO_REJECTED_COMPATIBILITY_TYPES:
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    (
+                        "LM Studio model uses the llama.cpp backend; this "
+                        "project only benchmarks MLX engines, so only models "
+                        "with compatibility_type='mlx' are accepted"
+                    ),
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+        if compatibility_type != LM_STUDIO_MLX_COMPATIBILITY_TYPE:
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    url,
+                    "unsupported LM Studio compatibility_type "
+                    f"{compatibility_type!r}; expected "
+                    f"{LM_STUDIO_MLX_COMPATIBILITY_TYPE!r}",
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+
+        runtime = self._runtime_probe(model)
+        if not self._runtime_supports_mlx(runtime):
+            runtime_name = runtime.get("name")
+            raise RuntimeError(
+                self._invalid_response_message(
+                    action,
+                    f"{self.native_url()}/chat/completions",
+                    (
+                        "the LM Studio runtime that served the request does not "
+                        f"support MLX (runtime={runtime_name!r}); switch the "
+                        "model's runtime to MLX in LM Studio and retry"
+                    ),
+                    model=model,
+                    request_model=request_model,
+                )
+            )
+
+        runtime_version = runtime.get("version")
+        self._runtime_version = (
+            runtime_version.strip()
+            if isinstance(runtime_version, str) and runtime_version.strip()
+            else None
+        )
+
+        metadata = {"format": compatibility_type}
+        quantization = data.get("quantization")
+        if isinstance(quantization, str) and quantization.strip():
+            metadata["quantization"] = quantization.strip()
+        return metadata
+
+    def get_version(self) -> str:
+        # The MLX runtime version is what determines performance, and it is
+        # captured by the backend check that must run before any measurement.
+        if self._runtime_version:
+            return self._runtime_version
+        return "unknown"
+
+
 # ─── Registry ─────────────────────────────────────────────────────────────────
 
 ENGINES = {
@@ -1462,6 +1736,7 @@ ENGINES = {
     ENGINE_NAME_VLLM_MLX: VLLMMLXEngine,
     ENGINE_NAME_MLX_LM: MLXLMEngine,
     ENGINE_NAME_OLLAMA: OllamaEngine,
+    ENGINE_NAME_LM_STUDIO: LMStudioEngine,
 }
 
 def get_engine(name: str) -> BaseEngine:

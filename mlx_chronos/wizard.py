@@ -45,6 +45,7 @@ ENGINE_DESCRIPTIONS = {
     "vllm-mlx": "vllm-mlx OpenAI-compatible server",
     "mlx-lm": "mlx-lm OpenAI-compatible server",
     "ollama": "Ollama local server",
+    "lmstudio": "LM Studio, MLX runtime only",
 }
 
 PROFILE_DESCRIPTIONS = {

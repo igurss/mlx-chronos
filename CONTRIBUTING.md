@@ -47,6 +47,7 @@ Supported engines:
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
 - [vllm-mlx](https://github.com/waybarrios/vllm-mlx)
 - [mlx-lm](https://github.com/ml-explore/mlx-lm)
+- [LM Studio](https://lmstudio.ai), MLX runtime only (see the note below)
 
 ### 1. Install mlx-Chronos
 
@@ -79,7 +80,18 @@ mlx_lm.server --model /path/to/model --port 8080
 
 # Ollama
 ollama serve
+
+# LM Studio (desktop app) — from the Developer tab, start the server, and load
+# an MLX model. Headless equivalent:
+lms server start --port 1234
 ```
+
+> **LM Studio: MLX only**
+> LM Studio also serves llama.cpp/GGUF models. mlx-Chronos checks both the
+> model's `compatibility_type` and the runtime that actually answered a probe
+> request, and rejects anything that is not confirmed MLX end to end. Load an
+> MLX build (for example from the `mlx-community` publisher in LM Studio's
+> model browser) and make sure its runtime is set to MLX before benchmarking.
 
 Default OpenAI-compatible endpoints:
 
@@ -90,12 +102,14 @@ Default OpenAI-compatible endpoints:
 | vllm-mlx | `http://localhost:8000/v1` |
 | mlx-lm | `http://localhost:8080/v1` |
 | Ollama | `http://localhost:11434/v1` |
+| LM Studio | `http://localhost:1234/v1` (native checks use `/api/v0`) |
 
 Override ports with environment variables:
 
 ```bash
 MLX_CHRONOS_VLLM_MLX_PORT=8003
 MLX_CHRONOS_MLX_LM_PORT=8002
+MLX_CHRONOS_LMSTUDIO_PORT=1235
 ```
 
 > **Port note**

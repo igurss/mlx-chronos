@@ -107,6 +107,7 @@ def test_readme_lists_every_default_engine_port():
         ("vllm-mlx", "8000"),
         ("mlx-lm", "8080"),
         ("Ollama", "11434"),
+        ("LM Studio", "1234"),
     ):
         assert f"| {engine} | `{port}` |" in readme
 

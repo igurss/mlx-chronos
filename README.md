@@ -101,12 +101,21 @@ reasoning models.
 | Rapid-MLX | [raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX) | OpenAI-compatible server |
 | vllm-mlx | [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx) | OpenAI-compatible server |
 | mlx-lm | [ml-explore/mlx-lm](https://github.com/ml-explore/mlx-lm) | Apple MLX |
+| LM Studio | [lmstudio.ai](https://lmstudio.ai) | MLX runtime only — see note below |
 
 > **Note**
 > The engine server must already be running before `mlx-chronos run`,
 > `mlx-chronos models`, or `mlx-chronos validate` can query it.
 > See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 > for engine setup details.
+
+> **LM Studio scope**
+> LM Studio ships two runtimes on Apple Silicon: MLX and llama.cpp. This
+> project benchmarks MLX engines only, so mlx-Chronos accepts an LM Studio
+> model only when the weights are an MLX build *and* a live probe confirms the
+> MLX runtime is the one that actually answered the request. A GGUF model, or
+> an MLX model whose runtime was switched to llama.cpp in LM Studio, is
+> rejected with a message explaining why.
 
 ---
 
@@ -287,6 +296,7 @@ Default engine ports:
 | vllm-mlx | `8000` |
 | mlx-lm | `8080` |
 | Ollama | `11434` |
+| LM Studio | `1234` |
 
 oMLX and vllm-mlx both default to port `8000`. To avoid mislabeling results,
 mlx-Chronos checks the oMLX listener process with `lsof`; if that process cannot

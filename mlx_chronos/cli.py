@@ -49,6 +49,7 @@ from mlx_chronos.updates import (
 from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
+    ENGINE_NAME_LM_STUDIO,
     MAX_TRIALS,
     PUBLIC_BASELINE_TRIALS,
     RECENT_BENCHMARK_WARNING_SECONDS,
@@ -625,8 +626,9 @@ def cmd_doctor(args):
                 failures += 1
             continue
 
-        version = engine.get_version()
         running = engine.is_server_running()
+        defer_version = name == ENGINE_NAME_LM_STUDIO and bool(model) and running
+        version = "pending model probe" if defer_version else engine.get_version()
         if running:
             running_engines.append(name)
             selected_engine_ready = selected_engine == name or selected_engine is None
@@ -675,6 +677,17 @@ def cmd_doctor(args):
                 if engine.requires_model_backend_validation is True:
                     model_format = model_backend_metadata.get("format", "unknown")
                     log_validation_check("ok", "model backend", f"format={model_format}")
+                if selected_engine == ENGINE_NAME_LM_STUDIO:
+                    runtime_version = engine.get_version()
+                    if runtime_version == "unknown" and args.publishable:
+                        failures += 1
+                    log_validation_check(
+                        "ok" if runtime_version != "unknown" else (
+                            "fail" if args.publishable else "warn"
+                        ),
+                        "MLX runtime version",
+                        runtime_version,
+                    )
             except RuntimeError as exc:
                 backend_failed = True
                 failures += 1
@@ -798,7 +811,8 @@ def cmd_validate(args):
 
     engine = get_engine(args.engine)
     if engine.is_installed():
-        engine_version = engine.get_version()
+        defer_version = args.engine == ENGINE_NAME_LM_STUDIO and bool(model)
+        engine_version = "pending model probe" if defer_version else engine.get_version()
         log_validation_check(
             "ok",
             "engine installed",
@@ -855,6 +869,13 @@ def cmd_validate(args):
             if engine.requires_model_backend_validation is True:
                 model_format = model_backend_metadata.get("format", "unknown")
                 log_validation_check("ok", "model backend", f"format={model_format}")
+            if args.engine == ENGINE_NAME_LM_STUDIO:
+                runtime_version = engine.get_version()
+                log_validation_check(
+                    "ok" if runtime_version != "unknown" else "warn",
+                    "MLX runtime version",
+                    runtime_version,
+                )
         except RuntimeError as exc:
             failures += 1
             backend_failed = True

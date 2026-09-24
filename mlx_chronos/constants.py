@@ -12,10 +12,8 @@ BENCHMARK_REQUEST_TEMPERATURE = 0.0
 BENCHMARK_REQUEST_TOP_P = 1.0
 
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
-# Swap growth above this during a run means the Mac was genuinely paging, which
-# distorts throughput. Recorded and surfaced as a warning, never a hard blocker:
-# blocking would lock 8 GB Macs out of the leaderboard, and those are exactly the
-# machines whose numbers people want to look up.
+# A system-wide swap rise is a memory-pressure warning, not proof that this
+# benchmark caused paging or that its throughput was distorted.
 MEMORY_PRESSURE_SWAP_GROWTH_GB = 0.5
 DEFAULT_THERMAL_SAMPLE_INTERVAL = 1.0
 RECENT_BENCHMARK_WARNING_SECONDS = 300.0
@@ -37,12 +35,19 @@ ENGINE_NAME_RAPID_MLX = "rapid-mlx"
 ENGINE_NAME_VLLM_MLX = "vllm-mlx"
 ENGINE_NAME_MLX_LM = "mlx-lm"
 ENGINE_NAME_OLLAMA = "ollama"
+ENGINE_NAME_LM_STUDIO = "lmstudio"
+# LM Studio ships both a llama.cpp runtime and an MLX runtime. Only the MLX one
+# is in scope for this project, so a result is accepted only when the model is
+# an MLX build *and* the runtime that actually served the request supports MLX.
+LM_STUDIO_MLX_COMPATIBILITY_TYPE = "mlx"
+LM_STUDIO_REJECTED_COMPATIBILITY_TYPES = frozenset({"gguf"})
 OLLAMA_MLX_MODEL_FORMATS = frozenset({"safetensors"})
 OLLAMA_REJECTED_MODEL_FORMATS = frozenset({"gguf"})
 # Keep in sync with engines.ENGINES and schema.EngineName. constants.py is kept
 # dependency-light, so tests enforce the registry/schema match instead.
 VALID_ENGINE_NAMES = {
     ENGINE_NAME_OMLX,
+    ENGINE_NAME_LM_STUDIO,
     ENGINE_NAME_RAPID_MLX,
     ENGINE_NAME_VLLM_MLX,
     ENGINE_NAME_MLX_LM,

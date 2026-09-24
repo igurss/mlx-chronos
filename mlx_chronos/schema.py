@@ -76,6 +76,7 @@ BenchmarkProfile = Literal[
 ]
 EngineName = Literal[
     "omlx",
+    "lmstudio",
     "rapid-mlx",
     "vllm-mlx",
     "mlx-lm",
