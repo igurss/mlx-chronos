@@ -928,8 +928,8 @@
             <thead>
               <tr id="compare-head">
                 <th>Engine</th>
-                <th>Decode tok/s</th>
                 <th>Request tok/s</th>
+                <th>Decode tok/s</th>
                 <th>TTFT cold</th>
                 <th>TTFT cached</th>
                 <th>System RAM peak</th>
@@ -1376,11 +1376,26 @@
         : "No public run matches this selection.";
       resultCount.textContent = `${runTotal} result${runTotal === 1 ? "" : "s"}`;
 
-      compareBody.innerHTML = representatives.map(row => `
+      compareBody.innerHTML = representatives
+        .map(row => compareRowHtml(row, rows, showDecodeTps))
+        .join("");
+
+      compareEmpty.textContent = allRows.length
+        ? "No matching public benchmark results yet. Try a different model/spec."
+        : "No benchmark results are available yet.";
+      compareEmpty.style.display = representatives.length ? "none" : "block";
+    }
+
+    // Request throughput is the ranking metric used by representativeRowsByEngine,
+    // so it is the emphasised column and sits directly after the engine name.
+    // Decode throughput stays a secondary, unemphasised column: emphasising a
+    // column the table is not sorted by makes the ordering look wrong.
+    function compareRowHtml(row, rows, showDecodeTps) {
+      return `
         <tr>
           <td>${engineCell(row)}</td>
-          ${showDecodeTps ? `<td><span class="metric-strong">${fmt(row.decode_tps, 2)}</span></td>` : ""}
-          <td>${showDecodeTps ? fmt(row.tps, 2) : `<span class="metric-strong">${fmt(row.tps, 2)}</span>`}</td>
+          <td><span class="metric-strong">${fmt(row.tps, 2)}</span></td>
+          ${showDecodeTps ? `<td>${fmt(row.decode_tps, 2)}</td>` : ""}
           <td>${fmt(row.ttft_cold, 3)} s</td>
           <td>${fmt(row.ttft_cached, 3)} s</td>
           <td>${systemRamCell(row)}</td>
@@ -1390,25 +1405,24 @@
         <tr class="details-row" id="detail-${row._id}" hidden>
           <td colspan="${showDecodeTps ? 8 : 7}">${detailsPanel(row)}</td>
         </tr>
-      `).join("");
-
-      compareEmpty.textContent = allRows.length
-        ? "No matching public benchmark results yet. Try a different model/spec."
-        : "No benchmark results are available yet.";
-      compareEmpty.style.display = representatives.length ? "none" : "block";
+      `;
     }
 
-    function renderCompareHead(showDecodeTps) {
-      compareHead.innerHTML = `
+    function compareHeadHtml(showDecodeTps) {
+      return `
         <th>Engine</th>
-        ${showDecodeTps ? "<th>Decode tok/s</th>" : ""}
         <th>Request tok/s</th>
+        ${showDecodeTps ? "<th>Decode tok/s</th>" : ""}
         <th>TTFT cold</th>
         <th>TTFT cached</th>
         <th>System RAM peak</th>
         <th>Conditions</th>
         <th></th>
       `;
+    }
+
+    function renderCompareHead(showDecodeTps) {
+      compareHead.innerHTML = compareHeadHtml(showDecodeTps);
     }
 
     function representativeRowsByEngine(rows) {

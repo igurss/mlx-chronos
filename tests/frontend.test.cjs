@@ -79,3 +79,44 @@ test("engine comparison always ranks by request throughput", () => {
   ];
   assert.equal(context.representativeRowsByEngine(rows)[0].engine, "mlx-lm");
 });
+
+test("the emphasised comparison column is the one the table is ranked by", () => {
+  const row = {
+    _id: "row-0",
+    engine: "omlx",
+    timestamp: "2026-01-01T00:00:00Z",
+    tps: 20.5,
+    decode_tps: 99.5,
+    ttft_cold: 0.1,
+    ttft_cached: 0.05,
+    system_ram_peak_gb: 7,
+    system_ram_peak_percent: 90,
+    engine_version: "1.0.0",
+    thermal_state: "nominal",
+    completion_tokens_raw: [100],
+    decode_timing_source: "client_stream",
+  };
+  const rendered = context.compareRowHtml(row, [row], true);
+
+  // Request throughput carries the emphasis; decode throughput must not.
+  assert.match(rendered, /<span class="metric-strong">20\.50<\/span>/);
+  assert.equal(rendered.includes('<span class="metric-strong">99.50</span>'), false);
+
+  // ... and it is the first metric column, immediately after the engine name.
+  assert.ok(rendered.indexOf("20.50") < rendered.indexOf("99.50"));
+});
+
+test("comparison header column order matches the rendered cells", () => {
+  const headers = [...context.compareHeadHtml(true).matchAll(/<th>([^<]*)<\/th>/g)]
+    .map(match => match[1].trim());
+  assert.deepEqual(headers.slice(0, 3), ["Engine", "Request tok/s", "Decode tok/s"]);
+
+  const withoutDecode = [...context.compareHeadHtml(false).matchAll(/<th>([^<]*)<\/th>/g)]
+    .map(match => match[1].trim());
+  assert.equal(withoutDecode.includes("Decode tok/s"), false);
+  assert.deepEqual(withoutDecode.slice(0, 2), ["Engine", "Request tok/s"]);
+
+  // Header count must match the colspan used for the details row.
+  assert.equal(context.compareHeadHtml(true).match(/<th>/g).length, 8);
+  assert.equal(context.compareHeadHtml(false).match(/<th>/g).length, 7);
+});
