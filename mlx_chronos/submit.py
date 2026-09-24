@@ -35,7 +35,11 @@ from mlx_chronos.schema import BenchmarkProtocol, BenchmarkResult
 SUBMIT_ENDPOINT_ENV = "MLX_CHRONOS_SUBMIT_ENDPOINT"
 DEFAULT_SUBMIT_ENDPOINT = "https://usebasin.com/f/29157002c003"
 SUBMITTER_EMAIL_ENV = "MLX_CHRONOS_SUBMITTER_EMAIL"
-DEFAULT_SUBMITTER_EMAIL = "182094468+igurss@users.noreply.github.com"
+# Reserved, non-deliverable domain (RFC 2606). A submission without a contact
+# address must never be attributed to the maintainer: that would make every
+# community submission look like it came from the project owner and would leave
+# the real submitter unreachable.
+ANONYMOUS_SUBMITTER_EMAIL = "anonymous@mlx-chronos.invalid"
 PUBLIC_TOKEN_COUNT_SOURCE = TOKEN_COUNT_SOURCE_USAGE
 PUBLIC_PROFILE_BASELINE = "baseline"
 PUBLIC_PROFILE_SUSTAINED = "sustained"
@@ -432,7 +436,7 @@ def submit_result_file(
     path: Path,
     endpoint: str,
     timeout: float = 30.0,
-    submitter_email: str = DEFAULT_SUBMITTER_EMAIL,
+    submitter_email: str = ANONYMOUS_SUBMITTER_EMAIL,
     raw: bytes | None = None,
     result: BenchmarkResult | None = None,
 ) -> BenchmarkResult:
@@ -449,8 +453,16 @@ def submit_result_file(
 
     if raw is None or result is None:
         raw, result = load_publishable_result(path)
+    contact_email = submitter_email.strip() or ANONYMOUS_SUBMITTER_EMAIL
+    if contact_email == ANONYMOUS_SUBMITTER_EMAIL:
+        logger.warning(
+            "No submitter contact address was provided; this result will be "
+            "submitted anonymously and maintainers will not be able to reply. "
+            "Pass --email or set %s to be reachable.",
+            SUBMITTER_EMAIL_ENV,
+        )
     data = {
-        "email": submitter_email.strip() or DEFAULT_SUBMITTER_EMAIL,
+        "email": contact_email,
         "name": "mlx-chronos CLI",
         "subject": f"mlx-chronos benchmark result: {result.engine.name}",
         "message": (

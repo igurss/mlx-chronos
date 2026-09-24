@@ -271,6 +271,7 @@ mlx-chronos run --engine omlx \
 | `MLX_CHRONOS_CACHED_TTFT_RATIO` | `MLX_CHRONOS_CACHED_TTFT_RATIO=0.8` | Sets the cached-TTFT warning threshold |
 | `MLX_CHRONOS_DISABLE_UPDATE_CHECK` | `MLX_CHRONOS_DISABLE_UPDATE_CHECK=1` | Disables automatic background update checks |
 | `MLX_CHRONOS_SUBMIT_ENDPOINT` | `https://example.test/form` | Overrides the maintainer inbox endpoint |
+| `MLX_CHRONOS_SUBMITTER_EMAIL` | `you@example.com` | Contact address attached to inbox submissions |
 
 Default engine ports:
 
@@ -430,6 +431,10 @@ If opening a PR is inconvenient, send a validated result directly:
 ```bash
 mlx-chronos submit --file results/local/your-result.json
 ```
+
+Pass `--email you@example.com` (or set `MLX_CHRONOS_SUBMITTER_EMAIL`) so
+maintainers can reply about your submission. Without it the result is sent
+anonymously and cannot be attributed or followed up.
 
 Maintainers can override the inbox endpoint with `--endpoint` or
 `MLX_CHRONOS_SUBMIT_ENDPOINT`.

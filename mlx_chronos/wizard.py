@@ -711,9 +711,15 @@ class WizardSession:
         endpoint = None
         email = None
         timeout = 30.0
-        if self._confirm("Customize submit endpoint, email, or timeout?", default=False):
+        if not dry_run:
+            # Asked on every real submission: without it the result is sent
+            # anonymously and maintainers cannot reply to the submitter.
+            email = self._ask_optional_text(
+                "Contact email (leave empty to submit anonymously)",
+                None,
+            )
+        if self._confirm("Customize submit endpoint or timeout?", default=False):
             endpoint = self._ask_optional_text("Submission endpoint URL", None)
-            email = self._ask_optional_text("Contact email", None)
             timeout = self._ask_float("Submission timeout in seconds", 30.0, 0.000001)
         self._call_command(
             self.callbacks.submit,

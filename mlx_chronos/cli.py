@@ -31,7 +31,7 @@ from mlx_chronos.reporters import BaseReporter, JSONReporter, MarkdownReporter
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
-    DEFAULT_SUBMITTER_EMAIL,
+    ANONYMOUS_SUBMITTER_EMAIL,
     SUBMIT_ENDPOINT_ENV,
     SUBMITTER_EMAIL_ENV,
     SubmissionError,
@@ -904,7 +904,7 @@ def cmd_submit(args):
     submitter_email = (
         args.email
         or os.environ.get(SUBMITTER_EMAIL_ENV)
-        or DEFAULT_SUBMITTER_EMAIL
+        or ANONYMOUS_SUBMITTER_EMAIL
     )
     try:
         submit_result_file(
@@ -1212,8 +1212,9 @@ def main():
         "--email",
         default=None,
         help=(
-            "Contact email included in submission metadata "
-            f"(default: project no-reply; overrides ${SUBMITTER_EMAIL_ENV})"
+            "Contact email so maintainers can reply about this submission "
+            f"(overrides ${SUBMITTER_EMAIL_ENV}; submissions without one are "
+            "sent anonymously)"
         ),
     )
     submit_parser.add_argument(

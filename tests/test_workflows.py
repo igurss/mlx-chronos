@@ -220,7 +220,12 @@ def test_leaderboard_compare_sorts_consistently_by_request_tps():
 
     assert "primaryThroughput" not in html
     assert "numericSortValue(b.tps) - numericSortValue(a.tps)" in html
-    assert "<th>Decode tok/s</th>\n                <th>Request tok/s</th>" in html
+    # The ranked column comes first and carries the emphasis; decode throughput
+    # must never be the emphasised column while the table is ranked by request
+    # throughput.
+    assert "<th>Request tok/s</th>\n                <th>Decode tok/s</th>" in html
+    assert '<td><span class="metric-strong">${fmt(row.tps, 2)}</span></td>' in html
+    assert 'metric-strong">${fmt(row.decode_tps, 2)}' not in html
 
 
 def test_leaderboard_hides_internal_protocol_and_condition_noise():

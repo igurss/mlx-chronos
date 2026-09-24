@@ -41,7 +41,13 @@ from mlx_chronos.integrity import seal_result
 from mlx_chronos.protocol import COLD_PROMPTS, THROUGHPUT_PROMPTS
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.stats import compute_stats
-from mlx_chronos.submit import SubmissionError, load_publishable_result, submit_result_file
+from mlx_chronos.submit import (
+    ANONYMOUS_SUBMITTER_EMAIL,
+    SUBMITTER_EMAIL_ENV,
+    SubmissionError,
+    load_publishable_result,
+    submit_result_file,
+)
 from mlx_chronos.updates import UpdateCheckResult
 
 
@@ -1056,6 +1062,69 @@ def test_cmd_submit_passes_prevalidated_payload(tmp_path):
     assert mock_submit_file.call_args.kwargs["raw"] == raw
     assert mock_submit_file.call_args.kwargs["result"] is result
 
+@patch("mlx_chronos.submit.httpx.post")
+def test_submit_result_file_never_defaults_to_the_maintainer_address(mock_post, tmp_path):
+    result_path = write_result(tmp_path / "result.json")
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.text = "ok"
+
+    submit_result_file(result_path, "https://example.test/form")
+
+    sent_email = mock_post.call_args.kwargs["data"]["email"]
+    assert sent_email == ANONYMOUS_SUBMITTER_EMAIL
+    assert "igurss" not in sent_email
+    assert "@users.noreply.github.com" not in sent_email
+
+
+@patch("mlx_chronos.submit.httpx.post")
+def test_submit_result_file_warns_when_submitting_anonymously(mock_post, tmp_path, caplog):
+    result_path = write_result(tmp_path / "result.json")
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.text = "ok"
+
+    with caplog.at_level(logging.WARNING, logger="mlx_chronos"):
+        submit_result_file(result_path, "https://example.test/form", submitter_email="   ")
+
+    assert any("anonymously" in record.message for record in caplog.records)
+
+
+@patch("mlx_chronos.submit.httpx.post")
+def test_submit_result_file_keeps_an_explicit_contact_address(mock_post, tmp_path, caplog):
+    result_path = write_result(tmp_path / "result.json")
+    mock_post.return_value.status_code = 200
+    mock_post.return_value.text = "ok"
+
+    with caplog.at_level(logging.WARNING, logger="mlx_chronos"):
+        submit_result_file(
+            result_path,
+            "https://example.test/form",
+            submitter_email="  contributor@example.com  ",
+        )
+
+    assert mock_post.call_args.kwargs["data"]["email"] == "contributor@example.com"
+    assert not any("anonymously" in record.message for record in caplog.records)
+
+
+def test_cmd_submit_falls_back_to_the_anonymous_address(tmp_path, monkeypatch):
+    monkeypatch.delenv(SUBMITTER_EMAIL_ENV, raising=False)
+    result_path = write_result(tmp_path / "result.json")
+    args = Namespace(
+        file=result_path,
+        endpoint="https://example.test/form",
+        email=None,
+        timeout=30.0,
+        dry_run=False,
+    )
+
+    with patch("mlx_chronos.cli.submit_result_file") as mock_submit_file:
+        cmd_submit(args)
+
+    assert (
+        mock_submit_file.call_args.kwargs["submitter_email"]
+        == ANONYMOUS_SUBMITTER_EMAIL
+    )
+
+
 def test_cmd_submit_invalid_timeout(capsys):
     args = Namespace(
         file=Path("result.json"),
@@ -1122,7 +1191,7 @@ def test_cmd_submit_uses_default_endpoint(tmp_path, monkeypatch):
     endpoint = mock_post.call_args.args[0]
     assert endpoint == "https://usebasin.com/f/29157002c003"
     data = mock_post.call_args.kwargs["data"]
-    assert data["email"] == "182094468+igurss@users.noreply.github.com"
+    assert data["email"] == ANONYMOUS_SUBMITTER_EMAIL
     assert data["name"] == "mlx-chronos CLI"
     assert data["subject"] == "mlx-chronos benchmark result: omlx"
     assert "The full benchmark result is attached as result_json." in data["message"]
