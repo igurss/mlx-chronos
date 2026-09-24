@@ -495,9 +495,10 @@ measured call:
    describes the weights, not the runtime, so it is necessary but not
    sufficient.
 2. A tiny non-streaming completion through `POST /api/v0/chat/completions`
-   must come back with a `runtime` block whose `supported_formats` (or,
-   failing that, whose `name`) confirms MLX. This describes what actually
-   answered.
+   must come back with an MLX-named `runtime`. When `supported_formats` is
+   present, it must include `mlx` or `safetensors`: LM Studio's MLX runtime
+   can report the latter as the weight format. `safetensors` alone is not
+   evidence of an MLX runtime. This describes what actually answered.
 
 A GGUF model is rejected at step 1 without ever reaching step 2. An MLX model
 whose runtime was switched to llama.cpp inside LM Studio is rejected at step 2.

@@ -1303,6 +1303,30 @@ def test_lmstudio_accepts_an_mlx_model_served_by_the_mlx_runtime():
     assert engine.get_version() == "0.9.1"
 
 
+def test_lmstudio_accepts_mlx_runtime_reporting_safetensors():
+    engine = LMStudioEngine()
+    response = MagicMock(status_code=200)
+    response.json.return_value = {
+        "model": "qwen3.5-4b-optiq",
+        "model_info": {"format": "mlx"},
+        "runtime": {
+            "name": "mlx-llm-mac-arm64-apple-metal-advsimd",
+            "version": "1.11.0",
+            "supported_formats": ["safetensors"],
+        },
+    }
+
+    with patch.object(
+        LMStudioEngine,
+        "_native_model_payload",
+        return_value=_lmstudio_model_payload(id="qwen3.5-4b-optiq"),
+    ), patch.object(LMStudioEngine, "_http_post", return_value=response):
+        metadata = engine.validate_model_backend("qwen3.5-4b-optiq")
+
+    assert metadata == {"format": "mlx", "quantization": "4bit"}
+    assert engine.get_version() == "1.11.0"
+
+
 def test_lmstudio_rejects_a_gguf_model():
     engine = LMStudioEngine()
 
@@ -1384,11 +1408,23 @@ def test_lmstudio_rejects_a_model_without_a_compatibility_type():
             engine.validate_model_backend("qwen3.5-4b-nvfp4")
 
 
-def test_lmstudio_runtime_support_falls_back_to_the_runtime_name():
-    assert LMStudioEngine._runtime_supports_mlx({"name": "mlx-mac-arm64"}) is True
-    assert LMStudioEngine._runtime_supports_mlx({"name": "llama.cpp-mac"}) is False
-    assert LMStudioEngine._runtime_supports_mlx({"name": "not-mlx-runtime"}) is False
-    assert LMStudioEngine._runtime_supports_mlx({}) is False
+@pytest.mark.parametrize(
+    ("runtime", "expected"),
+    [
+        ({"name": "mlx-mac-arm64", "supported_formats": ["safetensors"]}, True),
+        ({"name": "mlx-mac-arm64", "supported_formats": ["mlx"]}, True),
+        ({"name": "mlx-mac-arm64"}, True),
+        ({"name": "mlx-mac-arm64", "supported_formats": ["gguf"]}, False),
+        ({"name": "mlx-mac-arm64", "supported_formats": ["unknown"]}, False),
+        ({"name": "llama.cpp-mac", "supported_formats": ["safetensors"]}, False),
+        ({"name": "llama.cpp-mac", "supported_formats": ["mlx"]}, False),
+        ({"name": "not-mlx-runtime", "supported_formats": ["mlx"]}, False),
+        ({"supported_formats": ["safetensors"]}, False),
+        ({}, False),
+    ],
+)
+def test_lmstudio_runtime_requires_mlx_identity_and_compatible_format(runtime, expected):
+    assert LMStudioEngine._runtime_supports_mlx(runtime) is expected
 
 
 def test_lmstudio_identity_requires_the_native_api_namespace():

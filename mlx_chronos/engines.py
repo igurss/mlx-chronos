@@ -1471,8 +1471,8 @@ class LMStudioEngine(BaseEngine):
     1. ``GET /api/v0/models/{model}`` must report ``compatibility_type: "mlx"``,
        which says the weights are an MLX build.
     2. A tiny non-streaming completion through ``/api/v0/chat/completions`` must
-       come back from a runtime whose ``supported_formats`` include MLX, which
-       says the MLX runtime is the one that actually served the request.
+       come back from an MLX-named runtime. Its ``supported_formats`` may list
+       ``safetensors`` (the weight format) rather than ``mlx``.
 
     The first check alone is not sufficient: it describes the model, not the
     runtime that answered. The probe also yields the runtime version, which is
@@ -1630,19 +1630,22 @@ class LMStudioEngine(BaseEngine):
 
     @staticmethod
     def _runtime_supports_mlx(runtime: dict) -> bool:
+        name = runtime.get("name")
+        if not isinstance(name, str):
+            return False
+        normalized_name = name.strip().lower()
+        if normalized_name != "mlx" and not normalized_name.startswith("mlx-"):
+            return False
+
         formats = runtime.get("supported_formats")
         if isinstance(formats, list) and formats:
             return any(
                 isinstance(entry, str)
-                and entry.strip().lower() == LM_STUDIO_MLX_COMPATIBILITY_TYPE
+                and entry.strip().lower() in {"mlx", "safetensors"}
                 for entry in formats
             )
-        # Fall back to the runtime name only when formats are absent.
-        name = runtime.get("name")
-        return (
-            isinstance(name, str)
-            and name.strip().lower().startswith(LM_STUDIO_MLX_COMPATIBILITY_TYPE)
-        )
+        # Older runtime responses may omit supported_formats entirely.
+        return True
 
     def validate_model_backend(self, model: str) -> dict[str, str]:
         request_model = self._request_model_name(model)
