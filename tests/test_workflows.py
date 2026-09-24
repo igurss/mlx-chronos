@@ -63,6 +63,20 @@ def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
     assert '"results/submitted",' not in text
 
 
+def test_validate_result_workflow_checks_scope_before_running_pr_code():
+    text = workflow_text("validate_result.yml")
+
+    scope_step = text.index("- name: Check pull request scope")
+    install_step = text.index("- name: Install package and dependencies")
+    validate_step = text.index("- name: Validate submitted results")
+
+    # `pip install .` executes the pull request's own build backend, so the
+    # scope check has to gate it rather than run after it.
+    assert scope_step < install_step < validate_step
+    assert "if: steps.scope.outputs.changed_count != '0'" in text
+    assert "changed_count=${count}" in text
+
+
 def test_leaderboard_index_carries_standard_token_metadata():
     data = json.loads((ROOT / "docs" / "results_index.json").read_text())
 

@@ -18,89 +18,77 @@ jobs:
         with:
           fetch-depth: 0 # Fetch history to enable git diff
 
+      # Runs before the pull request's own code is installed or executed.
+      # `pip install .` runs the pull request's build backend, so a pull request
+      # that also edited pyproject.toml would otherwise execute arbitrary code
+      # before we ever checked that it only touched result JSON.
+      - name: Check pull request scope
+        id: scope
+        env:
+          TARGET_BRANCH: origin/${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          git diff --name-only "$TARGET_BRANCH" HEAD > changed_files.txt
+
+          unexpected=0
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            case "$path" in
+              results/submitted/*.json) ;;
+              *)
+                if [ "$unexpected" -eq 0 ]; then
+                  echo "Benchmark result submission PRs must only change JSON files under results/submitted/:"
+                fi
+                echo "- $path"
+                unexpected=1
+                ;;
+            esac
+          done < changed_files.txt
+          [ "$unexpected" -eq 0 ] || exit 1
+
+          missing=0
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            if [ ! -f "$path" ]; then
+              if [ "$missing" -eq 0 ]; then
+                echo "Benchmark result submission PRs must not delete submitted result files:"
+              fi
+              echo "- $path"
+              missing=1
+            fi
+          done < changed_files.txt
+          [ "$missing" -eq 0 ] || exit 1
+
+          count=$(grep -c . changed_files.txt || true)
+          echo "changed_count=${count}" >> "$GITHUB_OUTPUT"
+          echo "Scope check passed for ${count} changed file(s)."
+
       - name: Set up Python
+        if: steps.scope.outputs.changed_count != '0'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install package and dependencies
+        if: steps.scope.outputs.changed_count != '0'
         run: pip install . # Install Pydantic and other project dependencies
 
       - name: Validate submitted results
-        env:
-          TARGET_BRANCH: origin/${{ github.base_ref }}
+        if: steps.scope.outputs.changed_count != '0'
         run: |
           python - <<'EOF'
-          import os
-          import subprocess
           import sys
           from pathlib import Path
           from mlx_chronos.leaderboard import load_archive_results
           from mlx_chronos.submit import load_publishable_result
 
-          def get_changed_files() -> list[str]:
-              target_branch = os.environ.get("TARGET_BRANCH", "origin/main")
-              try:
-                  result = subprocess.run(
-                      [
-                          "git",
-                          "diff",
-                          "--name-only",
-                          target_branch,
-                          "HEAD",
-                      ],
-                      capture_output=True,
-                      text=True,
-                      check=True,
-                  )
-                  return [
-                      line.strip()
-                      for line in result.stdout.splitlines()
-                      if line.strip()
-                  ]
-              except Exception as e:
-                  print(f"Warning: git diff failed ({e}), falling back to all files.")
-                  return [
-                      str(path)
-                      for path in Path("results/submitted").rglob("*.json")
-                  ]
-
-          changed_files = get_changed_files()
-          unexpected_files = [
-              path
-              for path in changed_files
-              if not (
-                  path.startswith("results/submitted/")
-                  and path.endswith(".json")
-              )
-          ]
-          if unexpected_files:
-              print(
-                  "Benchmark result submission PRs must only change JSON files "
-                  "under results/submitted/:"
-              )
-              for path in unexpected_files:
-                  print(f"- {path}")
-              sys.exit(1)
-
-          missing_json_files = [
-              path
-              for path in changed_files
-              if path.endswith(".json") and not Path(path).exists()
-          ]
-          if missing_json_files:
-              print(
-                  "Benchmark result submission PRs must not delete submitted "
-                  "result files:"
-              )
-              for path in missing_json_files:
-                  print(f"- {path}")
-              sys.exit(1)
-
+          # Written by the scope check step, which already verified that every
+          # entry is an existing JSON file under results/submitted/.
           json_files = [
-              Path(path)
-              for path in changed_files
-              if path.endswith(".json") and Path(path).exists()
+              Path(line.strip())
+              for line in Path("changed_files.txt").read_text().splitlines()
+              if line.strip()
           ]
 
           if not json_files:
