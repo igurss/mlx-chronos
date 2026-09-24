@@ -142,6 +142,7 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
         "system_ram_peak_percent": metrics["system_ram_peak_percent"],
         "thermal_state": hardware["thermal_state"],
         "warmup_failures": meta["warmup_failures"],
+        "submitted_by": meta.get("submitted_by"),
         "chronos_version": meta["chronos_version"],
         "timestamp": meta["timestamp"],
     }

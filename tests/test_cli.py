@@ -628,6 +628,7 @@ def test_cmd_run_format_all_calls_reporters():
             model_reference_url=None,
             trials=1,
             notes=None,
+            submitted_by=None,
             ram_sample_interval=0.1,
             throughput_max_tokens=120,
             throughput_min_tokens=80,

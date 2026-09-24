@@ -32,6 +32,7 @@
       "system_ram_peak_percent": 88.1,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:58:39.000881Z"
     },
@@ -64,6 +65,7 @@
       "system_ram_peak_percent": 89.6,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:59:20.738416Z"
     },
@@ -96,6 +98,7 @@
       "system_ram_peak_percent": 95.0,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:48:34.250586Z"
     },
@@ -124,6 +127,7 @@
       "system_ram_peak_percent": 94.5,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:49:32.413099Z"
     },
@@ -156,6 +160,7 @@
       "system_ram_peak_percent": 37.2,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T20:52:30.528063Z"
     },
@@ -188,6 +193,7 @@
       "system_ram_peak_percent": 59.6,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T20:53:05.941670Z"
     },
@@ -220,6 +226,7 @@
       "system_ram_peak_percent": 85.0,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T20:53:54.116355Z"
     },
@@ -252,6 +259,7 @@
       "system_ram_peak_percent": 82.8,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T20:54:21.785250Z"
     },
@@ -284,6 +292,7 @@
       "system_ram_peak_percent": 88.7,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T20:56:33.321716Z"
     },
@@ -316,6 +325,7 @@
       "system_ram_peak_percent": 80.6,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T20:57:22.657175Z"
     },
@@ -348,6 +358,7 @@
       "system_ram_peak_percent": 65.8,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T21:09:57.676546Z"
     },
@@ -380,6 +391,7 @@
       "system_ram_peak_percent": 63.8,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-20T21:50:00.401881Z"
     },
@@ -412,6 +424,7 @@
       "system_ram_peak_percent": 87.2,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:30:47.219522Z"
     },
@@ -440,6 +453,7 @@
       "system_ram_peak_percent": 88.7,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:44:36.681985Z"
     },
@@ -472,6 +486,7 @@
       "system_ram_peak_percent": 62.9,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.1",
       "timestamp": "2026-06-15T11:08:37.176265Z"
     },
@@ -504,6 +519,7 @@
       "system_ram_peak_percent": 65.3,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.1",
       "timestamp": "2026-06-15T16:14:14.456201Z"
     },
@@ -536,6 +552,7 @@
       "system_ram_peak_percent": 72.1,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.1",
       "timestamp": "2026-06-15T16:24:46.988787Z"
     },
@@ -568,6 +585,7 @@
       "system_ram_peak_percent": 57.2,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-21T09:01:15.658973Z"
     },
@@ -600,6 +618,7 @@
       "system_ram_peak_percent": 71.9,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.4.0",
       "timestamp": "2026-07-21T09:22:01.165957Z"
     },
@@ -632,6 +651,7 @@
       "system_ram_peak_percent": 85.8,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:42:12.781189Z"
     },
@@ -660,6 +680,7 @@
       "system_ram_peak_percent": 84.8,
       "thermal_state": "nominal",
       "warmup_failures": 0,
+      "submitted_by": null,
       "chronos_version": "0.2.0",
       "timestamp": "2026-06-12T15:43:11.441758Z"
     }

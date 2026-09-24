@@ -528,6 +528,7 @@ def cmd_run(args):
             model_reference_url=getattr(args, "model_url", None),
             trials=trials,
             notes=args.notes,
+            submitted_by=getattr(args, "submitted_by", None),
             ram_sample_interval=args.ram_sample_interval,
             throughput_max_tokens=max_tokens,
             throughput_min_tokens=min_tokens,
@@ -1043,6 +1044,14 @@ def main():
         "--notes",
         default=None,
         help="Optional notes to include in the result JSON",
+    )
+    run_parser.add_argument(
+        "--submitted-by",
+        default=None,
+        help=(
+            "Optional GitHub handle recorded in the result so a public "
+            "leaderboard row can be attributed to you"
+        ),
     )
     run_parser.add_argument(
         "--ram-sample-interval",

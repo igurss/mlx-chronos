@@ -709,7 +709,32 @@ class Meta(ChronosBaseModel):
         None,
         description="Optional cache-control and cache-hit verification evidence",
     )
+    submitted_by: Optional[str] = Field(
+        None,
+        description=(
+            "Optional GitHub handle of the contributor, so public rows can be "
+            "attributed. Absent in earlier results."
+        ),
+    )
     notes: Optional[str] = Field(None, description="Optional notes from the contributor")
+
+    @field_validator("submitted_by")
+    @classmethod
+    def normalize_submitted_by(cls, value: str | None) -> str | None:
+        """Accept a GitHub handle, with or without a leading '@'."""
+        if value is None:
+            return None
+        normalized = value.strip()
+        if normalized.startswith("@"):
+            normalized = normalized[1:]
+        if not normalized:
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}", normalized):
+            raise ValueError(
+                "submitted_by must be a GitHub handle: letters, digits and "
+                "single hyphens, up to 39 characters"
+            )
+        return normalized
 
     @field_validator("timestamp")
     @classmethod

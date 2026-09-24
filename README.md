@@ -237,6 +237,9 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds
 # Fail fast with an extra model access probe before measured work starts
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
 
+# Credit a public leaderboard row to your GitHub handle
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --submitted-by igurss
+
 # Include a model reference URL, required for public leaderboard submissions
 mlx-chronos run --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \

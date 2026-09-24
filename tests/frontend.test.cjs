@@ -120,3 +120,14 @@ test("comparison header column order matches the rendered cells", () => {
   assert.equal(context.compareHeadHtml(true).match(/<th>/g).length, 8);
   assert.equal(context.compareHeadHtml(false).match(/<th>/g).length, 7);
 });
+
+test("submitter handles are escaped and rendered as profile links", () => {
+  assert.equal(context.submittedByCell({ submitted_by: "" }), "-");
+  const rendered = context.submittedByCell({ submitted_by: "igurss" });
+  assert.match(rendered, /href="https:\/\/github\.com\/igurss"/);
+  assert.match(rendered, /@igurss/);
+
+  const hostile = context.submittedByCell({ submitted_by: '"><img src=x onerror=1>' });
+  assert.equal(hostile.includes("<img"), false);
+  assert.match(hostile, /&quot;&gt;&lt;img/);
+});

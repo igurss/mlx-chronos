@@ -75,6 +75,7 @@ OPTIONAL_RUN_SETTINGS = {
     "cooldown_seconds": "Cooldown before run",
     "preflight": "Preflight model check",
     "notes": "Result notes",
+    "submitted_by": "GitHub handle for attribution",
 }
 
 MANUAL_MODEL_ENTRY = "__manual_model_entry__"
@@ -108,6 +109,7 @@ class RunWizardConfig:
     ram_sample_interval: float = DEFAULT_RAM_SAMPLE_INTERVAL
     preflight: bool = False
     notes: str | None = None
+    submitted_by: str | None = None
 
     def to_namespace(self) -> Namespace:
         return Namespace(
@@ -118,6 +120,7 @@ class RunWizardConfig:
             publishable=self.publishable,
             trials=self.trials,
             notes=self.notes,
+            submitted_by=self.submitted_by,
             ram_sample_interval=self.ram_sample_interval,
             profile=self.profile,
             cooldown_seconds=self.cooldown_seconds,

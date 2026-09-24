@@ -487,6 +487,14 @@ The small numeric labels stored in result JSON, such as `1`, `2`, or `3`, are
 internal compatibility markers for validators. They are not public protocol
 release versions.
 
+### Contributor Attribution
+
+`meta.submitted_by` optionally records the GitHub handle of the contributor who
+ran the benchmark, set with `mlx-chronos run --submitted-by <handle>`. It is
+opt-in, validated against GitHub's own handle format, and shown as a column on
+the public leaderboard. Leaving it out is always allowed and never affects
+whether a result is publishable.
+
 ### Integrity Metadata
 
 Results include a top-level `integrity` seal. The seal is a SHA-256 digest over

@@ -587,6 +587,17 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .submitter-link {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .submitter-link:hover,
+    .submitter-link:focus-visible {
+      color: inherit;
+      text-decoration: underline;
+    }
+
     .muted {
       color: var(--muted);
     }
@@ -1100,6 +1111,13 @@
         value: row => escapeHtml(row.engine_version),
       },
       {
+        key: "submitted_by",
+        label: "Submitted by",
+        description: "GitHub handle of the contributor who ran and submitted this row, when they chose to be credited.",
+        sortKey: "submitted_by",
+        value: row => submittedByCell(row),
+      },
+      {
         key: "quantization",
         label: "Quant",
         description: "Model quantization or format declared in the result, when available.",
@@ -1245,6 +1263,7 @@
         date: row.date || dateFromTimestamp(timestamp),
         macos_version: row.macos_version || "",
         model_reference_url: row.model_reference_url || "",
+        submitted_by: row.submitted_by || "",
       };
       normalized.model_key = modelIdentityKey(normalized);
       normalized.model_label = modelVariantLabel(normalized);
@@ -1481,6 +1500,7 @@
         ["Quantization", row.quantization],
         ["Model format", row.model_format || "not recorded"],
         ["Model reference", row.model_reference_url || "not recorded"],
+        ["Submitted by", row.submitted_by ? `@${row.submitted_by}` : "not recorded"],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],
@@ -1543,6 +1563,7 @@
         const searchable = [
           row.model,
           row.model_label,
+          row.submitted_by,
           row.engine,
           row.chip,
           row.benchmark_profile,
@@ -1662,6 +1683,14 @@
           <span>${escapeHtml(label)}</span>
         </div>
       `;
+    }
+
+    // The handle is schema-validated to GitHub's own character set before it can
+    // reach the index, and is escaped again here.
+    function submittedByCell(row) {
+      if (!row.submitted_by) return "-";
+      const handle = escapeHtml(row.submitted_by);
+      return `<a class="submitter-link" href="https://github.com/${handle}" rel="noopener noreferrer">@${handle}</a>`;
     }
 
     function systemRamCell(row) {

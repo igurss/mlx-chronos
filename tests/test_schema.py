@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime
 from typing import get_args
 
@@ -10,6 +11,7 @@ from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.schema import (
     BenchmarkResult,
     Engine,
+    Meta,
     TrialStats,
     normalize_model_quantization,
 )
@@ -789,3 +791,48 @@ def test_extra_fields_are_rejected():
 
     with pytest.raises(ValidationError):
         BenchmarkResult(**invalid_data)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("igurss", "igurss"),
+        ("@igurss", "igurss"),
+        ("  @Some-User  ", "Some-User"),
+        ("", None),
+        ("   ", None),
+        (None, None),
+    ],
+)
+def test_meta_normalizes_submitted_by(raw, expected):
+    meta = copy.deepcopy(EXAMPLE_RESULT["meta"])
+    meta["submitted_by"] = raw
+
+    assert Meta(**meta).submitted_by == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "not a handle",
+        "double--hyphen-is-fine-but-this-one-is-way-too-long-for-github",
+        "double--hyphen",
+        "@@two-at-signs",
+        "-leading-hyphen",
+        "trailing-hyphen-",
+        "email@example.com",
+    ],
+)
+def test_meta_rejects_values_that_are_not_github_handles(raw):
+    meta = copy.deepcopy(EXAMPLE_RESULT["meta"])
+    meta["submitted_by"] = raw
+
+    with pytest.raises(ValidationError):
+        Meta(**meta)
+
+
+def test_meta_stays_valid_without_submitted_by():
+    meta = copy.deepcopy(EXAMPLE_RESULT["meta"])
+    meta.pop("submitted_by", None)
+
+    assert Meta(**meta).submitted_by is None
