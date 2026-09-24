@@ -512,6 +512,34 @@ equivalent runtime proof and is not a mechanical endpoint substitution.
 
 ---
 
+## Local Comparison and History
+
+`mlx-chronos compare <file1> <file2> [...]` and `mlx-chronos history` are
+local conveniences over result files that already exist — neither talks to
+an engine, and neither is a benchmark profile.
+
+`compare` checks the schema and integrity seal of two or more result files,
+without requiring the additional public-submission conditions. Comparing
+exploratory local runs that are not publishable is still useful. It prints a
+metric-by-metric table with each file's value and its percentage delta against the *first*
+file, which is always the baseline. A metric missing from one file (for
+example, an older result with no `decode_tokens_per_second`, or one taken
+before `system_ram_delta_gb` existed) shows as `-` rather than a fabricated
+number, and its delta shows as unavailable rather than 0%. Warnings flag
+different hardware, model/quantization, benchmark profiles or protocol; the
+percentage is descriptive and does not establish a causal performance gain.
+System RAM rise is a whole-device diagnostic, not memory attributable to the
+engine.
+
+`history` lists every result file directly under `results/local/` (not its
+`context/` or `concurrency/` subdirectories, which hold a different,
+non-`BenchmarkResult` report shape by design), newest first. A file that
+fails to parse, or fails schema or integrity validation, is reported as skipped
+by name rather than silently vanishing — one corrupted file should never hide every
+other result.
+
+---
+
 ## Trial Protocol
 
 ### Baseline Defaults

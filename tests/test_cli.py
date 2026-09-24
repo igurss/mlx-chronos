@@ -21,6 +21,8 @@ from mlx_chronos.cli import (
     _publishable_environment_errors,
     _should_start_update_check,
     cmd_doctor,
+    cmd_compare,
+    cmd_history,
     cmd_models,
     cmd_run,
     cmd_submit,
@@ -224,6 +226,42 @@ def test_main_validate_command():
         with patch("mlx_chronos.cli.cmd_validate") as mock_validate:
             main()
             mock_validate.assert_called_once()
+
+
+def test_main_compare_command():
+    with patch.object(sys, "argv", ["mlx-chronos", "compare", "a.json", "b.json"]):
+        with patch("mlx_chronos.cli.cmd_compare") as mock_compare:
+            main()
+            assert mock_compare.call_args.args[0].files == ["a.json", "b.json"]
+
+
+def test_main_history_command():
+    with patch.object(sys, "argv", ["mlx-chronos", "history", "--limit", "2"]):
+        with patch("mlx_chronos.cli.cmd_history") as mock_history:
+            main()
+            assert mock_history.call_args.args[0].limit == 2
+
+
+def test_cmd_history_rejects_non_positive_limit(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cmd_history(Namespace(output_dir=tmp_path, limit=0))
+    assert exc.value.code == 2
+    assert "--limit must be at least 1" in capsys.readouterr().err
+
+
+def test_cmd_compare_reports_integrity_failure(tmp_path, capsys):
+    from tests.test_compare import write_result
+
+    good = write_result(tmp_path / "good.json")
+    changed = write_result(tmp_path / "changed.json")
+    data = json.loads(changed.read_text(encoding="utf-8"))
+    data["meta"]["notes"] = "tampered"
+    changed.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_compare(Namespace(files=[str(good), str(changed)]))
+    assert exc.value.code == 1
+    assert "invalid integrity seal" in capsys.readouterr().err
 
 def test_main_submit_command():
     with patch.object(sys, "argv", ["mlx-chronos", "submit", "--file", "result.json"]):

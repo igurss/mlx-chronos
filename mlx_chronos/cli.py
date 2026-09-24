@@ -28,6 +28,8 @@ from mlx_chronos.numeric import (
 )
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.reporters import BaseReporter, JSONReporter, MarkdownReporter
+from mlx_chronos.compare import CompareError, compare_results
+from mlx_chronos.history import list_history
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.submit import (
@@ -867,6 +869,85 @@ def cmd_models(args):
     logger.info("")
 
 
+def _format_compare_cell(value: float | None, delta_percent: float | None) -> str:
+    if value is None:
+        return "-"
+    if delta_percent is None:
+        return f"{value:.2f}"
+    return f"{value:.2f} ({delta_percent:+.1f}%)"
+
+
+def cmd_compare(args):
+    """Compare local result files, with deltas against the first."""
+    try:
+        report = compare_results([Path(raw_path) for raw_path in args.files])
+    except (CompareError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    columns = report["columns"]
+    logger.info("\nComparing %d result(s):\n", len(columns))
+    for index, column in enumerate(columns, start=1):
+        logger.info(
+            "  [%d] %s %s — %s (%s) — %s — %s — %s",
+            index, column["engine"], column["engine_version"],
+            column["model"], column["quantization"], column["chip"],
+            column["benchmark_profile"], column["timestamp"],
+        )
+        logger.info("      %s", column["path"])
+
+    for warning in report["warnings"]:
+        logger.warning("Comparison caution: %s", warning)
+
+    label_width = max(len(row["label"]) for row in report["rows"])
+    cell_width = 20
+    header = f"{'Metric':<{label_width}}  " + "  ".join(
+        f"[{index + 1}]".rjust(cell_width) for index in range(len(columns))
+    )
+    logger.info("\n%s", header)
+    for row in report["rows"]:
+        cells = [
+            _format_compare_cell(value, delta).rjust(cell_width)
+            for value, delta in zip(row["values"], row["deltas_percent"])
+        ]
+        logger.info("%s  %s", f"{row['label']:<{label_width}}", "  ".join(cells))
+
+    logger.info(
+        "\n(percentages are relative to [1]; direction and conditions matter — "
+        "see docs/methodology.md)\n"
+    )
+
+
+def cmd_history(args):
+    """List local benchmark results, newest first."""
+    results_dir = args.output_dir or Path.cwd() / "results" / "local"
+    try:
+        entries, skipped = list_history(results_dir, limit=args.limit)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+    if not entries and not skipped:
+        logger.info("No result files found under %s.", results_dir)
+        return
+
+    logger.info("\n%d result(s) under %s (newest first):\n", len(entries), results_dir)
+    for entry in entries:
+        logger.info(
+            "  %s  %-10s %s (%s)  %.2f tok/s  [%s]",
+            entry["timestamp"].isoformat(), entry["engine"], entry["model"],
+            entry["quantization"], entry["request_tokens_per_second"],
+            entry["benchmark_profile"],
+        )
+        logger.info("      %s", entry["path"])
+
+    if skipped:
+        logger.info("\nSkipped %d file(s) that could not be validated:", len(skipped))
+        for path, reason in skipped:
+            logger.info("  %s: %s", path, reason)
+    logger.info("")
+
+
 def log_validation_check(status: str, label: str, detail: str) -> None:
     logger.info(f"[{status}] {label}: {detail}")
 
@@ -1300,6 +1381,29 @@ def main():
         help="Engine to query (default: omlx)",
     )
     models_parser.set_defaults(func=cmd_models)
+
+    # --- compare ---
+    compare_parser = subparsers.add_parser(
+        "compare",
+        help="Compare two or more local result files against the first",
+    )
+    compare_parser.add_argument("files", nargs="+", help="Result JSON files to compare")
+    compare_parser.set_defaults(func=cmd_compare)
+
+    # --- history ---
+    history_parser = subparsers.add_parser(
+        "history",
+        help="List local benchmark result files, newest first",
+    )
+    history_parser.add_argument(
+        "--output-dir", type=Path, default=None,
+        help="Directory to list (default: results/local)",
+    )
+    history_parser.add_argument(
+        "--limit", type=int, default=None,
+        help="Show at most this many results (default: all)",
+    )
+    history_parser.set_defaults(func=cmd_history)
 
     # --- validate ---
     validate_parser = subparsers.add_parser(

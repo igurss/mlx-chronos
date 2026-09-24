@@ -249,6 +249,12 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds
 # saved as its own independent result file
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --repeat 5
 
+# Compare sealed local results; percentages are relative to the first file
+mlx-chronos compare results/local/first.json results/local/second.json
+
+# List local results newest first, skipping invalid files with a reason
+mlx-chronos history --limit 10
+
 # Fail fast with an extra model access probe before measured work starts
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
 
@@ -276,6 +282,8 @@ mlx-chronos run --engine omlx \
 | `mlx-chronos validate --engine <name> --model <model>` | Validate hardware, engine, server, and optional model access |
 | `mlx-chronos run --engine <name> --model <model>` | Run a benchmark and save local result files |
 | `mlx-chronos run --publishable --engine <name> --model <model> --model-url <url>` | Run only if public leaderboard settings are satisfied |
+| `mlx-chronos compare <file1> <file2>` | Compare sealed local results against the first file |
+| `mlx-chronos history [--limit N]` | List local results newest first |
 | `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |
 | `mlx-chronos submit --file <result.json>` | Send a validated result to the maintainer inbox |
 
