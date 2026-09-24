@@ -346,6 +346,7 @@ class Metrics(ChronosBaseModel):
             )
         if self.system_ram_delta_gb is None:
             return self
+        assert self.system_ram_baseline_gb is not None
         expected = round(
             max(0.0, self.system_ram_peak_gb - self.system_ram_baseline_gb),
             3,
