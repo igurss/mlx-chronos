@@ -649,6 +649,24 @@ They are not a cryptographic hardware attestation system.
 
 ---
 
+## Leaderboard Export and Chart
+
+The Raw tab exports the currently filtered and sorted index rows. CSV includes
+only the currently visible columns and uses plain values rather than rendered
+HTML. JSON includes all indexed fields in each filtered row; neither export is
+a full benchmark result with trials and an integrity seal. For original result
+files, use the linked submitted JSON records.
+
+The Compare tab uses the same representative rows as its table to draw an
+inline chart of request throughput by engine. It is hidden when fewer than two
+engines match. These are presentation tools, not new benchmark measurements.
+
+The page also includes description, Open Graph, Twitter Card and favicon
+metadata for clearer search and link previews. No social preview image is
+declared.
+
+---
+
 ## What Is Not Measured Yet
 
 - Tool-calling success rate.

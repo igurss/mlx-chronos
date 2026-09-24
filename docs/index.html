@@ -4,6 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mlx-Chronos Leaderboard</title>
+  <meta name="description" content="Community-driven benchmark suite and public leaderboard comparing MLX inference engines (Ollama, oMLX, Rapid-MLX, mlx-lm, vllm-mlx, LM Studio) on Apple Silicon." />
+  <meta property="og:title" content="mlx-Chronos Leaderboard" />
+  <meta property="og:description" content="Community-driven benchmark suite and public leaderboard comparing MLX inference engines on Apple Silicon." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://igurss.github.io/mlx-chronos/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="mlx-Chronos Leaderboard" />
+  <meta name="twitter:description" content="Community-driven benchmark suite and public leaderboard comparing MLX inference engines on Apple Silicon." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E" />
   <script>
     (() => {
       let savedTheme = null;
@@ -685,6 +694,54 @@
       align-items: center;
     }
 
+    .compare-chart-wrap {
+      padding: 4px 18px 18px;
+    }
+
+    .compare-chart {
+      width: 100%;
+      height: auto;
+      display: block;
+      font-family: inherit;
+    }
+
+    .compare-chart-bar {
+      fill: var(--blue);
+    }
+
+    .compare-chart-label,
+    .compare-chart-value {
+      fill: var(--text);
+      font-size: 12px;
+    }
+
+    .compare-chart-axis {
+      stroke: var(--line);
+    }
+
+    .export-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .export-button {
+      min-height: 38px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--text);
+      padding: 0 14px;
+      font-weight: 650;
+      font-size: inherit;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .export-button:hover,
+    .export-button:focus-visible {
+      background: var(--surface-strong);
+    }
+
     .columns-menu {
       position: relative;
     }
@@ -944,6 +1001,10 @@
           <span class="badge badge-blue" id="result-count">0 results</span>
         </div>
 
+        <div class="compare-chart-wrap" id="compare-chart-wrap" hidden>
+          <svg id="compare-chart" class="compare-chart" role="img" aria-label="Request throughput by engine"></svg>
+        </div>
+
         <div class="table-scroll">
           <table aria-label="Engine comparison">
             <thead>
@@ -973,6 +1034,10 @@
             <summary>Columns</summary>
             <div class="columns-popover" id="columns-popover"></div>
           </details>
+          <div class="export-buttons">
+            <button type="button" id="export-csv" class="export-button" title="Export the currently visible columns and filtered rows as CSV">Export CSV</button>
+            <button type="button" id="export-json" class="export-button" title="Export the full record for every currently filtered row as JSON">Export JSON</button>
+          </div>
         </div>
 
         <div class="table-scroll">
@@ -1010,6 +1075,7 @@
       "vllm-mlx": "vllm-mlx",
       "mlx-lm": "mlx-lm",
       "ollama": "Ollama",
+      "lmstudio": "LM Studio",
     };
 
     const BASE_RAW_COLUMNS = [
@@ -1023,6 +1089,7 @@
         key: "memory",
         label: "RAM",
         sortKey: "memory_gb",
+        exportLabel: "RAM (GB)",
         numeric: true,
         value: row => `${fmt(row.memory_gb, 0)} GB`,
       },
@@ -1049,6 +1116,7 @@
         key: "ttft_cold",
         label: "TTFT cold",
         sortKey: "ttft_cold",
+        exportLabel: "TTFT cold (s)",
         numeric: true,
         value: row => `${fmt(row.ttft_cold, 3)} s`,
       },
@@ -1056,6 +1124,8 @@
         key: "system_ram_peak",
         label: "System RAM",
         sortKey: "system_ram_peak_percent",
+        exportKey: "system_ram_peak_gb",
+        exportLabel: "System RAM peak (GB)",
         numeric: true,
         value: row => systemRamCell(row),
       },
@@ -1151,6 +1221,8 @@
     const compareBody = document.getElementById("compare-body");
     const compareTitle = document.getElementById("compare-title");
     const compareMeta = document.getElementById("compare-meta");
+    const compareChartWrap = document.getElementById("compare-chart-wrap");
+    const compareChart = document.getElementById("compare-chart");
     const compareEmpty = document.getElementById("compare-empty");
     const resultCount = document.getElementById("result-count");
 
@@ -1160,6 +1232,8 @@
     const rawEmpty = document.getElementById("raw-empty");
     const columnsMenu = document.querySelector(".columns-menu");
     const columnsPopover = document.getElementById("columns-popover");
+    const exportCsvButton = document.getElementById("export-csv");
+    const exportJsonButton = document.getElementById("export-json");
     const standardTokenLabel = document.getElementById("standard-token-label");
     const themeToggle = document.getElementById("theme-toggle");
 
@@ -1386,6 +1460,8 @@
         compareMeta.textContent = "The public results index could not be loaded.";
         resultCount.textContent = "0 results";
         compareBody.innerHTML = "";
+        compareChartWrap.hidden = true;
+        compareChart.innerHTML = "";
         compareEmpty.textContent = resultsLoadError;
         compareEmpty.style.display = "block";
         return;
@@ -1413,6 +1489,7 @@
       compareBody.innerHTML = representatives
         .map(row => compareRowHtml(row, rows, showDecodeTps))
         .join("");
+      renderCompareChart(representatives);
 
       compareEmpty.textContent = allRows.length
         ? "No matching public benchmark results yet. Try a different model/spec."
@@ -1650,6 +1727,103 @@
       return row[key];
     }
 
+    // column.value() renders HTML (badges, links, bold tags) for the table
+    // cell; a plain export needs the underlying data instead. Most columns
+    // export their sort field, but a column can select a different source when
+    // its display and sort units differ (for example RAM in GB vs percent).
+    function columnPlainValue(column, row) {
+      const value = row[column.exportKey || column.sortKey];
+      return value === null || value === undefined ? "" : value;
+    }
+
+    function csvEscapeCell(value) {
+      let text = String(value);
+      // Spreadsheet apps may execute formulas embedded in community-supplied
+      // strings. Preserve numeric values, but neutralize formula-like text.
+      if (typeof value === "string" && /^[\s\x00-\x1f]*[=+\-@]/.test(text)) {
+        text = `'${text}`;
+      }
+      return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }
+
+    function downloadTextFile(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function buildCsvExport(columns, rows) {
+      const lines = [columns.map(column => csvEscapeCell(column.exportLabel || column.label)).join(",")];
+      rows.forEach(row => {
+        lines.push(
+          columns.map(column => csvEscapeCell(columnPlainValue(column, row))).join(",")
+        );
+      });
+      return `${lines.join("\n")}\n`;
+    }
+
+    function buildJsonExport(rows) {
+      return JSON.stringify(rows, null, 2);
+    }
+
+    // A single bar isn't a comparison, so the chart stays hidden below this.
+    const COMPARE_CHART_MIN_ENGINES = 2;
+
+    function buildCompareChartMarkup(representatives) {
+      const barHeight = 28;
+      const barGap = 14;
+      const leftLabelWidth = 130;
+      const rightValueWidth = 90;
+      const chartWidth = 700;
+      const barAreaWidth = chartWidth - leftLabelWidth - rightValueWidth;
+      const topPadding = 8;
+      const rowHeight = barHeight + barGap;
+      const height = topPadding * 2 + representatives.length * rowHeight - barGap;
+      const maxTps = Math.max(...representatives.map(row => numericSortValue(row.tps)), 0.001);
+
+      const inner = representatives.map((row, index) => {
+        const y = topPadding + index * rowHeight;
+        const width = Math.max(2, (numericSortValue(row.tps) / maxTps) * barAreaWidth);
+        const label = escapeHtml(ENGINE_LABELS[row.engine] || row.engine);
+        const value = fmt(row.tps, 2);
+        return `
+          <text class="compare-chart-label" x="${leftLabelWidth - 10}" y="${y + barHeight / 2 + 4}" text-anchor="end">${label}</text>
+          <rect class="compare-chart-bar" x="${leftLabelWidth}" y="${y}" width="${width.toFixed(1)}" height="${barHeight}" rx="4" />
+          <text class="compare-chart-value" x="${leftLabelWidth + width + 8}" y="${y + barHeight / 2 + 4}">${value} tok/s</text>
+        `;
+      }).join("");
+
+      return { viewBox: `0 0 ${chartWidth} ${height}`, inner };
+    }
+
+    function renderCompareChart(representatives) {
+      if (representatives.length < COMPARE_CHART_MIN_ENGINES) {
+        compareChartWrap.hidden = true;
+        compareChart.innerHTML = "";
+        return;
+      }
+      const { viewBox, inner } = buildCompareChartMarkup(representatives);
+      compareChart.setAttribute("viewBox", viewBox);
+      compareChart.innerHTML = inner;
+      compareChartWrap.hidden = false;
+    }
+
+    function exportFilteredRowsAsCsv() {
+      const csv = buildCsvExport(visibleRawColumns(), rawRows().slice().sort(compareRawRows));
+      downloadTextFile(csv, "mlx-chronos-leaderboard.csv", "text/csv");
+    }
+
+    function exportFilteredRowsAsJson() {
+      const json = buildJsonExport(rawRows().slice().sort(compareRawRows));
+      downloadTextFile(json, "mlx-chronos-leaderboard.json", "application/json");
+    }
+
     function setSelectOptions(select, values, formatter, preferredValue = "") {
       const normalizedPreferred = String(preferredValue ?? "");
       select.replaceChildren();
@@ -1841,6 +2015,8 @@
     });
 
     rawSearch.addEventListener("input", renderRaw);
+    exportCsvButton.addEventListener("click", exportFilteredRowsAsCsv);
+    exportJsonButton.addEventListener("click", exportFilteredRowsAsJson);
     rawHead.addEventListener("click", event => {
       const header = event.target.closest("[data-sort]");
       if (!header) return;

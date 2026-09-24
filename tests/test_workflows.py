@@ -77,6 +77,33 @@ def test_validate_result_workflow_checks_scope_before_running_pr_code():
     assert "changed_count=${count}" in text
 
 
+def test_leaderboard_html_has_a_description_and_og_tags():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert '<meta name="description"' in html
+    assert 'property="og:title"' in html
+    assert 'property="og:description"' in html
+    assert 'name="twitter:card"' in html
+    assert 'rel="icon"' in html
+
+
+def test_leaderboard_html_has_csv_and_json_export_controls():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="export-csv"' in html
+    assert 'id="export-json"' in html
+    assert "function buildCsvExport" in html
+    assert "function buildJsonExport" in html
+
+
+def test_leaderboard_html_has_a_compare_chart():
+    html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="compare-chart-wrap"' in html
+    assert "function buildCompareChartMarkup" in html
+    assert "renderCompareChart(representatives)" in html
+
+
 def test_leaderboard_index_carries_standard_token_metadata():
     data = json.loads((ROOT / "docs" / "results_index.json").read_text())
 
