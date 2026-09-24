@@ -260,6 +260,15 @@ state change or non-nominal thermal state. The check compares early and late
 progress-window averages; a single noisy first/last sample is not enough. This
 is a conservative heuristic, not proof of a specific hardware mechanism.
 
+Progress samples record elapsed time from the start of the request, so the
+first window also contains connection setup and prompt prefill while every
+later window is decode only. When the trial recorded decode timing, that
+prefill offset is subtracted from the first window; otherwise the first window
+is discarded instead of being averaged against decode-only windows. Windows
+that straddle a change of token-count source are also skipped, because the
+intermediate samples count streamed words while the final sample carries the
+engine's completion-token total.
+
 ---
 
 ## Memory Metrics

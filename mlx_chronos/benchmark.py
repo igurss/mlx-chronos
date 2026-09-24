@@ -28,6 +28,7 @@ from mlx_chronos.measurements import (
 )
 from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.numeric import (
+    is_finite_number,
     require_finite_non_negative,
     require_finite_positive,
 )
@@ -220,25 +221,57 @@ def _log_thermal_monitor_warnings(summary: dict) -> None:
         )
 
 
-def _throughput_interval_rates(samples: list[dict]) -> list[float]:
+def _throughput_interval_rates(
+    samples: list[dict],
+    prefill_offset_seconds: float | None = None,
+) -> list[float]:
+    """Return per-window output rates for one sustained throughput trial.
+
+    Progress samples record elapsed time from the start of the request, so the
+    first window also contains connection setup and prompt prefill while every
+    later window is decode only. Leaving that in makes the early window look
+    slower than it was, which biases the early-vs-late comparison towards "no
+    degradation" and hides real throttling. When the trial reported decode
+    timing, the prefill offset is subtracted from the first window; otherwise
+    the first window is dropped rather than compared against decode-only ones.
+
+    Windows that straddle a change of ``token_count_source`` are skipped: the
+    intermediate samples count streamed words while the final sample carries the
+    engine's completion-token total, so their difference is not a rate.
+    """
     rates = []
     previous_tokens = 0
     previous_elapsed = 0.0
     previous_source = None
+    # Tracked separately from previous_source: samples may legitimately carry no
+    # token_count_source, in which case previous_source stays None for the whole
+    # trial and cannot mark the first window.
+    seen_sample = False
+    skip_first_window = True
+    if (
+        is_finite_number(prefill_offset_seconds)
+        and prefill_offset_seconds >= 0
+    ):
+        previous_elapsed = float(prefill_offset_seconds)
+        skip_first_window = False
+
     for sample in samples:
         tokens = sample.get("completion_tokens")
         elapsed = sample.get("elapsed_seconds")
         source = sample.get("token_count_source")
         if not isinstance(tokens, int) or not isinstance(elapsed, (int, float)):
             continue
+        is_first_window = not seen_sample
         token_delta = tokens - previous_tokens
         elapsed_delta = float(elapsed) - previous_elapsed
-        same_source = source == previous_source or previous_source is None
-        if token_delta > 0 and elapsed_delta > 0 and same_source:
+        same_source = source == previous_source or not seen_sample
+        usable_window = not (is_first_window and skip_first_window)
+        if token_delta > 0 and elapsed_delta > 0 and same_source and usable_window:
             rates.append(token_delta / elapsed_delta)
         previous_tokens = tokens
         previous_elapsed = float(elapsed)
         previous_source = source
+        seen_sample = True
     return rates
 
 
@@ -250,9 +283,23 @@ def _edge_average(values: list[float], from_end: bool = False) -> float:
     return sum(selected) / len(selected)
 
 
+def _prefill_offset_seconds(
+    elapsed_seconds: float | None,
+    decode_elapsed_seconds: float | None,
+) -> float | None:
+    """Return the time before the first streamed token, when it is known."""
+    if not is_finite_number(elapsed_seconds) or not is_finite_number(
+        decode_elapsed_seconds
+    ):
+        return None
+    offset = float(elapsed_seconds) - float(decode_elapsed_seconds)
+    return offset if offset >= 0 else None
+
+
 def _detect_sustained_throttling(
     progress_samples_trials: list[list[dict]],
     thermal_summary: dict | None,
+    prefill_offsets_seconds: list[float | None] | None = None,
 ) -> bool:
     """Flag clear sustained degradation when it aligns with thermal pressure."""
     if not thermal_summary:
@@ -264,8 +311,10 @@ def _detect_sustained_throttling(
     if not thermal_signal:
         return False
 
-    for samples in progress_samples_trials:
-        rates = _throughput_interval_rates(samples)
+    offsets = prefill_offsets_seconds or []
+    for index, samples in enumerate(progress_samples_trials):
+        prefill_offset = offsets[index] if index < len(offsets) else None
+        rates = _throughput_interval_rates(samples, prefill_offset)
         if len(rates) < SUSTAINED_THROTTLING_MIN_INTERVALS:
             continue
         early_rate = _edge_average(rates)
@@ -445,6 +494,7 @@ def run_benchmark(
     completion_tokens_trials = []
     finish_reasons_trials = []
     throughput_progress_samples_trials = []
+    throughput_prefill_offsets_trials: list[float | None] = []
     cache_validation = {
         "source": "inferred",
         "cold_cache_cleared": False,
@@ -628,6 +678,12 @@ def run_benchmark(
                     throughput_progress_samples_trials.append(
                         list(measurement.progress_samples)
                     )
+                    throughput_prefill_offsets_trials.append(
+                        _prefill_offset_seconds(
+                            measurement.elapsed_seconds,
+                            measurement.decode_elapsed_seconds,
+                        )
+                    )
                     if measurement.decode_tokens_per_second is not None:
                         if measurement.decode_elapsed_seconds is None:
                             raise RuntimeError(
@@ -732,6 +788,7 @@ def run_benchmark(
         and _detect_sustained_throttling(
             throughput_progress_samples_trials,
             thermal_summary,
+            throughput_prefill_offsets_trials,
         )
     )
     if sustained_throttling_warning:

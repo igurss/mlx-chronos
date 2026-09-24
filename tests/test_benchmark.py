@@ -9,6 +9,8 @@ from mlx_chronos.benchmark import (
     _cached_ttft_warning_ratio,
     _detect_sustained_throttling,
     _edge_average,
+    _prefill_offset_seconds,
+    _throughput_interval_rates,
     run_benchmark,
 )
 from mlx_chronos.protocol import (
@@ -701,6 +703,94 @@ def test_detect_sustained_throttling_requires_thermal_signal():
             "non_nominal_observed": False,
         },
     ) is False
+
+
+def test_throughput_interval_rates_subtract_prefill_from_the_first_window():
+    samples = [
+        {"completion_tokens": 100, "elapsed_seconds": 5.0},
+        {"completion_tokens": 200, "elapsed_seconds": 7.0},
+        {"completion_tokens": 300, "elapsed_seconds": 9.0},
+    ]
+
+    # 3.0s of the first window is prefill, so the decode rate in that window is
+    # 100 tokens / 2.0s, identical to the windows that follow.
+    assert _throughput_interval_rates(samples, 3.0) == [50.0, 50.0, 50.0]
+
+
+def test_throughput_interval_rates_drop_the_first_window_without_decode_timing():
+    samples = [
+        {"completion_tokens": 100, "elapsed_seconds": 5.0},
+        {"completion_tokens": 200, "elapsed_seconds": 7.0},
+        {"completion_tokens": 300, "elapsed_seconds": 9.0},
+    ]
+
+    # Without a known prefill offset the first window is not comparable with the
+    # decode-only windows, so it is excluded rather than dragged into the mean.
+    assert _throughput_interval_rates(samples) == [50.0, 50.0]
+    assert _throughput_interval_rates(samples, None) == [50.0, 50.0]
+    assert _throughput_interval_rates(samples, float("nan")) == [50.0, 50.0]
+    assert _throughput_interval_rates(samples, -1.0) == [50.0, 50.0]
+
+
+def test_prefill_offset_keeps_the_first_window_comparable():
+    # 3.0s prefill, then a steady 50 output units/s.
+    samples = [
+        {"completion_tokens": 100, "elapsed_seconds": 5.0},
+        {"completion_tokens": 200, "elapsed_seconds": 7.0},
+        {"completion_tokens": 300, "elapsed_seconds": 9.0},
+    ]
+
+    corrected = _throughput_interval_rates(samples, 3.0)
+    dropped = _throughput_interval_rates(samples)
+
+    # The first window must not read as 100/5.0 = 20 units/s: that is prefill
+    # being charged to decode, and it drags the early average down.
+    assert 20.0 not in corrected
+    assert 20.0 not in dropped
+    assert _edge_average(corrected) == _edge_average(dropped)
+
+
+def test_prefill_offset_preserves_throttling_detection_on_short_runs():
+    # 3.0s prefill, 50 output units/s halving to 25 units/s partway through.
+    samples = [
+        {"completion_tokens": 100, "elapsed_seconds": 5.0},
+        {"completion_tokens": 200, "elapsed_seconds": 7.0},
+        {"completion_tokens": 300, "elapsed_seconds": 11.0},
+        {"completion_tokens": 400, "elapsed_seconds": 15.0},
+    ]
+    thermal = {"changed_during_run": True, "non_nominal_observed": False}
+
+    # Without decode timing the first window has to be discarded, leaving three
+    # comparable windows: below SUSTAINED_THROTTLING_MIN_INTERVALS, so a real
+    # 50% degradation goes unreported.
+    assert _throughput_interval_rates(samples) == [50.0, 25.0, 25.0]
+    assert _detect_sustained_throttling([samples], thermal) is False
+
+    # Subtracting the known prefill recovers that window and the drop is caught.
+    assert _throughput_interval_rates(samples, 3.0) == [50.0, 50.0, 25.0, 25.0]
+    assert _detect_sustained_throttling([samples], thermal, [3.0]) is True
+
+
+def test_detect_sustained_throttling_tolerates_short_prefill_offset_lists():
+    samples = [
+        {"completion_tokens": 100, "elapsed_seconds": 5.0},
+        {"completion_tokens": 200, "elapsed_seconds": 7.0},
+        {"completion_tokens": 300, "elapsed_seconds": 9.0},
+    ]
+    thermal = {"changed_during_run": True, "non_nominal_observed": False}
+
+    assert _detect_sustained_throttling([samples], thermal, []) is False
+    assert _detect_sustained_throttling([samples], thermal, [None]) is False
+
+
+def test_prefill_offset_seconds_requires_both_finite_timings():
+    assert _prefill_offset_seconds(5.0, 2.0) == 3.0
+    assert _prefill_offset_seconds(5.0, 5.0) == 0.0
+    assert _prefill_offset_seconds(None, 2.0) is None
+    assert _prefill_offset_seconds(5.0, None) is None
+    assert _prefill_offset_seconds(float("inf"), 2.0) is None
+    # Independent rounding must never produce a negative prefill.
+    assert _prefill_offset_seconds(2.0, 5.0) is None
 
 
 def test_detect_sustained_throttling_requires_enough_intervals():
