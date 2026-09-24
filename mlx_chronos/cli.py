@@ -28,6 +28,7 @@ from mlx_chronos.numeric import (
 )
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.reporters import BaseReporter, JSONReporter, MarkdownReporter
+from mlx_chronos.stats import compute_stats
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
@@ -50,6 +51,7 @@ from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     ENGINE_NAME_LM_STUDIO,
+    MAX_REPEATS,
     MAX_TRIALS,
     PUBLIC_BASELINE_TRIALS,
     RECENT_BENCHMARK_WARNING_SECONDS,
@@ -442,54 +444,28 @@ def _run_model_preflight(engine_name: str, model: str) -> None:
     logger.info("")
 
 
-def cmd_run(args):
-    """Run a benchmark session."""
-    profile, trials, max_tokens = _resolve_profile_defaults(args)
-    cooldown_seconds = getattr(args, "cooldown_seconds", 0.0)
-    min_tokens = getattr(args, "min_tokens", None)
-    connection_mode = getattr(args, "connection_mode", CONNECTION_MODE_PERSISTENT)
-    if trials < 1:
-        print("Error: --trials must be at least 1.", file=sys.stderr)
-        raise SystemExit(2)
-    if trials > MAX_TRIALS:
-        print(f"Error: --trials must be <= {MAX_TRIALS}.", file=sys.stderr)
-        raise SystemExit(2)
-    _require_cli_number(
-        args.ram_sample_interval,
-        option="--ram-sample-interval",
-        positive=True,
-    )
-    if max_tokens < 1:
-        print("Error: --max-tokens must be at least 1.", file=sys.stderr)
-        raise SystemExit(2)
-    if min_tokens is not None and min_tokens < 1:
-        print("Error: --min-tokens must be at least 1.", file=sys.stderr)
-        raise SystemExit(2)
-    if min_tokens is not None and min_tokens > max_tokens:
-        print("Error: --min-tokens must be <= --max-tokens.", file=sys.stderr)
-        raise SystemExit(2)
-    _require_cli_number(
-        cooldown_seconds,
-        option="--cooldown-seconds",
-        positive=False,
-    )
-    if not args.model.strip():
-        print("Error: --model must not be empty.", file=sys.stderr)
-        raise SystemExit(2)
+def _run_once(
+    args,
+    *,
+    profile: str,
+    trials: int,
+    max_tokens: int,
+    min_tokens: int | None,
+    connection_mode: str,
+    cooldown_seconds: float,
+    results_dir: Path,
+    last_run_finished_at: float | None = None,
+) -> dict:
+    """Run one full benchmark and save its result files.
 
-    trials, max_tokens, min_tokens, connection_mode = _ensure_publishable_run_args(
-        args,
-        profile=profile,
-        trials=trials,
-        max_tokens=max_tokens,
-        min_tokens=min_tokens,
-        connection_mode=connection_mode,
+    Repeats use a monotonic clock for cooldown, including Markdown-only runs.
+    The first run still checks prior JSON results in the output directory.
+    """
+    elapsed_since_last = (
+        _elapsed_since_last_result(results_dir)
+        if last_run_finished_at is None
+        else max(0.0, time.monotonic() - last_run_finished_at)
     )
-    if getattr(args, "publishable", False):
-        _ensure_publishable_environment()
-
-    results_dir = args.output_dir or Path.cwd() / "results" / "local"
-    elapsed_since_last = _elapsed_since_last_result(results_dir)
     if elapsed_since_last is not None:
         if cooldown_seconds > elapsed_since_last:
             delay = cooldown_seconds - elapsed_since_last
@@ -500,7 +476,11 @@ def cmd_run(args):
                 delay,
             )
             time.sleep(delay)
-            elapsed_since_last = _elapsed_since_last_result(results_dir)
+            elapsed_since_last = (
+                _elapsed_since_last_result(results_dir)
+                if last_run_finished_at is None
+                else max(0.0, time.monotonic() - last_run_finished_at)
+            )
         elif elapsed_since_last < RECENT_BENCHMARK_WARNING_SECONDS:
             logger.warning(
                 "Warning: previous benchmark in this output directory was %.1f "
@@ -559,6 +539,114 @@ def cmd_run(args):
         logger.info(f"Result saved to: {path}")
 
     _log_publishability_summary(result, json_path)
+    return result
+
+
+def _log_repeat_summary(results: list[dict]) -> None:
+    """Print cross-run throughput variance for `--repeat` > 1.
+
+    Each repeat is already a full, independent, self-contained result file
+    (nothing here is written back into any of them), so this is a console-only
+    aid for judging how much a single run's numbers can be trusted.
+    """
+    throughput_means = [
+        result["metrics"]["tokens_per_second"]["mean"] for result in results
+    ]
+    stats = compute_stats(throughput_means)
+    logger.info("\n%s", "=" * 50)
+    logger.info("  Repeat Summary (%d runs)", len(results))
+    logger.info(
+        "  Throughput : mean %.2f tok/s across runs (cross-run stddev %.2f; "
+        "min %.2f, max %.2f)",
+        stats["mean"],
+        stats["stddev"],
+        stats["min"],
+        stats["max"],
+    )
+    if stats["mean"] > 0:
+        spread_percent = 100.0 * (stats["max"] - stats["min"]) / stats["mean"]
+        logger.info("  Spread     : %.1f%% (max-min relative to mean)", spread_percent)
+    logger.info("%s\n", "=" * 50)
+
+
+def cmd_run(args):
+    """Run a benchmark session, optionally repeated with --repeat."""
+    profile, trials, max_tokens = _resolve_profile_defaults(args)
+    cooldown_seconds = getattr(args, "cooldown_seconds", 0.0)
+    min_tokens = getattr(args, "min_tokens", None)
+    connection_mode = getattr(args, "connection_mode", CONNECTION_MODE_PERSISTENT)
+    repeat_arg = getattr(args, "repeat", None)
+    repeat = 1 if repeat_arg is None else repeat_arg
+    if trials < 1:
+        print("Error: --trials must be at least 1.", file=sys.stderr)
+        raise SystemExit(2)
+    if trials > MAX_TRIALS:
+        print(f"Error: --trials must be <= {MAX_TRIALS}.", file=sys.stderr)
+        raise SystemExit(2)
+    if repeat < 1:
+        print("Error: --repeat must be at least 1.", file=sys.stderr)
+        raise SystemExit(2)
+    if repeat > MAX_REPEATS:
+        print(f"Error: --repeat must be <= {MAX_REPEATS}.", file=sys.stderr)
+        raise SystemExit(2)
+    _require_cli_number(
+        args.ram_sample_interval,
+        option="--ram-sample-interval",
+        positive=True,
+    )
+    if max_tokens < 1:
+        print("Error: --max-tokens must be at least 1.", file=sys.stderr)
+        raise SystemExit(2)
+    if min_tokens is not None and min_tokens < 1:
+        print("Error: --min-tokens must be at least 1.", file=sys.stderr)
+        raise SystemExit(2)
+    if min_tokens is not None and min_tokens > max_tokens:
+        print("Error: --min-tokens must be <= --max-tokens.", file=sys.stderr)
+        raise SystemExit(2)
+    _require_cli_number(
+        cooldown_seconds,
+        option="--cooldown-seconds",
+        positive=False,
+    )
+    if not args.model.strip():
+        print("Error: --model must not be empty.", file=sys.stderr)
+        raise SystemExit(2)
+
+    trials, max_tokens, min_tokens, connection_mode = _ensure_publishable_run_args(
+        args,
+        profile=profile,
+        trials=trials,
+        max_tokens=max_tokens,
+        min_tokens=min_tokens,
+        connection_mode=connection_mode,
+    )
+    if getattr(args, "publishable", False):
+        _ensure_publishable_environment()
+
+    results_dir = args.output_dir or Path.cwd() / "results" / "local"
+
+    results: list[dict] = []
+    last_run_finished_at: float | None = None
+    for repeat_index in range(1, repeat + 1):
+        if repeat > 1:
+            logger.info("\n### Repeat %d/%d ###", repeat_index, repeat)
+        results.append(
+            _run_once(
+                args,
+                profile=profile,
+                trials=trials,
+                max_tokens=max_tokens,
+                min_tokens=min_tokens,
+                connection_mode=connection_mode,
+                cooldown_seconds=cooldown_seconds,
+                results_dir=results_dir,
+                last_run_finished_at=last_run_finished_at,
+            )
+        )
+        last_run_finished_at = time.monotonic()
+
+    if repeat > 1:
+        _log_repeat_summary(results)
     logger.info("\nDone.")
 
 
@@ -1065,6 +1153,18 @@ def main():
         "--notes",
         default=None,
         help="Optional notes to include in the result JSON",
+    )
+    run_parser.add_argument(
+        "--repeat",
+        type=int,
+        default=None,
+        help=(
+            "Run the whole benchmark this many times, each saved as its own "
+            f"independent result file (default: 1; max: {MAX_REPEATS}). "
+            "Prints a cross-run throughput summary at the end so run-to-run "
+            "variance can be judged; nothing is written back into the result "
+            "files themselves."
+        ),
     )
     run_parser.add_argument(
         "--submitted-by",

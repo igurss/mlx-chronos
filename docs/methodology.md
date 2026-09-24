@@ -397,6 +397,24 @@ priming, cached TTFT, throughput, and total runtime. These fields make run
 order and heat buildup easier to interpret, but they do not remove thermal
 throttling from the measured results.
 
+### Repeating a Run
+
+`--repeat N` runs the entire benchmark N times (default 1, max 20). Each
+repeat is a full, independent run through the same protocol and is saved as
+its own self-contained result file — nothing is written back into any of
+them, and each is independently eligible for the public leaderboard exactly as
+a single run would be.
+
+Result filenames preserve fractional seconds when available, so two quick
+repeats in the same second do not overwrite one another.
+
+After the last repeat, mlx-Chronos prints a console-only cross-run summary:
+the mean of each repeat's throughput mean, the cross-run standard deviation,
+and the min/max spread. This is a local diagnostic for judging how much a
+single run's numbers can be trusted; it is computed with the same statistics
+function used for in-run trial statistics, and it is never stored in a result
+file.
+
 ### Cross-Run Cooldown
 
 When `mlx-chronos run` starts, the CLI checks the newest prior JSON result in
@@ -409,6 +427,10 @@ meta.elapsed_since_last_benchmark_seconds
 Passing `--cooldown-seconds N` makes the CLI wait until at least `N` seconds
 have elapsed since that prior result. Without an explicit cooldown, the CLI
 warns when the prior result is recent but does not block the run.
+
+Within one `--repeat` invocation, elapsed time is measured from the end of the
+previous run with a monotonic clock. This also enforces cooldown when only
+Markdown reports are written and no new JSON file exists.
 
 The built-in recent-run warning threshold is 300 seconds. It is a pragmatic
 heuristic, not a measured guarantee that every Mac has returned to a fully cool

@@ -47,13 +47,16 @@ class BaseReporter(ABC):
         if isinstance(ts_meta, str):
             try:
                 # pydantic dumps it as ISO string
-                ts = datetime.fromisoformat(
-                    ts_meta.replace("Z", "+00:00")
-                ).strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.fromisoformat(ts_meta.replace("Z", "+00:00"))
+                ts = timestamp.strftime("%Y%m%d_%H%M%S")
+                if timestamp.microsecond:
+                    ts += f"_{timestamp.microsecond:06d}"
             except Exception:
                 ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         elif isinstance(ts_meta, datetime):
             ts = ts_meta.strftime("%Y%m%d_%H%M%S")
+            if ts_meta.microsecond:
+                ts += f"_{ts_meta.microsecond:06d}"
         else:
             ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             

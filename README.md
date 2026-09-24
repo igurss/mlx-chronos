@@ -245,6 +245,10 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --profile sustaine
 # Enforce cooldown after a recent run in the same output directory
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
 
+# Run the whole benchmark 5 times to see run-to-run variance; each repeat is
+# saved as its own independent result file
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --repeat 5
+
 # Fail fast with an extra model access probe before measured work starts
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
 

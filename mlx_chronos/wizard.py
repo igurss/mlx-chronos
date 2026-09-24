@@ -21,6 +21,7 @@ from mlx_chronos.benchmark import (
 from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
+    MAX_REPEATS,
     MAX_TRIALS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
@@ -74,6 +75,7 @@ OPTIONAL_RUN_SETTINGS = {
     "connection_mode": "HTTP connection mode",
     "ram_sample_interval": "RAM sample interval",
     "cooldown_seconds": "Cooldown before run",
+    "repeat": "Repeat count for cross-run variance",
     "preflight": "Preflight model check",
     "notes": "Result notes",
     "submitted_by": "GitHub handle for attribution",
@@ -106,6 +108,7 @@ class RunWizardConfig:
     output_format: str = "json"
     output_dir: Path | None = None
     cooldown_seconds: float = 0.0
+    repeat: int = 1
     connection_mode: str = CONNECTION_MODE_PERSISTENT
     ram_sample_interval: float = DEFAULT_RAM_SAMPLE_INTERVAL
     preflight: bool = False
@@ -125,6 +128,7 @@ class RunWizardConfig:
             ram_sample_interval=self.ram_sample_interval,
             profile=self.profile,
             cooldown_seconds=self.cooldown_seconds,
+            repeat=self.repeat,
             max_tokens=self.max_tokens,
             min_tokens=self.min_tokens,
             format=self.output_format,
@@ -210,6 +214,8 @@ def validate_run_config(config: RunWizardConfig) -> list[str]:
             "connection mode must be one of "
             f"{', '.join(sorted(VALID_CONNECTION_MODES))}"
         )
+    if not 1 <= config.repeat <= MAX_REPEATS:
+        errors.append(f"repeat must be between 1 and {MAX_REPEATS}")
     for value, name, validator in (
         (
             config.ram_sample_interval,
@@ -258,6 +264,8 @@ def build_run_command(config: RunWizardConfig) -> str:
         parts.extend(["--output-dir", str(config.output_dir)])
     if config.cooldown_seconds != 0.0:
         parts.extend(["--cooldown-seconds", _format_number(config.cooldown_seconds)])
+    if config.repeat != 1:
+        parts.extend(["--repeat", str(config.repeat)])
     if config.connection_mode != CONNECTION_MODE_PERSISTENT:
         parts.extend(["--connection-mode", config.connection_mode])
     if config.ram_sample_interval != DEFAULT_RAM_SAMPLE_INTERVAL:
@@ -600,6 +608,16 @@ class WizardSession:
                     min_value=0.0,
                 ),
             )
+        if setting == "repeat":
+            return replace(
+                config,
+                repeat=self._ask_int(
+                    "Repeat count (each repeat saves its own result file)",
+                    default=config.repeat,
+                    min_value=1,
+                    max_value=MAX_REPEATS,
+                ),
+            )
         if setting == "preflight":
             return replace(
                 config,
@@ -647,6 +665,7 @@ class WizardSession:
             ("Connection mode", config.connection_mode),
             ("RAM sample interval", f"{config.ram_sample_interval:g}s"),
             ("Cooldown", f"{config.cooldown_seconds:g}s"),
+            ("Repeat", str(config.repeat)),
             ("Preflight", "yes" if config.preflight else "no"),
             ("Notes", _format_optional(config.notes, "none")),
         ]
@@ -992,6 +1011,24 @@ class WizardSession:
             raise WizardAbort("model reference URL is required")
         return normalized
 
+    def _ask_int(
+        self,
+        message: str,
+        *,
+        default: int,
+        min_value: int,
+        max_value: int | None = None,
+    ) -> int:
+        value = self._ask(
+            self.questionary.text(
+                message,
+                default=str(default),
+                validate=self._int_validator(min_value, max_value),
+                style=self.style,
+            )
+        )
+        return int(str(value).strip())
+
     def _ask_optional_int(
         self,
         message: str,
@@ -1083,6 +1120,27 @@ class WizardSession:
                 style=self.style,
             )
         )
+
+    @staticmethod
+    def _int_validator(
+        min_value: int,
+        max_value: int | None,
+    ) -> Callable[[str], bool | str]:
+        def validate(text: str) -> bool | str:
+            stripped = text.strip()
+            if not stripped:
+                return "Enter an integer."
+            try:
+                value = int(stripped)
+            except ValueError:
+                return "Enter an integer."
+            if value < min_value:
+                return f"Enter a value >= {min_value}."
+            if max_value is not None and value > max_value:
+                return f"Enter a value <= {max_value}."
+            return True
+
+        return validate
 
     @staticmethod
     def _optional_int_validator(

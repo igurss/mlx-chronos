@@ -7,6 +7,7 @@ import pytest
 from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
+    MAX_REPEATS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
     SUSTAINED_TRIALS,
 )
@@ -130,6 +131,29 @@ def test_wizard_float_validator_rejects_non_finite_values(value):
     assert validator(value) == "Enter a finite number."
 
 
+@pytest.mark.parametrize("value", [0, -1, MAX_REPEATS + 1])
+def test_validate_run_config_rejects_repeat_out_of_bounds(value):
+    errors = validate_run_config(RunWizardConfig(model="test", repeat=value))
+
+    assert f"repeat must be between 1 and {MAX_REPEATS}" in errors
+
+
+def test_validate_run_config_accepts_repeat_within_bounds():
+    errors = validate_run_config(RunWizardConfig(model="test", repeat=MAX_REPEATS))
+
+    assert not any("repeat" in error for error in errors)
+
+
+def test_wizard_int_validator_rejects_blank_and_out_of_range_input():
+    validator = WizardSession._int_validator(1, 5)
+
+    assert validator("") == "Enter an integer."
+    assert validator("not a number") == "Enter an integer."
+    assert validator("0") == "Enter a value >= 1."
+    assert validator("6") == "Enter a value <= 5."
+    assert validator("3") is True
+
+
 def test_validate_run_config_rejects_invalid_model_url():
     errors = validate_run_config(RunWizardConfig(model="test", model_url="not-a-url"))
 
@@ -200,6 +224,19 @@ def test_build_run_command_contains_only_needed_default_flags():
     assert "--trials" not in parts
     assert "--max-tokens" not in parts
     assert "--ram-sample-interval" not in parts
+
+
+def test_build_run_command_omits_repeat_when_default():
+    command = build_run_command(RunWizardConfig(model="test", repeat=1))
+
+    assert "--repeat" not in shlex.split(command)
+
+
+def test_build_run_command_includes_repeat_when_set():
+    command = build_run_command(RunWizardConfig(model="test", repeat=5))
+
+    parts = shlex.split(command)
+    assert parts[parts.index("--repeat") + 1] == "5"
 
 
 def test_build_run_command_includes_publishable_flag():

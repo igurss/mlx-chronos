@@ -30,6 +30,7 @@ from mlx_chronos.cli import (
     main,
 )
 from mlx_chronos.constants import (
+    MAX_REPEATS,
     MAX_TRIALS,
     PUBLIC_BASELINE_TRIALS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
@@ -1864,3 +1865,155 @@ def test_cmd_submit_reports_http_error(mock_post, tmp_path, capsys):
 
     assert exc.value.code == 1
     assert "HTTP 500" in capsys.readouterr().err
+
+
+def test_cmd_run_repeat_saves_one_result_file_per_run_and_logs_a_summary(caplog):
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=120,
+        min_tokens=80,
+        format="json",
+        output_dir=None,
+        repeat=3,
+    )
+    throughputs = [20.0, 22.0, 24.0]
+
+    def fake_result(*_args, **_kwargs):
+        result = copy.deepcopy(EXAMPLE_RESULT)
+        result["metrics"]["tokens_per_second"]["mean"] = throughputs[
+            fake_result.call_count
+        ]
+        fake_result.call_count += 1
+        return result
+
+    fake_result.call_count = 0
+
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+    with patch("mlx_chronos.cli.run_benchmark", side_effect=fake_result) as mock_run, \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
+         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+        mock_json.return_value.save.side_effect = [
+            Path(f"results/local/run{i}.json") for i in range(3)
+        ]
+        cmd_run(args)
+
+    assert mock_run.call_count == 3
+    assert mock_json.return_value.save.call_count == 3
+    # Cross-run summary: mean of [20, 22, 24] = 22, computed with the same
+    # compute_stats() used for in-run trial statistics.
+    assert "Repeat Summary (3 runs)" in caplog.text
+    assert "mean 22.00 tok/s" in caplog.text
+    assert "min 20.00, max 24.00" in caplog.text
+
+
+def test_cmd_run_repeat_defaults_to_a_single_run(caplog):
+    # repeat is absent from args, as in older programmatic callers of cmd_run.
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=120,
+        min_tokens=80,
+        format="json",
+        output_dir=None,
+    )
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+    with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT) as mock_run, \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
+         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+        mock_json.return_value.save.return_value = Path("results/local/run.json")
+        cmd_run(args)
+
+    assert mock_run.call_count == 1
+    assert "Repeat Summary" not in caplog.text
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_cmd_run_rejects_a_non_positive_repeat(value, capsys):
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=100,
+        min_tokens=None,
+        format="json",
+        output_dir=None,
+        repeat=value,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+
+    assert exc.value.code == 2
+    assert "--repeat must be at least 1" in capsys.readouterr().err
+
+
+def test_cmd_run_rejects_a_repeat_above_the_maximum(capsys):
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=0.0,
+        max_tokens=100,
+        min_tokens=None,
+        format="json",
+        output_dir=None,
+        repeat=MAX_REPEATS + 1,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_run(args)
+
+    assert exc.value.code == 2
+    assert f"--repeat must be <= {MAX_REPEATS}" in capsys.readouterr().err
+
+
+def test_cmd_run_repeat_observes_cooldown_between_runs():
+    # First run checks prior JSON files; repeats use elapsed monotonic time,
+    # so Markdown-only runs get the requested cooldown too.
+    args = Namespace(
+        engine="omlx",
+        model="Qwen3.5-4B-OptiQ-4bit",
+        quantization="4bit",
+        trials=1,
+        notes=None,
+        ram_sample_interval=0.1,
+        profile="baseline",
+        cooldown_seconds=10.0,
+        max_tokens=100,
+        min_tokens=None,
+        format="markdown",
+        output_dir=None,
+        repeat=2,
+    )
+
+    with patch("mlx_chronos.cli.run_benchmark", return_value=EXAMPLE_RESULT), \
+         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=2.0), \
+         patch("mlx_chronos.cli.MarkdownReporter") as mock_markdown, \
+         patch("mlx_chronos.cli.time.monotonic", return_value=100.0), \
+         patch("mlx_chronos.cli.time.sleep") as mock_sleep:
+        mock_markdown.return_value.save.return_value = Path("results/local/run.md")
+        cmd_run(args)
+
+    assert mock_sleep.call_args_list == [((8.0,),), ((10.0,),)]

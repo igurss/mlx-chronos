@@ -1,6 +1,10 @@
 """Shared constants for benchmark result contracts."""
 
 MAX_TRIALS = 30
+# Upper bound for `mlx-chronos run --repeat`. Each repeat is a full independent
+# run through the whole protocol, so wall time scales with repeat * trials;
+# this keeps a mistyped value from turning into an unbounded local loop.
+MAX_REPEATS = 20
 PUBLIC_BASELINE_TRIALS = 5
 P95_MIN_TRIALS = 20
 DEFAULT_THROUGHPUT_MAX_TOKENS = 100

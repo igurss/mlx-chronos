@@ -50,6 +50,22 @@ def test_generate_base_filename_datetime_timestamp():
     }
     assert reporter._generate_base_filename(result) == "omlx_m1_20260528_100000"
 
+
+def test_generate_base_filename_distinguishes_runs_within_one_second():
+    reporter = DummyReporter()
+    result = {
+        "hardware": {"chip": "M1"},
+        "engine": {"name": "omlx"},
+        "meta": {"timestamp": "2026-05-28T10:00:00.123456Z"},
+    }
+    first = reporter._generate_base_filename(result)
+    result["meta"]["timestamp"] = "2026-05-28T10:00:00.654321Z"
+    second = reporter._generate_base_filename(result)
+
+    assert first == "omlx_m1_20260528_100000_123456"
+    assert second == "omlx_m1_20260528_100000_654321"
+    assert first != second
+
 def test_json_reporter_save(tmp_path):
     reporter = JSONReporter()
     output_path = reporter.save(EXAMPLE_RESULT, tmp_path)
