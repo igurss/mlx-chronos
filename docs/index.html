@@ -587,6 +587,16 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .ram-cell {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.25;
+    }
+
+    .ram-cell .muted {
+      font-size: 0.82em;
+    }
+
     .submitter-link {
       color: var(--muted);
       text-decoration: none;
@@ -1264,6 +1274,11 @@
         macos_version: row.macos_version || "",
         model_reference_url: row.model_reference_url || "",
         submitted_by: row.submitted_by || "",
+        system_ram_baseline_gb: row.system_ram_baseline_gb ?? null,
+        system_ram_delta_gb: row.system_ram_delta_gb ?? null,
+        system_ram_headroom_gb: row.system_ram_headroom_gb ?? null,
+        swap_growth_gb: row.swap_growth_gb ?? null,
+        memory_pressure_warning: row.memory_pressure_warning === true,
       };
       normalized.model_key = modelIdentityKey(normalized);
       normalized.model_label = modelVariantLabel(normalized);
@@ -1486,6 +1501,9 @@
       } else if (row.thermal_state && row.thermal_state !== "nominal") {
         badges.push(`<span class="badge badge-amber">thermal ${escapeHtml(row.thermal_state)}</span>`);
       }
+      if (row.memory_pressure_warning) {
+        badges.push(`<span class="badge badge-amber">swap grew</span>`);
+      }
       if (!badges.length) {
         badges.push(`<span class="badge badge-green">no flags</span>`);
       }
@@ -1506,6 +1524,9 @@
         ["Thermal", conditionValue(row.thermal_state)],
         ["Machine", row.machine_model],
         ["macOS", row.macos_version || "unknown"],
+        ["RAM before run", row.system_ram_baseline_gb == null ? "not recorded" : `${fmt(row.system_ram_baseline_gb, 2)} GB`],
+        ["RAM headroom at peak", row.system_ram_headroom_gb == null ? "-" : `${fmt(row.system_ram_headroom_gb, 2)} GB`],
+        ["Swap growth", row.swap_growth_gb == null ? "not recorded" : `${fmt(row.swap_growth_gb, 2)} GB`],
         ["Stddev tok/s", row.tps_stddev == null ? "-" : fmt(row.tps_stddev, 3)],
         ["Date", row.date],
       ];
@@ -1693,9 +1714,20 @@
       return `<a class="submitter-link" href="https://github.com/${handle}" rel="noopener noreferrer">@${handle}</a>`;
     }
 
+    // Both figures describe the whole Mac. Keep peak as the primary stress
+    // reading; the rise can include other processes and omit preloaded weights.
     function systemRamCell(row) {
       if (row.system_ram_peak_percent == null) return "-";
-      return `${fmt(row.system_ram_peak_gb, 2)} GB / ${fmt(row.system_ram_peak_percent, 0)}%`;
+      const peak = `${fmt(row.system_ram_peak_gb, 2)} GB / ${fmt(row.system_ram_peak_percent, 0)}%`;
+      if (row.system_ram_delta_gb == null) {
+        return `<span class="metric-strong">${peak}</span>`;
+      }
+      return `
+        <div class="ram-cell">
+          <span class="metric-strong">${peak}</span>
+          <span class="muted">whole-Mac rise +${fmt(row.system_ram_delta_gb, 2)} GB</span>
+        </div>
+      `;
     }
 
     function profileLabel(profile) {

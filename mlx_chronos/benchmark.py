@@ -8,6 +8,7 @@ from typing import get_args
 
 from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
+    MEMORY_PRESSURE_SWAP_GROWTH_GB,
     DEFAULT_THERMAL_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     MAX_TRIALS,
@@ -172,6 +173,10 @@ def _record_phase_duration(
         yield
     finally:
         phase_timings[name] = round(time.perf_counter() - start, 3)
+
+
+def _rounded_or_none(value: object, digits: int = 3) -> float | None:
+    return round(float(value), digits) if is_finite_number(value) else None
 
 
 def _sample_current_system_ram() -> tuple[float, float]:
@@ -508,6 +513,11 @@ def run_benchmark(
     peak_ram_gb = None
     system_ram_peak_gb = None
     system_ram_peak_percent = None
+    system_ram_occupancy: dict[str, float | None] = {
+        "system_ram_baseline_gb": None,
+        "system_ram_delta_gb": None,
+        "swap_growth_gb": None,
+    }
     thermal_summary = None
     ram_tracker = None
     ram_is_process_rss = False
@@ -717,6 +727,7 @@ def run_benchmark(
 
         try:
             system_ram_peak_gb, system_ram_peak_percent = system_ram_tracker.stop()
+            system_ram_occupancy = system_ram_tracker.occupancy_summary()
         except Exception as exc:
             logger.warning(
                 "System RAM sampling failed during teardown; using current "
@@ -818,6 +829,30 @@ def run_benchmark(
             "decode_tokens_per_second will be omitted."
         )
 
+    # Whole-system baseline and peak provide context, but their difference is
+    # not attributable solely to this process or comparable across hosts.
+    system_ram_baseline_gb = _rounded_or_none(
+        system_ram_occupancy.get("system_ram_baseline_gb")
+    )
+    swap_growth_gb = _rounded_or_none(system_ram_occupancy.get("swap_growth_gb"))
+    system_ram_delta_gb = None
+    if system_ram_baseline_gb is not None:
+        system_ram_delta_gb = round(
+            max(0.0, round(system_ram_peak_gb, 3) - system_ram_baseline_gb),
+            3,
+        )
+    memory_pressure_warning = (
+        swap_growth_gb is not None
+        and swap_growth_gb >= MEMORY_PRESSURE_SWAP_GROWTH_GB
+    )
+    if memory_pressure_warning:
+        logger.warning(
+            "  Warning: system-wide macOS swap usage rose by %.2f GB during "
+            "this run. Check for memory pressure and other active processes "
+            "before comparing timings.",
+            swap_growth_gb,
+        )
+
     # 7. Build result
     model_metadata = {
         "name": model_name,
@@ -850,6 +885,9 @@ def run_benchmark(
             ),
             "system_ram_peak_gb": round(system_ram_peak_gb, 3),
             "system_ram_peak_percent": round(system_ram_peak_percent, 1),
+            "system_ram_baseline_gb": system_ram_baseline_gb,
+            "system_ram_delta_gb": system_ram_delta_gb,
+            "swap_growth_gb": swap_growth_gb,
             "token_count_source": token_count_source,
         },
         "trials": {
@@ -902,6 +940,7 @@ def run_benchmark(
             "engine_version_warning": engine_version_warning,
             "sustained_throttling_warning": sustained_throttling_warning,
             "cached_ttft_warning": cached_ttft_warning,
+            "memory_pressure_warning": memory_pressure_warning,
             "cache_validation": cache_validation,
             "benchmark_protocol": build_benchmark_protocol(
                 trials,

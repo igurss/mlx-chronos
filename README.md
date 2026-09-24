@@ -77,7 +77,9 @@ The public leaderboard is available at
 | TTFT cached | Time to first token after a cache-priming call with the same prompt | Yes |
 | Request throughput | Completion tokens divided by full client-observed request time | Yes, when engine token usage is reliable |
 | Sustained throughput | Optional long throughput run for heat buildup and late-run degradation | Yes, under the sustained profile |
-| System RAM peak | Peak total Mac RAM in use during the benchmark | Yes |
+| System RAM peak | Peak total Mac RAM in use during the benchmark | Stress context |
+| RAM increase | Peak total Mac RAM minus the first sample; includes other processes | Diagnostic only |
+| Swap growth | Increase in system-wide macOS swap usage during the run | Warning at 0.5 GB |
 | Engine RSS | Post-warmup RSS of the engine server process when identifiable | Diagnostic only |
 | Thermal state | Start, end, worst state, samples, and affected benchmark phases when available | Context metadata |
 | Tool calling | Planned future success-rate benchmark | Not yet available |

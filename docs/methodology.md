@@ -273,7 +273,7 @@ engine's completion-token total.
 
 ## Memory Metrics
 
-### System RAM Peak
+### System RAM Peak and Added Occupancy
 
 System RAM peak is sampled continuously from before warmup through recorded
 benchmark phases. Results store:
@@ -281,9 +281,39 @@ benchmark phases. Results store:
 - `metrics.system_ram_peak_gb`
 - `metrics.system_ram_peak_percent`
 
-This is the public leaderboard memory metric. It answers the practical
-question of how much total memory pressure the run placed on the Mac while the
-model was loading or serving requests.
+Peak occupancy shows the highest observed whole-Mac usage during the run. It is
+useful device-stress context, not memory attributable to the engine alone.
+
+Peak includes whatever was already resident before the benchmark started. New
+results also record the first observed sample and the rise from that sample:
+
+- `metrics.system_ram_baseline_gb` — total RAM in use at the first sample
+- `metrics.system_ram_delta_gb` — peak minus baseline, validated as exactly that
+
+The leaderboard keeps peak usage as the main stress reading and displays the
+increase alongside it as diagnostic context. The increase is **not** a
+cross-submitter memory benchmark: other processes can change during sampling,
+and the model may already be loaded before the first sample. Older results keep
+only the peak.
+
+One caveat the numbers cannot resolve on their own: the engine server is started
+outside mlx-Chronos, so whether model loading falls inside the sampled window
+depends on whether the model was already resident when the benchmark began.
+The measured increase therefore includes weight loading only when it happens
+inside the sampling window.
+
+### Swap Pressure
+
+`metrics.swap_growth_gb` records the largest observed rise in system-wide macOS
+swap usage relative to the first valid swap sample.
+`meta.memory_pressure_warning` is set once that rise reaches 0.5 GB. This is a
+reason to scrutinize the timings, not proof that the benchmark process itself
+caused paging or slowed down.
+
+It is a warning, never a submission blocker. Blocking would lock 8 GB Macs out
+of the public leaderboard, and those are exactly the machines whose numbers
+people most want to look up. The leaderboard marks affected rows with a
+`swap grew` badge instead.
 
 The default sampling interval is 50ms:
 
@@ -320,8 +350,8 @@ Relevant JSON fields:
 - `metrics.ram_measurement_method`
 - `metrics.ram_peak_gb`
 
-The public leaderboard excludes process RSS from the row index and uses System
-RAM Peak as the comparable memory metric.
+The public leaderboard excludes process RSS from the row index and displays
+System RAM Peak as whole-device stress context, not an engine-only comparison.
 
 ---
 

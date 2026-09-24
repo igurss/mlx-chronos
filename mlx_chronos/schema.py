@@ -306,10 +306,56 @@ class Metrics(ChronosBaseModel):
         ...,
         description="Peak total Mac RAM usage percentage during the benchmark",
     )
+    system_ram_baseline_gb: Optional[NonNegativeFloat] = Field(
+        None,
+        description=(
+            "Total Mac RAM in use at the first sample. Absent in older results."
+        ),
+    )
+    system_ram_delta_gb: Optional[NonNegativeFloat] = Field(
+        None,
+        description=(
+            "Peak total Mac RAM minus the first sample. Whole-system diagnostic; "
+            "not attributable solely to the benchmark or comparable across hosts."
+        ),
+    )
+    swap_growth_gb: Optional[NonNegativeFloat] = Field(
+        None,
+        description=(
+            "Largest observed rise in system-wide macOS swap use relative to "
+            "the first valid sample; it does not identify the responsible process."
+        ),
+    )
     token_count_source: TokenCountSource = Field(
         ...,
         description="Source used to count generated tokens for throughput",
     )
+
+    @model_validator(mode="after")
+    def validate_system_ram_occupancy(self):
+        """Keep delta a derivation of peak and baseline, not an independent claim."""
+        if self.system_ram_delta_gb is not None and self.system_ram_baseline_gb is None:
+            raise ValueError(
+                "system_ram_delta_gb requires system_ram_baseline_gb"
+            )
+        if (self.system_ram_baseline_gb is not None
+                and self.system_ram_baseline_gb > self.system_ram_peak_gb + 0.001):
+            raise ValueError(
+                "system_ram_baseline_gb must not exceed system_ram_peak_gb"
+            )
+        if self.system_ram_delta_gb is None:
+            return self
+        expected = round(
+            max(0.0, self.system_ram_peak_gb - self.system_ram_baseline_gb),
+            3,
+        )
+        if abs(self.system_ram_delta_gb - expected) > 0.002:
+            raise ValueError(
+                "system_ram_delta_gb must match system_ram_peak_gb minus "
+                f"system_ram_baseline_gb (expected {expected}, got "
+                f"{self.system_ram_delta_gb})"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_ram_method_matches_boolean(self):
@@ -704,6 +750,13 @@ class Meta(ChronosBaseModel):
     cached_ttft_warning: bool = Field(
         ...,
         description="True when cached TTFT is close to cold TTFT",
+    )
+    memory_pressure_warning: bool = Field(
+        False,
+        description=(
+            "True when system-wide macOS swap use rose at least 0.5 GB during "
+            "the run; review timing comparability and other processes."
+        ),
     )
     cache_validation: Optional[CacheValidation] = Field(
         None,

@@ -272,10 +272,80 @@ def test_system_ram_tracker():
         mock_virtual_memory.return_value = mem_info
 
         tracker = SystemRAMTracker(interval=0.1)
-        used_bytes, percent = tracker._sample_system_ram()
+        used_bytes, percent, total_bytes = tracker._sample_system_ram()
 
     assert used_bytes == 6 * (1024 ** 3)
     assert percent == 75.0
+    assert total_bytes == 8 * (1024 ** 3)
+
+
+def test_system_ram_tracker_reports_baseline_added_occupancy_and_swap_growth():
+    memory_samples = iter([4, 4, 7, 6])  # GB in use, peaking at 7
+    swap_samples = iter([1, 1, 1, 3])  # GB of swap, growing by 2
+
+    def fake_virtual_memory():
+        used_gb = next(memory_samples, 6)
+        mem = MagicMock()
+        mem.total = 16 * (1024 ** 3)
+        mem.available = (16 - used_gb) * (1024 ** 3)
+        return mem
+
+    def fake_swap_memory():
+        swap = MagicMock()
+        swap.used = next(swap_samples, 3) * (1024 ** 3)
+        return swap
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory", fake_virtual_memory), \
+         patch("mlx_chronos.trackers.psutil.swap_memory", fake_swap_memory):
+        tracker = SystemRAMTracker(interval=0.001)
+        for _ in range(4):
+            tracker._record_sample()
+
+    summary = tracker.occupancy_summary()
+
+    # Peak occupancy stays the device-stress reading...
+    assert tracker.peak_used_bytes == 7 * (1024 ** 3)
+    # ...and the first sample allows the whole-Mac rise to be inspected.
+    assert summary["system_ram_baseline_gb"] == 4.0
+    assert summary["system_ram_delta_gb"] == 3.0
+    assert summary["swap_growth_gb"] == 2.0
+
+
+def test_system_ram_occupancy_summary_never_reports_negative_growth():
+    memory_samples = iter([8, 5])
+    swap_samples = iter([4, 1])
+
+    def fake_virtual_memory():
+        used_gb = next(memory_samples, 5)
+        mem = MagicMock()
+        mem.total = 16 * (1024 ** 3)
+        mem.available = (16 - used_gb) * (1024 ** 3)
+        return mem
+
+    def fake_swap_memory():
+        swap = MagicMock()
+        swap.used = next(swap_samples, 1) * (1024 ** 3)
+        return swap
+
+    with patch("mlx_chronos.trackers.psutil.virtual_memory", fake_virtual_memory), \
+         patch("mlx_chronos.trackers.psutil.swap_memory", fake_swap_memory):
+        tracker = SystemRAMTracker(interval=0.001)
+        tracker._record_sample()
+        tracker._record_sample()
+
+    summary = tracker.occupancy_summary()
+
+    # Other processes releasing memory must not read as negative demand.
+    assert summary["system_ram_delta_gb"] == 0.0
+    assert summary["swap_growth_gb"] == 0.0
+
+
+def test_system_ram_occupancy_summary_tolerates_missing_swap_reporting():
+    with patch("mlx_chronos.trackers.psutil.swap_memory", side_effect=OSError("n/a")):
+        tracker = SystemRAMTracker(interval=0.001)
+        tracker._record_sample()
+
+    assert tracker.occupancy_summary()["swap_growth_gb"] is None
 
 
 def test_system_ram_tracker_start_survives_sampling_error():

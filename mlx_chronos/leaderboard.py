@@ -106,6 +106,13 @@ def load_archive_results(results_dir: Path) -> list[ArchiveResult]:
     return records
 
 
+def _headroom_gb(memory_gb: object, peak_gb: object) -> float | None:
+    """Return estimated unused RAM at peak as whole-device stress context."""
+    if not isinstance(memory_gb, (int, float)) or not isinstance(peak_gb, (int, float)):
+        return None
+    return round(max(0.0, float(memory_gb) - float(peak_gb)), 3)
+
+
 def _index_row(result: BenchmarkResult) -> dict[str, object]:
     data = result.model_dump(mode="json", by_alias=True)
     hardware = data["hardware"]
@@ -140,6 +147,14 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
         "ttft_cached": metrics["ttft_cached"]["mean"],
         "system_ram_peak_gb": metrics["system_ram_peak_gb"],
         "system_ram_peak_percent": metrics["system_ram_peak_percent"],
+        "system_ram_baseline_gb": metrics.get("system_ram_baseline_gb"),
+        "system_ram_delta_gb": metrics.get("system_ram_delta_gb"),
+        "system_ram_headroom_gb": _headroom_gb(
+            hardware["memory_gb"],
+            metrics["system_ram_peak_gb"],
+        ),
+        "swap_growth_gb": metrics.get("swap_growth_gb"),
+        "memory_pressure_warning": bool(meta.get("memory_pressure_warning")),
         "thermal_state": hardware["thermal_state"],
         "warmup_failures": meta["warmup_failures"],
         "submitted_by": meta.get("submitted_by"),

@@ -12,6 +12,11 @@ BENCHMARK_REQUEST_TEMPERATURE = 0.0
 BENCHMARK_REQUEST_TOP_P = 1.0
 
 DEFAULT_RAM_SAMPLE_INTERVAL = 0.05
+# Swap growth above this during a run means the Mac was genuinely paging, which
+# distorts throughput. Recorded and surfaced as a warning, never a hard blocker:
+# blocking would lock 8 GB Macs out of the leaderboard, and those are exactly the
+# machines whose numbers people want to look up.
+MEMORY_PRESSURE_SWAP_GROWTH_GB = 0.5
 DEFAULT_THERMAL_SAMPLE_INTERVAL = 1.0
 RECENT_BENCHMARK_WARNING_SECONDS = 300.0
 

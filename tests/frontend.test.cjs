@@ -131,3 +131,17 @@ test("submitter handles are escaped and rendered as profile links", () => {
   assert.equal(hostile.includes("<img"), false);
   assert.match(hostile, /&quot;&gt;&lt;img/);
 });
+
+test("system RAM peak remains primary and the whole-Mac rise is diagnostic", () => {
+  const rendered = context.systemRamCell({
+    system_ram_peak_gb: 7,
+    system_ram_peak_percent: 87.5,
+    system_ram_delta_gb: 2,
+  });
+  assert.match(rendered, /<span class="metric-strong">7\.00 GB \/ 88%<\/span>/);
+  assert.match(rendered, /whole-Mac rise \+2\.00 GB/);
+  assert.equal(context.systemRamCell({
+    system_ram_peak_gb: 7,
+    system_ram_peak_percent: 87.5,
+  }).includes("whole-Mac rise"), false);
+});

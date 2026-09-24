@@ -12,6 +12,7 @@ from mlx_chronos.schema import (
     BenchmarkResult,
     Engine,
     Meta,
+    Metrics,
     TrialStats,
     normalize_model_quantization,
 )
@@ -836,3 +837,58 @@ def test_meta_stays_valid_without_submitted_by():
     meta.pop("submitted_by", None)
 
     assert Meta(**meta).submitted_by is None
+
+
+def test_metrics_reject_a_delta_that_is_not_peak_minus_baseline():
+    metrics = copy.deepcopy(EXAMPLE_RESULT["metrics"])
+    metrics["system_ram_baseline_gb"] = 4.0
+    metrics["system_ram_delta_gb"] = 9.9  # peak is 7.22
+
+    with pytest.raises(ValidationError, match="system_ram_delta_gb must match"):
+        Metrics(**metrics)
+
+
+def test_metrics_reject_a_baseline_above_the_peak():
+    metrics = copy.deepcopy(EXAMPLE_RESULT["metrics"])
+    metrics["system_ram_baseline_gb"] = 12.0
+    metrics["system_ram_delta_gb"] = 0.0
+
+    with pytest.raises(ValidationError, match="must not exceed"):
+        Metrics(**metrics)
+
+
+def test_metrics_reject_a_baseline_above_the_peak_without_delta():
+    metrics = copy.deepcopy(EXAMPLE_RESULT["metrics"])
+    metrics["system_ram_baseline_gb"] = 12.0
+
+    with pytest.raises(ValidationError, match="must not exceed"):
+        Metrics(**metrics)
+
+
+def test_metrics_reject_a_delta_without_a_baseline():
+    metrics = copy.deepcopy(EXAMPLE_RESULT["metrics"])
+    metrics["system_ram_delta_gb"] = 1.0
+
+    with pytest.raises(ValidationError, match="requires system_ram_baseline_gb"):
+        Metrics(**metrics)
+
+
+def test_metrics_accept_consistent_occupancy_fields():
+    metrics = copy.deepcopy(EXAMPLE_RESULT["metrics"])
+    metrics["system_ram_baseline_gb"] = 4.0
+    metrics["system_ram_delta_gb"] = round(metrics["system_ram_peak_gb"] - 4.0, 3)
+    metrics["swap_growth_gb"] = 0.25
+
+    parsed = Metrics(**metrics)
+
+    assert parsed.system_ram_delta_gb == 3.22
+    assert parsed.swap_growth_gb == 0.25
+
+
+def test_metrics_stay_valid_without_occupancy_fields():
+    # Older results record only the peak.
+    parsed = Metrics(**copy.deepcopy(EXAMPLE_RESULT["metrics"]))
+
+    assert parsed.system_ram_baseline_gb is None
+    assert parsed.system_ram_delta_gb is None
+    assert parsed.swap_growth_gb is None

@@ -116,32 +116,62 @@ class RAMTracker:
 
 
 class SystemRAMTracker:
-    """Continuously samples total system RAM usage during the benchmark."""
+    """Continuously samples total system RAM usage during the benchmark.
+
+    Peak occupancy answers "how close to the wall did this Mac get", which is a
+    property of the whole machine and is exactly what a device-stress metric
+    should report. It is not an engine-specific metric. The first sample is
+    recorded so the whole-system rise can be inspected, but activity by other
+    processes and preloaded models limit its comparability.
+
+    System-wide swap growth is tracked alongside it as a warning sign, without
+    claiming the benchmark caused it or that timings were necessarily affected.
+    """
 
     def __init__(self, interval: float = DEFAULT_RAM_SAMPLE_INTERVAL):
         require_finite_positive(interval, name="interval")
         self.interval = interval
+        self.total_bytes = 0
+        self.baseline_used_bytes: int | None = None
         self.peak_used_bytes = 0
         self.peak_percent = 0.0
+        self.baseline_swap_used_bytes: int | None = None
+        self.peak_swap_used_bytes = 0
         self.sample_count = 0
         self.sample_errors = 0
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def _sample_system_ram(self) -> tuple[int, float]:
+    def _sample_system_ram(self) -> tuple[int, float, int]:
         mem = psutil.virtual_memory()
         used_bytes = max(0, mem.total - mem.available)
         percent = (used_bytes / mem.total * 100) if mem.total else 0.0
-        return used_bytes, percent
+        return used_bytes, percent, mem.total
+
+    def _sample_swap_used(self) -> int | None:
+        """Return swap bytes in use, or None where the platform cannot report it."""
+        try:
+            return max(0, int(psutil.swap_memory().used))
+        except Exception:
+            return None
 
     def _record_sample(self) -> None:
-        used_bytes, percent = self._sample_system_ram()
+        used_bytes, percent, total_bytes = self._sample_system_ram()
+        swap_used_bytes = self._sample_swap_used()
         with self._lock:
             self.sample_count += 1
+            self.total_bytes = total_bytes
+            if self.baseline_used_bytes is None:
+                self.baseline_used_bytes = used_bytes
             if used_bytes > self.peak_used_bytes:
                 self.peak_used_bytes = used_bytes
                 self.peak_percent = percent
+            if swap_used_bytes is not None:
+                if self.baseline_swap_used_bytes is None:
+                    self.baseline_swap_used_bytes = swap_used_bytes
+                if swap_used_bytes > self.peak_swap_used_bytes:
+                    self.peak_swap_used_bytes = swap_used_bytes
 
     def _monitor(self):
         while not self._stop_event.wait(self.interval):
@@ -171,6 +201,36 @@ class SystemRAMTracker:
             peak_used = self.peak_used_bytes
             peak_pct = self.peak_percent
         return peak_used / (1024 ** 3), peak_pct
+
+    def occupancy_summary(self) -> dict[str, float | None]:
+        """Return baseline, whole-system rise and swap growth, in GiB.
+
+        Safe to call after stop(); values are None when the tracker never
+        collected a usable sample for that quantity.
+        """
+        with self._lock:
+            baseline_used = self.baseline_used_bytes
+            peak_used = self.peak_used_bytes
+            baseline_swap = self.baseline_swap_used_bytes
+            peak_swap = self.peak_swap_used_bytes
+
+        gibibyte = 1024 ** 3
+        baseline_gb = None if baseline_used is None else baseline_used / gibibyte
+        delta_gb = (
+            None
+            if baseline_used is None
+            else max(0.0, (peak_used - baseline_used) / gibibyte)
+        )
+        swap_growth_gb = (
+            None
+            if baseline_swap is None
+            else max(0.0, (peak_swap - baseline_swap) / gibibyte)
+        )
+        return {
+            "system_ram_baseline_gb": baseline_gb,
+            "system_ram_delta_gb": delta_gb,
+            "swap_growth_gb": swap_growth_gb,
+        }
 
 
 class ThermalStateTracker:
