@@ -142,6 +142,7 @@ def test_concurrency_profile_sends_distinct_requests_to_a_real_http_server():
         engine = LocalOMLXEngine(base_url)
         with (
             patch("mlx_chronos.concurrency_profile.get_engine", return_value=engine),
+            patch.object(engine, "is_installed", return_value=True),
             patch("mlx_chronos.concurrency_profile.detect_hardware", return_value={
                 "chip": "Apple test", "memory_gb": 64, "macos_version": "test",
             }),
