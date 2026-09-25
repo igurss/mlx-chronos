@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Features
+- Add a local multi-engine `matrix` sweep with explicit per-engine model IDs,
+  all-engine preflight, seeded rotating order, cooldown and condition manifest;
+  it does not assert artifact identity or comparable performance.
 - Add a local-only `concurrency` diagnostic for exact aggregate throughput
   under simultaneous requests, with unique prompts, per-wave warm-up, cache
   evidence, rotated level order and thermal context.

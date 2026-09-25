@@ -569,6 +569,55 @@ There is deliberately no cache-warm mode in this initial implementation.
 
 ---
 
+## Local Multi-Engine Matrix
+
+`mlx-chronos matrix --engine-model 'omlx=ORG/MODEL' --engine-model
+'ollama=ALIAS:TAG'` is a **local orchestration aid**, not a claim that different
+server-side names identify the same weights. Pass one exact `ENGINE=MODEL` pair
+per engine; an optional common `--model-url` is only a reference, not artifact
+verification. Check repository, revision, weight file and quantization yourself
+before interpreting cross-engine differences. All selected servers must already
+be running. On a low-memory Mac, start with only engines and models the machine
+can keep loaded safely; the command does not start, stop or unload servers.
+
+Before any measured benchmark, matrix checks *every* selected engine for
+installation, server availability, model listing/backend and a small accepted
+completion request. A declared quantization mismatch is rejected when the
+engine exposes authoritative quantization metadata; unavailable metadata is
+not treated as proof of a match. Any failed preflight aborts the whole sweep.
+These probes can load or warm models; a cooldown follows the final preflight
+as well as each full run. The default minimum is 120 seconds, adjustable via
+`--cooldown-seconds`. Time elapsed between runs is measured on a monotonic
+clock, not inferred from file timestamps. A fixed interval cannot guarantee
+return to a cold, thermally identical or memory-idle state.
+
+The first engine order is shuffled with a recorded seed (`--seed` can reproduce
+the plan); later rounds cyclically rotate it. By default there are as many
+rounds as engines, so every engine occupies every position once. More rounds
+should be a multiple of the engine count; fewer rounds are permitted for local
+experimentation but are marked as position-unbalanced. This balances *position*,
+not every pairwise carryover or changing background activity. One full standard
+benchmark is run per engine per round, using the same requested protocol
+settings: with N engines the default is N² full benchmarks and N² cooldown
+intervals including the one after preflight. Inspect the printed plan before
+allowing a long sweep to proceed. The command stops at the first measured
+failure instead of presenting a partial sweep as complete.
+
+Standard sealed result files and an incrementally updated `matrix_*.json`
+manifest are saved under `results/local/matrix/` by default. The manifest
+records the model mapping, accepted request IDs, exact schedule, status, result
+filenames, actual cooldown elapsed, and before/after thermal, power, available
+RAM and swap snapshots. Unknown readings stay unknown. Each benchmark result
+also retains its continuous thermal and RAM diagnostics. Neither snapshots nor
+rotation isolate one engine from other servers, prove equal cache state, or
+prove equal model artifacts. The manifest is **not** a `BenchmarkResult` and is
+not submit-able; individual result files retain their normal schema, but a
+matrix sweep alone does not establish leaderboard comparability or justify
+publishing them as an engine ranking. There is deliberately no automatically
+computed winner.
+
+---
+
 ## Local Comparison and History
 
 `mlx-chronos compare <file1> <file2> [...]` and `mlx-chronos history` are
@@ -589,8 +638,7 @@ System RAM rise is a whole-device diagnostic, not memory attributable to the
 engine.
 
 `history` lists every result file directly under `results/local/` (not its
-`context/` or `concurrency/` subdirectories, which hold a different,
-non-`BenchmarkResult` report shape by design), newest first. A file that
+`context/`, `concurrency/` or `matrix/` subdirectories), newest first. A file that
 fails to parse, or fails schema or integrity validation, is reported as skipped
 by name rather than silently vanishing — one corrupted file should never hide every
 other result.

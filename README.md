@@ -247,6 +247,11 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --profile sustaine
 mlx-chronos concurrency --engine vllm-mlx --model "Qwen3.5-4B-OptiQ-4bit" \
   --levels 1,2,4,8
 
+# Local multi-engine sweep with each server's exact model ID; both servers
+# must already be running. The default two rounds reverse their positions.
+mlx-chronos matrix --engine-model 'omlx=org/model-id' \
+  --engine-model 'ollama=model-alias:tag'
+
 # Enforce cooldown after a recent run in the same output directory
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
 
@@ -288,6 +293,7 @@ mlx-chronos run --engine omlx \
 | `mlx-chronos run --engine <name> --model <model>` | Run a benchmark and save local result files |
 | `mlx-chronos run --publishable --engine <name> --model <model> --model-url <url>` | Run only if public leaderboard settings are satisfied |
 | `mlx-chronos concurrency --engine <name> --model <model>` | Measure local aggregate throughput under simultaneous requests; never a leaderboard result |
+| `mlx-chronos matrix --engine-model <engine>=<model> ...` | Preflight and rotate local full runs across engines; not a comparability verdict |
 | `mlx-chronos compare <file1> <file2>` | Compare sealed local results against the first file |
 | `mlx-chronos history [--limit N]` | List local results newest first |
 | `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |
