@@ -1,4 +1,5 @@
 import json
+import html
 import os
 import re
 import tempfile
@@ -84,6 +85,83 @@ class BaseReporter(ABC):
         if stats.get("p95") is not None:
             text += f", p95 {stats['p95']} {unit}"
         return text
+
+
+def _concurrency_base_filename(report: dict) -> str:
+    """Use the run's timestamp for matching JSON/Markdown diagnostic names."""
+    timestamp = datetime.fromisoformat(report["timestamp"].replace("Z", "+00:00"))
+    stamp = timestamp.strftime("%Y%m%d_%H%M%S_%f")
+    engine = re.sub(r"[^a-z0-9]+", "_", report["engine"]["name"].lower()).strip("_")
+    chip = re.sub(r"[^a-z0-9]+", "_", report["hardware"]["chip"].lower()).strip("_")
+    return f"concurrency_{engine or 'unknown'}_{chip or 'unknown'}_{stamp}"
+
+
+def _concurrency_markdown_text(value: object) -> str:
+    """Keep local report metadata from becoming Markdown or raw HTML."""
+    escaped = html.escape(str(value).replace("\r", " ").replace("\n", " "), quote=False)
+    return re.sub(r"([\\`*_{}\[\]()#+.!|>~-])", r"\\\1", escaped)
+
+
+class ConcurrencyProfileJSONReporter:
+    """Save the unsealed, local-only concurrency diagnostic as JSON."""
+
+    def save(self, report: dict, results_dir: Path) -> Path:
+        results_dir.mkdir(parents=True, exist_ok=True)
+        output_path = results_dir / f"{_concurrency_base_filename(report)}.json"
+        _write_text_atomic(output_path, json.dumps(report, indent=2) + "\n")
+        return output_path
+
+
+class ConcurrencyProfileMarkdownReporter:
+    """Save a concise human-readable view of the same diagnostic."""
+
+    def save(self, report: dict, results_dir: Path) -> Path:
+        results_dir.mkdir(parents=True, exist_ok=True)
+        output_path = results_dir / f"{_concurrency_base_filename(report)}.md"
+        engine_name = _concurrency_markdown_text(report["engine"]["name"])
+        engine_version = _concurrency_markdown_text(report["engine"]["version"])
+        model_name = _concurrency_markdown_text(report["model"]["name"])
+        chip = _concurrency_markdown_text(report["hardware"]["chip"])
+        lines = [
+            "# mlx-Chronos concurrency diagnostic",
+            "",
+            f"- Engine: {engine_name} ({engine_version})",
+            f"- Model: {model_name}",
+            f"- Hardware: {chip} ({report['hardware']['memory_gb']} GB)",
+            f"- Request max tokens: {report['request_max_tokens']}",
+            f"- Timestamp: {report['timestamp']}",
+            "",
+            "Local diagnostic only; not accepted for the public leaderboard. "
+            "Unique prompts and best-effort cache clearing minimize reuse, "
+            "but do not prove that the server cache was cold.",
+            "",
+            "| Concurrent requests | Waves | Aggregate tokens/s mean | Stddev | "
+            "Request elapsed mean (s) | Confirmed clears | Observed cache-hit waves |",
+            "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+        for level in report["levels"]:
+            waves = level["waves"]
+            clears = sum(wave["cache_clear_confirmed"] for wave in waves)
+            hits = sum((wave["prefix_cache_hits_delta"] or 0) > 0 for wave in waves)
+            tps = level["aggregate_tokens_per_second"]
+            elapsed = level["per_request_elapsed_seconds"]
+            lines.append(
+                f"| {level['concurrency']} | {level['trials']} | {tps['mean']:.2f} | "
+                f"{tps['stddev']:.2f} | {elapsed['mean']:.3f} | {clears} | {hits} |"
+            )
+        lines.extend([
+            "",
+            "The JSON report contains exact prompts, per-wave completion tokens, "
+            "request-start spread, and cache-clear/hit evidence. A missing hit "
+            "counter is unknown, not zero hits.",
+            "",
+        ])
+        if report.get("warnings"):
+            lines.extend(["## Cautions", ""])
+            lines.extend(f"- {warning}" for warning in report["warnings"])
+            lines.append("")
+        _write_text_atomic(output_path, "\n".join(lines))
+        return output_path
 
 class JSONReporter(BaseReporter):
     """Saves benchmark results as JSON."""

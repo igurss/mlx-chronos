@@ -12,6 +12,7 @@ import httpx
 
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import (
+    _parse_concurrency_levels,
     _emit_result_warnings,
     _ensure_publishable_run_args,
     _log_result_summary,
@@ -22,6 +23,7 @@ from mlx_chronos.cli import (
     _should_start_update_check,
     cmd_doctor,
     cmd_compare,
+    cmd_concurrency,
     cmd_history,
     cmd_models,
     cmd_run,
@@ -60,6 +62,48 @@ class FakeTTY:
 
     def isatty(self):
         return self._is_tty
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(None, None), ("1,2,4,8", [1, 2, 4, 8]), (" 2 , 1 ", [2, 1])],
+)
+def test_parse_concurrency_levels(raw, expected):
+    assert _parse_concurrency_levels(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["", "1,,2", "1,no", "1,1", "0", "33"])
+def test_parse_concurrency_levels_rejects_invalid_values(raw):
+    with pytest.raises(SystemExit) as exc:
+        _parse_concurrency_levels(raw)
+    assert exc.value.code == 2
+
+
+def test_cmd_concurrency_saves_local_diagnostic_in_both_formats(tmp_path):
+    args = Namespace(
+        engine="vllm-mlx", model="model", quantization=None, model_url=None,
+        levels="1,2", trials_per_level=1, request_max_tokens=60,
+        format="all", output_dir=tmp_path,
+    )
+    report = {
+        "timestamp": "2026-09-25T12:00:00+00:00",
+        "hardware": {"chip": "Apple M4 Max", "memory_gb": 64},
+        "engine": {"name": "vllm-mlx", "version": "1.0"},
+        "model": {"name": "model"},
+        "request_max_tokens": 60,
+        "levels": [{
+            "concurrency": 1, "trials": 1,
+            "aggregate_tokens_per_second": {"mean": 50, "stddev": 0},
+            "per_request_elapsed_seconds": {"mean": 1},
+            "waves": [{"cache_clear_confirmed": False,
+                       "prefix_cache_hits_delta": None}],
+        }],
+    }
+    with patch("mlx_chronos.cli.run_concurrency_profile", return_value=report) as run:
+        cmd_concurrency(args)
+    assert run.call_args.kwargs["levels"] == [1, 2]
+    assert len(list(tmp_path.glob("concurrency_*.json"))) == 1
+    assert len(list(tmp_path.glob("concurrency_*.md"))) == 1
 
 
 def test_cmd_run_invalid_trials(capsys):

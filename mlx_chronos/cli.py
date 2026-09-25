@@ -19,6 +19,14 @@ from mlx_chronos.benchmark import (
     VALID_BENCHMARK_PROFILES,
     run_benchmark,
 )
+from mlx_chronos.concurrency_profile import (
+    DEFAULT_REQUEST_MAX_TOKENS,
+    DEFAULT_TRIALS_PER_LEVEL,
+    MAX_CONCURRENCY_LEVEL,
+    MAX_TRIALS_PER_LEVEL,
+    MIN_TRIALS_PER_LEVEL,
+    run_concurrency_profile,
+)
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
@@ -27,7 +35,13 @@ from mlx_chronos.numeric import (
     require_finite_positive,
 )
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
-from mlx_chronos.reporters import BaseReporter, JSONReporter, MarkdownReporter
+from mlx_chronos.reporters import (
+    BaseReporter,
+    ConcurrencyProfileJSONReporter,
+    ConcurrencyProfileMarkdownReporter,
+    JSONReporter,
+    MarkdownReporter,
+)
 from mlx_chronos.compare import CompareError, compare_results
 from mlx_chronos.history import list_history
 from mlx_chronos.stats import compute_stats
@@ -918,6 +932,75 @@ def cmd_compare(args):
     )
 
 
+def _parse_concurrency_levels(raw: str | None) -> list[int] | None:
+    if raw is None:
+        return None
+    parts = [part.strip() for part in raw.split(",")]
+    if not parts or any(not part for part in parts):
+        print("Error: --levels must be a non-empty comma-separated list.", file=sys.stderr)
+        raise SystemExit(2)
+    try:
+        levels = [int(part) for part in parts]
+    except ValueError as exc:
+        print("Error: --levels must contain integers only.", file=sys.stderr)
+        raise SystemExit(2) from exc
+    if len(levels) != len(set(levels)) or any(
+        not 1 <= level <= MAX_CONCURRENCY_LEVEL for level in levels
+    ):
+        print(
+            f"Error: --levels must contain distinct integers from 1 to "
+            f"{MAX_CONCURRENCY_LEVEL}.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return levels
+
+
+def cmd_concurrency(args):
+    """Run a local-only throughput-under-load diagnostic."""
+    if not args.model.strip():
+        print("Error: --model must not be empty.", file=sys.stderr)
+        raise SystemExit(2)
+    levels = _parse_concurrency_levels(args.levels)
+    if not MIN_TRIALS_PER_LEVEL <= args.trials_per_level <= MAX_TRIALS_PER_LEVEL:
+        print(
+            f"Error: --trials-per-level must be between {MIN_TRIALS_PER_LEVEL} "
+            f"and {MAX_TRIALS_PER_LEVEL}.", file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if args.request_max_tokens < 1:
+        print("Error: --request-max-tokens must be positive.", file=sys.stderr)
+        raise SystemExit(2)
+    try:
+        report = run_concurrency_profile(
+            engine_name=args.engine,
+            model_name=args.model,
+            model_quantization=args.quantization,
+            model_reference_url=args.model_url,
+            levels=levels,
+            trials_per_level=args.trials_per_level,
+            request_max_tokens=args.request_max_tokens,
+        )
+    except (RuntimeError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    for warning in report.get("warnings", []):
+        logger.warning("Concurrency caution: %s", warning)
+    results_dir = args.output_dir or Path.cwd() / "results" / "local" / "concurrency"
+    reporters: list[
+        ConcurrencyProfileJSONReporter | ConcurrencyProfileMarkdownReporter
+    ] = []
+    if args.format in ("json", "all"):
+        reporters.append(ConcurrencyProfileJSONReporter())
+    if args.format in ("markdown", "all"):
+        reporters.append(ConcurrencyProfileMarkdownReporter())
+    for reporter in reporters:
+        path = reporter.save(report, results_dir)
+        logger.info("Report saved to: %s", path)
+    logger.info("Concurrency diagnostic complete. This report is not publishable.")
+
+
 def cmd_history(args):
     """List local benchmark results, newest first."""
     results_dir = args.output_dir or Path.cwd() / "results" / "local"
@@ -1381,6 +1464,47 @@ def main():
         help="Engine to query (default: omlx)",
     )
     models_parser.set_defaults(func=cmd_models)
+
+    # --- concurrency (local diagnostic; never a public BenchmarkResult) ---
+    concurrency_parser = subparsers.add_parser(
+        "concurrency",
+        help="Measure aggregate throughput under concurrent requests (local only)",
+    )
+    concurrency_parser.add_argument(
+        "--engine", choices=list(ENGINES.keys()), required=True,
+        help="Engine to benchmark",
+    )
+    concurrency_parser.add_argument(
+        "--model", required=True, help="Model id exposed by the engine server",
+    )
+    concurrency_parser.add_argument(
+        "--quantization", default=None,
+        help="Optional quantization, checked against engine metadata when available",
+    )
+    concurrency_parser.add_argument(
+        "--model-url", default=None, help="Optional model reference URL",
+    )
+    concurrency_parser.add_argument(
+        "--levels", default=None,
+        help="Distinct concurrency levels, comma-separated (default: 1,2,4,8)",
+    )
+    concurrency_parser.add_argument(
+        "--trials-per-level", type=int, default=DEFAULT_TRIALS_PER_LEVEL,
+        help=f"Measured waves per level (default: {DEFAULT_TRIALS_PER_LEVEL})",
+    )
+    concurrency_parser.add_argument(
+        "--request-max-tokens", type=int, default=DEFAULT_REQUEST_MAX_TOKENS,
+        help=f"Maximum completion tokens per request (default: {DEFAULT_REQUEST_MAX_TOKENS})",
+    )
+    concurrency_parser.add_argument(
+        "--format", choices=("json", "markdown", "all"), default="all",
+        help="Local report format (default: all)",
+    )
+    concurrency_parser.add_argument(
+        "--output-dir", type=Path, default=None,
+        help="Report directory (default: results/local/concurrency)",
+    )
+    concurrency_parser.set_defaults(func=cmd_concurrency)
 
     # --- compare ---
     compare_parser = subparsers.add_parser(

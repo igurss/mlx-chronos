@@ -2,9 +2,11 @@ import json
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 import pytest
 
+from mlx_chronos.concurrency_profile import run_concurrency_profile
 from mlx_chronos.engines import OMLXEngine
 
 
@@ -133,6 +135,32 @@ def test_mock_openai_server_model_listing_and_completion_flow():
         for request in requests
         if request["method"] == "POST"
     )
+
+
+def test_concurrency_profile_sends_distinct_requests_to_a_real_http_server():
+    with openai_mock_server() as (base_url, requests):
+        engine = LocalOMLXEngine(base_url)
+        with (
+            patch("mlx_chronos.concurrency_profile.get_engine", return_value=engine),
+            patch("mlx_chronos.concurrency_profile.detect_hardware", return_value={
+                "chip": "Apple test", "memory_gb": 64, "macos_version": "test",
+            }),
+            patch("mlx_chronos.concurrency_profile.get_thermal_state", return_value="nominal"),
+        ):
+            report = run_concurrency_profile(
+                "omlx", "org/test-model", levels=[2], trials_per_level=1,
+                request_max_tokens=8,
+            )
+
+    post_requests = [
+        request for request in requests
+        if request["method"] == "POST" and request["path"] == "/v1/chat/completions"
+    ]
+    prompts = [request["payload"]["messages"][0]["content"] for request in post_requests]
+    assert len(post_requests) == 4  # two unmeasured warm-up, two measured
+    assert len(set(prompts)) == 4
+    assert report["levels"][0]["waves"][0]["total_completion_tokens"] == 14
+    assert report["levels"][0]["waves"][0]["cache_clear_confirmed"] is False
 
 
 def test_mock_openai_server_malformed_model_response_raises():
