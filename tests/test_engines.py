@@ -524,6 +524,20 @@ def test_measure_throughput_retries_without_stream_usage_when_unsupported(mock_s
     assert measurement.decode_tokens_per_second is None
     assert measurement.decode_timing_source == "unavailable"
 
+
+@patch("httpx.stream")
+def test_measure_throughput_can_forbid_a_hidden_retry_without_stream_usage(mock_stream):
+    mock_stream.return_value = stream_response(
+        [], status_code=400,
+        text='{"error":"stream_options include_usage is not supported"}',
+    )
+    with pytest.raises(RuntimeError, match="measure throughput"):
+        OMLXEngine().measure_throughput(
+            "test prompt", "default", 100,
+            allow_stream_usage_fallback=False,
+        )
+    assert mock_stream.call_count == 1
+
 @patch("httpx.stream", side_effect=httpx.TimeoutException("timed out"))
 def test_measure_tokens_per_second_wraps_http_errors(mock_stream):
     engine = OMLXEngine()
@@ -1071,6 +1085,24 @@ def test_rapid_mlx_clears_cache_only_when_server_confirms_prefix_cache_clear():
     assert RapidMLXEngine().clear_cache_for_benchmark(client) is True
     client.request.assert_called_once_with(
         "POST", "http://localhost:8001/v1/cache/clear", timeout=3.0
+    )
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"status": "cleared", "rewarm_scheduled": False}, True),
+        ({"status": "cleared", "rewarm_scheduled": True}, False),
+        ({"status": "cleared"}, False),
+        ({"status": "error", "rewarm_scheduled": False}, False),
+    ],
+)
+def test_vllm_mlx_cache_clear_requires_confirmation_and_no_rewarm(payload, expected):
+    client = MagicMock()
+    client.request.return_value = _json_response(payload)
+    assert VLLMMLXEngine().clear_cache_for_benchmark(client) is expected
+    client.request.assert_called_once_with(
+        "DELETE", "http://localhost:8000/v1/cache/prefix", timeout=3.0
     )
 
 

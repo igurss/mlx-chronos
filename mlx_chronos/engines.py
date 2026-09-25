@@ -87,9 +87,16 @@ class BaseEngine(ABC):
     def root_url(self) -> str:
         return f"http://localhost:{self.port}"
 
-    def http_client(self) -> httpx.Client:
+    def http_client(self, *, max_keepalive_connections: int | None = None) -> httpx.Client:
         """Return a reusable HTTP client for benchmark request loops."""
-        return httpx.Client()
+        if max_keepalive_connections is None:
+            return httpx.Client()
+        return httpx.Client(
+            limits=httpx.Limits(
+                max_connections=max(100, max_keepalive_connections),
+                max_keepalive_connections=max_keepalive_connections,
+            )
+        )
 
     def _http_get(
         self,
@@ -748,6 +755,7 @@ class BaseEngine(ABC):
         progress_sample_interval_tokens: int | None = None,
         client: httpx.Client | None = None,
         request_stream_usage: bool = True,
+        allow_stream_usage_fallback: bool = True,
     ) -> ThroughputMeasurement:
         """Measure request throughput and client-observed decode throughput."""
         if (
@@ -767,7 +775,11 @@ class BaseEngine(ABC):
         url = f"{self.base_url()}{self.endpoint()}"
         request_model = str(base_payload["model"])
         action = "measure throughput"
-        usage_attempts = (True, False) if request_stream_usage else (False,)
+        usage_attempts = (
+            (True, False)
+            if request_stream_usage and allow_stream_usage_fallback
+            else (request_stream_usage,)
+        )
         for include_usage in usage_attempts:
             payload = dict(base_payload)
             if include_usage:
@@ -849,7 +861,11 @@ class BaseEngine(ABC):
                                         )
                 break
             except httpx.HTTPError as exc:
-                if include_usage and self._should_retry_without_stream_usage(exc):
+                if (
+                    include_usage
+                    and allow_stream_usage_fallback
+                    and self._should_retry_without_stream_usage(exc)
+                ):
                     continue
                 raise RuntimeError(
                     self._request_error_message(
@@ -1162,6 +1178,28 @@ class VLLMMLXEngine(BaseEngine):
     name = ENGINE_NAME_VLLM_MLX
     default_port = 8000
     expected_process_names = ("vllm-mlx", "vllm_mlx")
+
+    def clear_cache_for_benchmark(self, client: httpx.Client | None = None) -> bool:
+        """Confirm a prefix-cache clear only when no background re-warm is queued.
+
+        vllm-mlx documents DELETE /v1/cache/prefix. A server configured with
+        warm prompts may re-populate the cache immediately after that response;
+        that case cannot be reported as a confirmed cold-cache preparation.
+        """
+        url = f"{self.base_url()}/cache/prefix"
+        try:
+            request = client.request if client is not None else httpx.request
+            response = request("DELETE", url, timeout=3.0)
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.debug("vllm-mlx prefix-cache clear unavailable at %s: %s", url, exc)
+            return False
+        return (
+            isinstance(payload, dict)
+            and payload.get("status") == "cleared"
+            and payload.get("rewarm_scheduled") is False
+        )
 
     def is_installed(self) -> bool:
         return (
