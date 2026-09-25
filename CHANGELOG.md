@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Features
+- Add a local-only `concurrency` diagnostic for exact aggregate throughput
+  under simultaneous requests, with unique prompts, per-wave warm-up, cache
+  evidence, rotated level order and thermal context.
 - Add opt-in contributor attribution, `run --repeat`, and local `compare` and
   `history` commands.
 - Record whole-system RAM baseline, rise and swap growth as diagnostics without

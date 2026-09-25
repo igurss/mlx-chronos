@@ -513,6 +513,62 @@ equivalent runtime proof and is not a mechanical endpoint substitution.
 
 ---
 
+## Concurrency: Local Throughput-Under-Load Diagnostic
+
+`mlx-chronos concurrency --engine vllm-mlx --model MODEL --levels 1,2,4,8`
+tests how one running server handles multiple independent requests at once.
+It is **not** a `run` profile or a sealed `BenchmarkResult`; its JSON and
+Markdown reports go under `results/local/concurrency/`, and `submit` and the
+public leaderboard do not accept them. The default is three measured waves
+per level, 60 requested maximum output tokens per request, and one additional
+unmeasured warm-up wave immediately before each measured wave. Thus the
+default workload sends 45 warm-up and 45 measured requests. Start with low
+levels if memory headroom is limited.
+
+Each worker waits on a barrier before starting its request. The wave clock
+starts when the barrier releases; it excludes thread creation and queued
+worker setup, but includes client-side dispatch, server processing, response
+streaming and client parsing. The workers share one HTTP client whose idle
+connection capacity is at least the highest selected level, so level 32 does
+not silently lose warmed connections between waves. **Aggregate throughput**
+is the *sum of exact completion tokens* across the wave divided by the elapsed
+time until its last response. It is not the sum of each request's individual
+tok/s. If a measured request fails, or the server does not supply exact
+completion-token usage, the run stops without publishing a partial result.
+The same happens when any measured request produces fewer than 80% of its
+requested maximum tokens: short replies would change the workload across
+levels. Request elapsed
+times and request-start spread are also recorded so a staggered launch is
+visible.
+
+This is a **cache-minimized workload, not a verified cache-cold benchmark**:
+
+- Every request, including warm-up, receives a unique run-specific identifier
+  near the start of one fixed prompt template. This avoids exact repeats
+  across waves and previous runs. The report stores the exact prompts and
+  their character lengths; input *token* counts are not available uniformly.
+- After warm-up and before each measured wave, mlx-Chronos asks the engine to
+  clear its prefix cache when its documented API supports that operation.
+  `cache_clear_confirmed` is true only for an affirmative response. For
+  vllm-mlx, whose [cache API documents background re-warming](https://github.com/waybarrios/vllm-mlx/blob/main/docs/guides/warm-prompts.md),
+  such a response is **not** treated as confirmation of a cold measurement.
+  Other engines may not expose a usable cache-clear operation.
+- When the engine exposes a labelled text-prefix-cache hit counter, its
+  before/after values and delta are recorded. A missing counter means
+  *unknown*, not zero hits; a counter can also include traffic from other
+  clients. Different prompts can still share a short chat-template prefix.
+
+Levels are rotated in execution order between rounds to reduce systematic
+first-level versus last-level warm-up or thermal bias. The order and thermal
+state immediately before and after each measured wave are retained in JSON.
+This does not remove all thermal or memory-pressure effects, nor does a client
+barrier prove that the server kept all requests active simultaneously.
+Interpret the output as a local serving-capacity diagnostic, preferably with
+the same model, hardware, server configuration, token bounds and cache policy.
+There is deliberately no cache-warm mode in this initial implementation.
+
+---
+
 ## Local Comparison and History
 
 `mlx-chronos compare <file1> <file2> [...]` and `mlx-chronos history` are

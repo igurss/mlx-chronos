@@ -242,6 +242,11 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --max-tokens 100 -
 # Run the longer heat/throttling-sensitive sustained profile
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --profile sustained
 
+# Local-only server-load diagnostic: 1, 2, 4 and 8 simultaneous requests
+# Use lower levels on machines with limited RAM.
+mlx-chronos concurrency --engine vllm-mlx --model "Qwen3.5-4B-OptiQ-4bit" \
+  --levels 1,2,4,8
+
 # Enforce cooldown after a recent run in the same output directory
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
 
@@ -282,6 +287,7 @@ mlx-chronos run --engine omlx \
 | `mlx-chronos validate --engine <name> --model <model>` | Validate hardware, engine, server, and optional model access |
 | `mlx-chronos run --engine <name> --model <model>` | Run a benchmark and save local result files |
 | `mlx-chronos run --publishable --engine <name> --model <model> --model-url <url>` | Run only if public leaderboard settings are satisfied |
+| `mlx-chronos concurrency --engine <name> --model <model>` | Measure local aggregate throughput under simultaneous requests; never a leaderboard result |
 | `mlx-chronos compare <file1> <file2>` | Compare sealed local results against the first file |
 | `mlx-chronos history [--limit N]` | List local results newest first |
 | `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |
