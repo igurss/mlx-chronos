@@ -6,6 +6,10 @@ import json
 import time
 import subprocess
 import re
+import copy
+import secrets
+from collections.abc import Callable
+from uuid import uuid4
 
 from pathlib import Path
 from datetime import datetime, timezone
@@ -30,6 +34,13 @@ from mlx_chronos.concurrency_profile import (
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
+from mlx_chronos.matrix import (
+    parse_engine_models,
+    rotation_schedule,
+    sample_matrix_conditions,
+    save_matrix_manifest,
+)
+from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.numeric import (
     require_finite_non_negative,
     require_finite_positive,
@@ -45,7 +56,7 @@ from mlx_chronos.reporters import (
 from mlx_chronos.compare import CompareError, compare_results
 from mlx_chronos.history import list_history
 from mlx_chronos.stats import compute_stats
-from mlx_chronos.schema import BenchmarkResult
+from mlx_chronos.schema import BenchmarkResult, normalize_model_quantization
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
     ANONYMOUS_SUBMITTER_EMAIL,
@@ -429,7 +440,12 @@ def _log_result_summary(result: dict) -> None:
     logger.info("%s\n", "=" * 50)
 
 
-def _run_model_preflight(engine_name: str, model: str) -> None:
+def _run_model_preflight(
+    engine_name: str,
+    model: str,
+    *,
+    declared_quantization: str | None = None,
+) -> str:
     """Run an opt-in model access probe before the measured benchmark."""
     logger.info("Running preflight model access check...")
     engine = get_engine(engine_name)
@@ -451,6 +467,15 @@ def _run_model_preflight(engine_name: str, model: str) -> None:
         logger.info("  Model listed: %s", resolved_model)
 
     model_backend_metadata = engine.validate_model_backend(model)
+    if not isinstance(model_backend_metadata, dict):
+        model_backend_metadata = {}
+    if declared_quantization is not None and model_backend_metadata.get("quantization"):
+        reported = normalize_model_quantization(model_backend_metadata["quantization"])
+        if reported != normalize_model_quantization(declared_quantization):
+            raise RuntimeError(
+                "declared model quantization does not match the engine metadata: "
+                f"declared {declared_quantization!r}, engine reported {reported!r}"
+            )
     if engine.requires_model_backend_validation is True:
         model_format = model_backend_metadata.get("format", "unknown")
         logger.info("  Model backend verified: format=%s", model_format)
@@ -458,6 +483,7 @@ def _run_model_preflight(engine_name: str, model: str) -> None:
     request_model = engine.validate_completion_request(model)
     logger.info("  Completion request accepted as: %s", request_model)
     logger.info("")
+    return request_model
 
 
 def _run_once(
@@ -471,11 +497,15 @@ def _run_once(
     cooldown_seconds: float,
     results_dir: Path,
     last_run_finished_at: float | None = None,
+    pre_run_hook: Callable[[], None] | None = None,
+    saved_paths: dict[str, Path] | None = None,
+    show_publishability: bool = True,
 ) -> dict:
     """Run one full benchmark and save its result files.
 
-    Repeats use a monotonic clock for cooldown, including Markdown-only runs.
-    The first run still checks prior JSON results in the output directory.
+    Repeats and matrix sweeps use a monotonic clock for cooldown, including
+    Markdown-only runs. The first ordinary run checks prior JSON results.
+    A matrix hook samples conditions after the wait but before measurement.
     """
     elapsed_since_last = (
         _elapsed_since_last_result(results_dir)
@@ -511,6 +541,9 @@ def _run_once(
         except RuntimeError as exc:
             print(f"Error: {exc}", file=sys.stderr)
             raise SystemExit(1) from exc
+
+    if pre_run_hook is not None:
+        pre_run_hook()
 
     progress_sample_interval_tokens = (
         SUSTAINED_PROGRESS_SAMPLE_INTERVAL_TOKENS
@@ -550,11 +583,14 @@ def _run_once(
     json_path = None
     for report_format, reporter in reporters:
         path = reporter.save(result, results_dir)
+        if saved_paths is not None:
+            saved_paths[report_format] = path
         if report_format == "json":
             json_path = path
         logger.info(f"Result saved to: {path}")
 
-    _log_publishability_summary(result, json_path)
+    if show_publishability:
+        _log_publishability_summary(result, json_path)
     return result
 
 
@@ -664,6 +700,173 @@ def cmd_run(args):
     if repeat > 1:
         _log_repeat_summary(results)
     logger.info("\nDone.")
+
+
+def cmd_matrix(args):
+    """Run a local, position-balanced multi-engine sweep without ranking it."""
+    try:
+        models = parse_engine_models(args.engine_model, set(ENGINES))
+        quantization = normalize_model_quantization(args.quantization)
+        model_url = normalize_model_reference_url(args.model_url)
+    except ValueError as exc:
+        print(f"Error: {exc}.", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+    profile, trials, max_tokens = _resolve_profile_defaults(args)
+    rounds = len(models) if args.rounds is None else args.rounds
+    seed = secrets.randbits(32) if args.seed is None else args.seed
+    min_tokens = args.min_tokens
+    if not 1 <= trials <= MAX_TRIALS:
+        print(f"Error: --trials must be between 1 and {MAX_TRIALS}.", file=sys.stderr)
+        raise SystemExit(2)
+    if not 1 <= rounds <= MAX_REPEATS:
+        print(f"Error: --rounds must be between 1 and {MAX_REPEATS}.", file=sys.stderr)
+        raise SystemExit(2)
+    if seed < 0:
+        print("Error: --seed must be non-negative.", file=sys.stderr)
+        raise SystemExit(2)
+    if max_tokens < 1 or min_tokens is not None and not 1 <= min_tokens <= max_tokens:
+        print("Error: require 1 <= --min-tokens <= --max-tokens.", file=sys.stderr)
+        raise SystemExit(2)
+    _require_cli_number(args.ram_sample_interval, option="--ram-sample-interval", positive=True)
+    _require_cli_number(args.cooldown_seconds, option="--cooldown-seconds", positive=False)
+
+    engines = list(models)
+    schedule = rotation_schedule(engines, rounds, seed)
+    if rounds % len(engines):
+        logger.warning(
+            "Warning: %d rounds do not give every engine each order position "
+            "the same number of times; use a multiple of %d rounds.",
+            rounds, len(engines),
+        )
+    logger.warning(
+        "Matrix is a local execution aid, not proof of identical model weights "
+        "or directly comparable engine performance. Keep unrelated servers idle."
+    )
+    logger.info(
+        "Matrix plan: %d engines, %d rounds, %d full runs; seed=%d; "
+        "at least %.0f seconds of cooldown in total.",
+        len(engines), rounds, len(engines) * rounds, seed,
+        len(engines) * rounds * args.cooldown_seconds,
+    )
+
+    results_dir = args.output_dir or Path.cwd() / "results" / "local" / "matrix"
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f") + "_" + uuid4().hex[:8]
+    manifest_path = results_dir / f"matrix_{run_id}.json"
+    manifest: dict = {
+        "kind": "local_matrix_diagnostic",
+        "version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "preflight",
+        "model_identity_verified": False,
+        "model_identity_note": (
+            "Engine model aliases and a shared reference URL do not prove identical "
+            "weights, revision, file or quantization. Verify artifacts independently."
+        ),
+        "engine_models": models,
+        "model_reference_url": model_url,
+        "seed": seed,
+        "schedule": schedule,
+        "position_balanced": rounds % len(engines) == 0,
+        "settings": {
+            "profile": profile, "trials": trials, "max_tokens": max_tokens,
+            "min_tokens": min_tokens, "quantization": quantization,
+            "connection_mode": args.connection_mode,
+            "cooldown_seconds": args.cooldown_seconds,
+        },
+        "preflight": {},
+        "runs": [],
+    }
+    save_matrix_manifest(manifest_path, manifest)
+
+    preflight_failed = False
+    for engine_name, model in models.items():
+        try:
+            accepted_model = _run_model_preflight(
+                engine_name, model, declared_quantization=quantization,
+            )
+            manifest["preflight"][engine_name] = {
+                "status": "passed", "accepted_request_model": accepted_model,
+            }
+        except Exception as exc:
+            logger.error("Preflight failed for %s: %s", engine_name, exc)
+            manifest["preflight"][engine_name] = {"status": "failed", "error": str(exc)}
+            preflight_failed = True
+        save_matrix_manifest(manifest_path, manifest)
+    if preflight_failed:
+        manifest["status"] = "preflight_failed"
+        save_matrix_manifest(manifest_path, manifest)
+        logger.error("No benchmark was started. Matrix manifest: %s", manifest_path)
+        raise SystemExit(1)
+
+    manifest["status"] = "running"
+    manifest["preflight_finished_at"] = datetime.now(timezone.utc).isoformat()
+    save_matrix_manifest(manifest_path, manifest)
+    last_finished = time.monotonic()  # Cool down after the final preflight probe too.
+    for round_index, ordered_engines in enumerate(schedule, start=1):
+        for position, engine_name in enumerate(ordered_engines, start=1):
+            engine_args = copy.copy(args)
+            engine_args.engine = engine_name
+            engine_args.model = models[engine_name]
+            engine_args.model_url = model_url
+            engine_args.quantization = quantization
+            engine_args.preflight = False  # Every model was checked before measurement.
+            record: dict = {
+                "round": round_index, "position": position,
+                "engine": engine_name, "model": models[engine_name],
+                "status": "running", "before": None, "after": None,
+            }
+            manifest["runs"].append(record)
+            save_matrix_manifest(manifest_path, manifest)
+            saved_paths: dict[str, Path] = {}
+
+            def snapshot_before() -> None:
+                record["cooldown_elapsed_seconds"] = round(
+                    max(0.0, time.monotonic() - last_finished), 3
+                )
+                record["before"] = sample_matrix_conditions()
+                save_matrix_manifest(manifest_path, manifest)
+
+            logger.info("\n### Matrix round %d/%d, position %d/%d: %s ###",
+                        round_index, rounds, position, len(engines), engine_name)
+            try:
+                result = _run_once(
+                    engine_args, profile=profile, trials=trials,
+                    max_tokens=max_tokens, min_tokens=min_tokens,
+                    connection_mode=args.connection_mode,
+                    cooldown_seconds=args.cooldown_seconds,
+                    results_dir=results_dir,
+                    last_run_finished_at=last_finished,
+                    pre_run_hook=snapshot_before,
+                    saved_paths=saved_paths,
+                    show_publishability=False,
+                )
+            except BaseException as exc:
+                record["status"] = (
+                    "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed"
+                )
+                record["error"] = str(exc)
+                if isinstance(exc, SystemExit):
+                    record["exit_code"] = exc.code
+                record["after"] = sample_matrix_conditions()
+                record["result_files"] = {
+                    key: path.name for key, path in saved_paths.items()
+                }
+                manifest["status"] = record["status"]
+                save_matrix_manifest(manifest_path, manifest)
+                logger.error("Matrix stopped. Local manifest: %s", manifest_path)
+                raise
+            record["status"] = "completed"
+            record["after"] = sample_matrix_conditions()
+            record["result_files"] = {key: path.name for key, path in saved_paths.items()}
+            record["result_timestamp"] = result.get("meta", {}).get("timestamp")
+            last_finished = time.monotonic()
+            save_matrix_manifest(manifest_path, manifest)
+
+    manifest["status"] = "completed"
+    manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
+    save_matrix_manifest(manifest_path, manifest)
+    logger.info("Matrix complete. Local manifest: %s", manifest_path)
 
 
 def cmd_engines(args):
@@ -1416,6 +1619,49 @@ def main():
         help="Directory for result files (default: ./results/local)",
     )
     run_parser.set_defaults(func=cmd_run)
+
+    # --- matrix (local multi-engine sweep, never a comparison verdict) ---
+    matrix_parser = subparsers.add_parser(
+        "matrix",
+        help="Run a preflighted, rotated local sweep across explicit engine/model IDs",
+    )
+    matrix_parser.add_argument(
+        "--engine-model", action="append", required=True, metavar="ENGINE=MODEL",
+        help="Repeat once per engine; use its exact server-side model ID",
+    )
+    matrix_parser.add_argument(
+        "--rounds", type=int, default=None,
+        help="Complete sweeps (default: number of engines, balancing order positions)",
+    )
+    matrix_parser.add_argument(
+        "--seed", type=int, default=None,
+        help="Optional reproducible order seed (otherwise generated and saved)",
+    )
+    matrix_parser.add_argument(
+        "--cooldown-seconds", type=float, default=120.0,
+        help="Minimum wait after preflight and between full runs (default: 120)",
+    )
+    matrix_parser.add_argument("--quantization", default="4bit")
+    matrix_parser.add_argument(
+        "--model-url", default=None,
+        help="Optional shared artifact reference; does not verify identical weights",
+    )
+    matrix_parser.add_argument("--profile", choices=sorted(VALID_BENCHMARK_PROFILES),
+                               default=BENCHMARK_PROFILE_BASELINE)
+    matrix_parser.add_argument("--trials", type=int, default=None)
+    matrix_parser.add_argument("--max-tokens", type=int, default=None)
+    matrix_parser.add_argument("--min-tokens", type=int, default=None)
+    matrix_parser.add_argument("--ram-sample-interval", type=float,
+                               default=DEFAULT_RAM_SAMPLE_INTERVAL)
+    matrix_parser.add_argument("--connection-mode", choices=sorted(VALID_CONNECTION_MODES),
+                               default=CONNECTION_MODE_PERSISTENT)
+    matrix_parser.add_argument("--format", choices=("json", "markdown", "all"),
+                               default="json")
+    matrix_parser.add_argument("--notes", default=None)
+    matrix_parser.add_argument("--submitted-by", default=None)
+    matrix_parser.add_argument("--output-dir", type=Path, default=None,
+                               help="Local report directory (default: results/local/matrix)")
+    matrix_parser.set_defaults(func=cmd_matrix)
 
     # --- doctor ---
     doctor_parser = subparsers.add_parser(
