@@ -461,6 +461,28 @@ If detection fails, the result records `unknown` instead of blocking the run.
 Results also set `meta.engine_version_warning=true` so reports and the public
 leaderboard can call out the comparability risk.
 
+### Serving Configuration
+
+`engine.serving_config` is optional diagnostic context in new sealed results.
+It has two separate maps: `observed` values came from a running-model API,
+while `declared` values were supplied by the operator with repeatable
+`run --engine-opt KEY=VALUE`. That option **records** a claim; it does not
+configure the server. Conflicting observed and declared values remain separate
+and visible instead of being merged under a misleading common source.
+
+Ollama's `/api/ps` can report the **allocated** context length of an exactly
+matched running model. The model capacity in `/api/show` is not substituted for
+it. LM Studio's optional `/api/v1/models` loaded-instance configuration can
+report context length, evaluation batch size, parallelism, Flash Attention and
+KV-cache offload when exactly one MLX instance matches. This read does not
+replace the existing v0 model-format and active-runtime checks. Unsupported,
+ambiguous or inaccessible APIs yield no observed value, not a guessed setting.
+
+The field is bounded and part of the integrity-sealed result. Historical results
+without it remain valid. The leaderboard displays it in row details, but does
+not use it to group models or claim that two settings are equivalent. Settings
+can also change during a run; the observed snapshot is taken after measurement.
+
 ### Server Identity Checks
 
 mlx-Chronos checks more than `/v1/models` for engines that can be confused with

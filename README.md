@@ -279,6 +279,10 @@ mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --preflight
 # Credit a public leaderboard row to your GitHub handle
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --submitted-by igurss
 
+# Record a server setting you checked yourself; this does not configure the server
+mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" \
+  --engine-opt context_length=8192
+
 # Include a model reference URL, required for public leaderboard submissions
 mlx-chronos run --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \

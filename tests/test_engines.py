@@ -1335,6 +1335,59 @@ def test_lmstudio_accepts_an_mlx_model_served_by_the_mlx_runtime():
     assert engine.get_version() == "0.9.1"
 
 
+def test_ollama_serving_config_uses_allocated_context_not_model_capacity():
+    response = MagicMock(status_code=200)
+    response.json.return_value = {
+        "models": [{"name": "qwen:mlx", "context_length": 8192}],
+    }
+    with patch.object(OllamaEngine, "_http_get", return_value=response) as get:
+        observed = OllamaEngine().observed_serving_configuration("qwen:mlx")
+    assert observed == {"allocated_context_length": 8192}
+    assert get.call_args.args[0].endswith("/api/ps")
+
+
+def test_ollama_serving_config_does_not_guess_an_unmatched_model():
+    response = MagicMock(status_code=200)
+    response.json.return_value = {
+        "models": [{"name": "different:mlx", "context_length": 8192}],
+    }
+    with patch.object(OllamaEngine, "_http_get", return_value=response):
+        assert OllamaEngine().observed_serving_configuration("qwen:mlx") == {}
+
+
+def test_lmstudio_serving_config_requires_one_loaded_mlx_instance():
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"models": [{
+        "key": "org/model", "format": "mlx", "max_context_length": 131072,
+        "loaded_instances": [{"id": "active", "config": {
+            "context_length": 8192, "eval_batch_size": 256,
+            "parallel": 2, "flash_attention": True,
+        }}],
+    }]}
+    with patch.object(LMStudioEngine, "_http_get", return_value=response) as get:
+        observed = LMStudioEngine().observed_serving_configuration("active")
+    assert observed == {
+        "context_length": 8192, "eval_batch_size": 256,
+        "parallel": 2, "flash_attention": True,
+    }
+    assert get.call_args.args[0].endswith("/api/v1/models")
+    response.json.return_value["models"][0]["loaded_instances"].append(
+        {"id": "other", "config": {"context_length": 4096}}
+    )
+    with patch.object(LMStudioEngine, "_http_get", return_value=response):
+        assert LMStudioEngine().observed_serving_configuration("org/model") == {}
+
+
+def test_lmstudio_serving_config_does_not_mislabel_model_capacity():
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"models": [{
+        "key": "org/model", "format": "mlx", "max_context_length": 131072,
+        "loaded_instances": [],
+    }]}
+    with patch.object(LMStudioEngine, "_http_get", return_value=response):
+        assert LMStudioEngine().observed_serving_configuration("org/model") == {}
+
+
 def test_lmstudio_accepts_mlx_runtime_reporting_safetensors():
     engine = LMStudioEngine()
     response = MagicMock(status_code=200)

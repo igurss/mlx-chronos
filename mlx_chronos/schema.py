@@ -3,8 +3,8 @@ import math
 import re
 import statistics
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
-from typing import Optional, Annotated, Literal
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, model_validator, field_validator
+from typing import Optional, Annotated, Literal, Union
 
 from mlx_chronos.constants import (
     VALID_ENGINE_NAMES,
@@ -159,9 +159,49 @@ class Hardware(ChronosBaseModel):
         )
 
 
+ServingConfigValue = Union[StrictBool, StrictInt, StrictFloat, str]
+SERVING_CONFIG_MAX_KEYS = 24
+SERVING_CONFIG_KEY_PATTERN = r"^[a-z0-9][a-z0-9_.-]{0,63}$"
+SERVING_CONFIG_MAX_VALUE_LENGTH = 200
+
+
+class ServingConfig(ChronosBaseModel):
+    """Keep API observations separate from unverified operator declarations."""
+
+    observed: dict[str, ServingConfigValue] = Field(default_factory=dict)
+    declared: dict[str, ServingConfigValue] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_entries(self):
+        if not self.observed and not self.declared:
+            raise ValueError("serving_config must contain at least one setting")
+        if len(self.observed) + len(self.declared) > SERVING_CONFIG_MAX_KEYS:
+            raise ValueError(f"serving_config accepts at most {SERVING_CONFIG_MAX_KEYS} entries")
+        for section in (self.observed, self.declared):
+            for key, value in section.items():
+                if not re.fullmatch(SERVING_CONFIG_KEY_PATTERN, key):
+                    raise ValueError(f"invalid serving_config key: {key!r}")
+                if isinstance(value, float) and not math.isfinite(value):
+                    raise ValueError(f"serving_config[{key!r}] must be finite")
+                if isinstance(value, str) and (
+                    len(value) > SERVING_CONFIG_MAX_VALUE_LENGTH
+                    or any(ord(char) < 32 or ord(char) == 127 for char in value)
+                ):
+                    raise ValueError(f"serving_config[{key!r}] contains invalid text")
+        return self
+
+
 class Engine(ChronosBaseModel):
     name: EngineName = Field(..., description="Engine name")
     version: str = Field(..., min_length=1, description="Engine version string")
+    serving_config: Optional[ServingConfig] = Field(
+        None,
+        description=(
+            "Optional server context: observed values came from a running-model API; "
+            "declared values were supplied by the operator and are not verified. "
+            "Neither section changes leaderboard grouping."
+        ),
+    )
 
     @field_validator("name", mode="before")
     @classmethod

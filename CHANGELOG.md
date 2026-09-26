@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Features
+- Record bounded, sealed server settings with separate API-observed and
+  operator-declared values; unknown settings remain unknown and do not change
+  leaderboard grouping.
 - Add a local-only `context` TTFT-versus-input-length diagnostic. Run/bucket/
   trial-specific prefixes remain unique at the maximum trial count; optional
   input token counts are kept per trial, with no misleading prefill-speed claim.
@@ -25,6 +28,8 @@
   chart, and link-preview metadata.
 
 ### Fixes and maintenance
+- Regenerate the leaderboard index from the latest `main` and retry a rejected
+  push only when `main` actually advanced.
 - Correct the Compare table emphasis and sustained-throughput early window.
 - Keep anonymous inbox submissions unattributed by default.
 - Check result-submission PR scope before installing code from the PR in CI.

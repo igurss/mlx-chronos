@@ -12,6 +12,7 @@ import httpx
 
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import (
+    _parse_engine_options,
     _parse_concurrency_levels,
     _emit_result_warnings,
     _ensure_publishable_run_args,
@@ -62,6 +63,21 @@ class FakeTTY:
 
     def isatty(self):
         return self._is_tty
+
+
+def test_engine_options_are_declared_only_and_typed():
+    assert _parse_engine_options([
+        "context_length=8192", "cache_enabled=false", "policy=prefix",
+    ]) == {"context_length": 8192, "cache_enabled": False, "policy": "prefix"}
+
+
+@pytest.mark.parametrize("options", [
+    ["missing_equals"], ["key="], ["key=1", "key=2"],
+    ["bad key=1"], ["value=nan"], ["value=inf"],
+])
+def test_engine_options_reject_invalid_claims(options):
+    with pytest.raises(ValueError):
+        _parse_engine_options(options)
 
 
 @pytest.mark.parametrize(
@@ -714,6 +730,7 @@ def test_cmd_run_format_all_calls_reporters():
         quantization="4bit",
         trials=1,
         notes=None,
+        engine_opt=["context_length=8192"],
         ram_sample_interval=0.1,
         profile="baseline",
         cooldown_seconds=0.0,
@@ -747,6 +764,7 @@ def test_cmd_run_format_all_calls_reporters():
             cooldown_seconds=0.0,
             progress_sample_interval_tokens=None,
             connection_mode="persistent",
+            declared_serving_config={"context_length": 8192},
         )
         mock_json.assert_called_once()
         mock_md.assert_called_once()

@@ -73,7 +73,7 @@ from mlx_chronos.reporters import (
 from mlx_chronos.compare import CompareError, compare_results
 from mlx_chronos.history import list_history
 from mlx_chronos.stats import compute_stats
-from mlx_chronos.schema import BenchmarkResult, normalize_model_quantization
+from mlx_chronos.schema import BenchmarkResult, ServingConfig, normalize_model_quantization
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
     ANONYMOUS_SUBMITTER_EMAIL,
@@ -106,6 +106,32 @@ from mlx_chronos.constants import (
 
 
 logger = logging.getLogger("mlx_chronos")
+
+
+def _parse_engine_options(raw_options: list[str] | None) -> dict[str, object]:
+    """Parse operator declarations; this flag does not configure the server."""
+    parsed: dict[str, object] = {}
+    for raw in raw_options or []:
+        key, separator, value = raw.partition("=")
+        key = key.strip().lower()
+        value = value.strip()
+        if not separator or not key or not value:
+            raise ValueError(f"--engine-opt expects key=value; got {raw!r}")
+        if key in parsed:
+            raise ValueError(f"--engine-opt repeats key {key!r}")
+        if value.lower() in {"true", "false"}:
+            parsed[key] = value.lower() == "true"
+        else:
+            try:
+                parsed[key] = int(value)
+            except ValueError:
+                try:
+                    parsed[key] = float(value)
+                except ValueError:
+                    parsed[key] = value
+    if parsed:
+        ServingConfig.model_validate({"declared": parsed})
+    return parsed
 
 
 def _require_cli_number(
@@ -517,6 +543,7 @@ def _run_once(
     pre_run_hook: Callable[[], None] | None = None,
     saved_paths: dict[str, Path] | None = None,
     show_publishability: bool = True,
+    declared_serving_config: dict[str, object] | None = None,
 ) -> dict:
     """Run one full benchmark and save its result files.
 
@@ -584,6 +611,7 @@ def _run_once(
             cooldown_seconds=cooldown_seconds,
             progress_sample_interval_tokens=progress_sample_interval_tokens,
             connection_mode=connection_mode,
+            declared_serving_config=declared_serving_config,
         )
     except (RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -680,6 +708,11 @@ def cmd_run(args):
     if not args.model.strip():
         print("Error: --model must not be empty.", file=sys.stderr)
         raise SystemExit(2)
+    try:
+        declared_serving_config = _parse_engine_options(getattr(args, "engine_opt", None))
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
     trials, max_tokens, min_tokens, connection_mode = _ensure_publishable_run_args(
         args,
@@ -710,6 +743,7 @@ def cmd_run(args):
                 cooldown_seconds=cooldown_seconds,
                 results_dir=results_dir,
                 last_run_finished_at=last_run_finished_at,
+                declared_serving_config=declared_serving_config,
             )
         )
         last_run_finished_at = time.monotonic()
@@ -1614,6 +1648,13 @@ def main():
         "--notes",
         default=None,
         help="Optional notes to include in the result JSON",
+    )
+    run_parser.add_argument(
+        "--engine-opt", action="append", metavar="KEY=VALUE",
+        help=(
+            "Record an unverified operator-declared server setting in the result; "
+            "does not change server configuration. Repeat for multiple settings."
+        ),
     )
     run_parser.add_argument(
         "--repeat",

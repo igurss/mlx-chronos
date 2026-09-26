@@ -417,6 +417,11 @@ class BaseEngine(ABC):
         del model
         return {}
 
+    def observed_serving_configuration(self, model: str) -> dict[str, object]:
+        """Best-effort settings of a running instance; unsupported means unknown."""
+        del model
+        return {}
+
     def wait_for_server(self, timeout: int = 60) -> bool:
         require_finite_non_negative(timeout, name="timeout")
         start = time.perf_counter()
@@ -1560,6 +1565,36 @@ class OllamaEngine(BaseEngine):
         }
         return metadata
 
+    def observed_serving_configuration(self, model: str) -> dict[str, object]:
+        # /api/show's model_info context length is model capacity, not the
+        # context allocated to this running instance. /api/ps reports the latter.
+        try:
+            response = self._http_get(
+                f"{self.root_url()}/api/ps", timeout=2.0,
+                action="running model configuration", log_retries=False,
+            )
+            if response.status_code != 200:
+                return {}
+            payload = response.json()
+        except Exception:
+            return {}
+        entries = payload.get("models") if isinstance(payload, dict) else None
+        if not isinstance(entries, list):
+            return {}
+        request_model = self._request_model_name(model)
+        matches = [
+            entry for entry in entries
+            if isinstance(entry, dict)
+            and request_model in (entry.get("name"), entry.get("model"))
+        ]
+        if len(matches) != 1:
+            return {}
+        length = matches[0].get("context_length")
+        return (
+            {"allocated_context_length": length}
+            if type(length) is int and length > 0 else {}
+        )
+
     def get_version(self) -> str:
         server_version = self._server_version()
         if server_version is not None:
@@ -1846,6 +1881,57 @@ class LMStudioEngine(BaseEngine):
         if self._runtime_version:
             return self._runtime_version
         return "unknown"
+
+    def observed_serving_configuration(self, model: str) -> dict[str, object]:
+        # The v0 max_context_length describes model capacity. v1 reports the
+        # load configuration of a specific instance. This optional read does
+        # not replace the v0 MLX runtime proof used by validate_model_backend.
+        try:
+            response = self._http_get(
+                f"{self.root_url()}/api/v1/models", timeout=2.0,
+                action="loaded model configuration", log_retries=False,
+            )
+            if response.status_code != 200:
+                return {}
+            payload = response.json()
+        except Exception:
+            return {}
+        models = payload.get("models") if isinstance(payload, dict) else None
+        if not isinstance(models, list):
+            return {}
+        request_model = self._request_model_name(model)
+        candidates: list[dict] = []
+        for entry in models:
+            if not isinstance(entry, dict) or entry.get("format") != "mlx":
+                continue
+            instances = entry.get("loaded_instances")
+            if not isinstance(instances, list):
+                continue
+            exact = [
+                instance for instance in instances
+                if isinstance(instance, dict) and instance.get("id") == request_model
+            ]
+            if exact:
+                candidates.extend(exact)
+            elif entry.get("key") == request_model:
+                candidates.extend(
+                    instance for instance in instances if isinstance(instance, dict)
+                )
+        if len(candidates) != 1:
+            return {}
+        config = candidates[0].get("config")
+        if not isinstance(config, dict):
+            return {}
+        observed: dict[str, object] = {}
+        for key in ("context_length", "eval_batch_size", "parallel"):
+            value = config.get(key)
+            if type(value) is int and value > 0:
+                observed[key] = value
+        for key in ("flash_attention", "offload_kv_cache_to_gpu"):
+            value = config.get(key)
+            if type(value) is bool:
+                observed[key] = value
+        return observed
 
 
 # ─── Registry ─────────────────────────────────────────────────────────────────

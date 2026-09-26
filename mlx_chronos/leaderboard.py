@@ -130,6 +130,7 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
         "machine_model": hardware["machine_model"],
         "engine": engine["name"],
         "engine_version": engine["version"],
+        "engine_serving_config": engine.get("serving_config"),
         "model": model["name"],
         "quantization": model["quantization"],
         "model_format": model.get("format"),

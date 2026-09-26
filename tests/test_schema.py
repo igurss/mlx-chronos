@@ -11,6 +11,7 @@ from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.schema import (
     BenchmarkResult,
     Engine,
+    ServingConfig,
     Meta,
     Metrics,
     TrialStats,
@@ -91,6 +92,31 @@ def test_schema_allows_legacy_results_without_new_diagnostic_fields():
 
     assert result.trials.finish_reasons_raw is None
     assert result.meta.cache_validation is None
+    assert result.engine.serving_config is None
+
+
+def test_serving_config_keeps_conflicting_sources_separate():
+    config = ServingConfig.model_validate({
+        "observed": {"context_length": 8192},
+        "declared": {"context_length": 4096},
+    })
+    assert config.model_dump() == {
+        "observed": {"context_length": 8192},
+        "declared": {"context_length": 4096},
+    }
+
+
+@pytest.mark.parametrize("entries", [
+    {"bad key": 1},
+    {"context_length": float("nan")},
+    {"context_length": float("inf")},
+    {"details": "x" * 201},
+    {"details": "line\nbreak"},
+    {"details": ["not scalar"]},
+])
+def test_serving_config_rejects_invalid_entries(entries):
+    with pytest.raises(ValidationError):
+        ServingConfig.model_validate({"declared": entries})
 
 
 def test_cache_validation_rejects_inferred_api_claims():

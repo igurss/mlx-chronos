@@ -207,6 +207,18 @@ test("buildJsonExport returns valid, pretty-printed JSON of the given rows", () 
   assert.match(json, /\n\s+"engine"/); // pretty-printed, not minified
 });
 
+test("server settings are labeled by source and escaped in details", () => {
+  const markup = context.detailsPanel({
+    engine_serving_config: {
+      observed: { context_length: 8192 },
+      declared: { context_length: 4096, note: '<img src=x onerror=1>' },
+    },
+  });
+  assert.match(markup, /observed: context_length=8192/);
+  assert.match(markup, /declared: context_length=4096/);
+  assert.doesNotMatch(markup, /<img src=x onerror=1>/);
+});
+
 test("buildCompareChartMarkup draws one bar per engine with request tok/s widths", () => {
   const representatives = [
     { engine: "rapid-mlx", tps: 27.46 },

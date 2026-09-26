@@ -1347,6 +1347,7 @@
         date: row.date || dateFromTimestamp(timestamp),
         macos_version: row.macos_version || "",
         model_reference_url: row.model_reference_url || "",
+        engine_serving_config: row.engine_serving_config ?? null,
         submitted_by: row.submitted_by || "",
         system_ram_baseline_gb: row.system_ram_baseline_gb ?? null,
         system_ram_delta_gb: row.system_ram_delta_gb ?? null,
@@ -1590,6 +1591,7 @@
     function detailsPanel(row) {
       const details = [
         ["Engine version", row.engine_version],
+        ["Server settings", servingConfigSummary(row.engine_serving_config)],
         ["Profile", profileLabel(row.benchmark_profile)],
         ["Chronos version", row.chronos_version],
         ["Quantization", row.quantization],
@@ -1618,6 +1620,17 @@
           `).join("")}
         </div>
       `;
+    }
+
+    function servingConfigSummary(config) {
+      if (!config || typeof config !== "object") return "not recorded";
+      const sections = ["observed", "declared"].flatMap(source => {
+        const entries = config[source];
+        if (!entries || typeof entries !== "object") return [];
+        return Object.entries(entries).map(([key, value]) =>
+          `${source}: ${key}=${JSON.stringify(value)}`);
+      });
+      return sections.length ? sections.join("; ") : "not recorded";
     }
 
     function renderColumnMenu() {

@@ -46,6 +46,7 @@ from mlx_chronos.protocol import (
 from mlx_chronos.schema import (
     BenchmarkProfile,
     BenchmarkResult,
+    ServingConfig,
     dump_benchmark_result,
     normalize_model_quantization,
 )
@@ -345,6 +346,7 @@ def run_benchmark(
     cooldown_seconds: float | None = None,
     progress_sample_interval_tokens: int | None = None,
     connection_mode: str = CONNECTION_MODE_PERSISTENT,
+    declared_serving_config: dict[str, object] | None = None,
 ) -> dict:
     """
     Run a full benchmark session for a given engine and model.
@@ -392,6 +394,8 @@ def run_benchmark(
     if not model_name:
         raise ValueError("model name must not be empty")
     model_reference_url = normalize_model_reference_url(model_reference_url)
+    if declared_serving_config:
+        ServingConfig.model_validate({"declared": declared_serving_config})
 
     if trials < 3:
         logger.warning(
@@ -862,11 +866,35 @@ def run_benchmark(
     if model_format:
         model_metadata["format"] = model_format
 
+    # Collect running-instance settings after measurements, when the model is
+    # loaded. A metadata endpoint failure must not invalidate a valid run.
+    try:
+        observed_config = engine.observed_serving_configuration(model_name)
+    except Exception as exc:
+        logger.warning("Could not inspect running server configuration: %s", exc)
+        observed_config = {}
+    if not isinstance(observed_config, dict):
+        observed_config = {}
+    declared_config = declared_serving_config or {}
+    serving_config = None
+    if observed_config or declared_config:
+        try:
+            serving_config = ServingConfig.model_validate({
+                "observed": observed_config, "declared": declared_config,
+            })
+        except ValueError as exc:
+            logger.warning("Ignoring invalid observed server configuration: %s", exc)
+            if declared_config:
+                serving_config = ServingConfig.model_validate({"declared": declared_config})
+
     result = {
         "hardware": hw,
         "engine": {
             "name": engine_name,
             "version": engine_version,
+            "serving_config": (
+                serving_config.model_dump(mode="json") if serving_config else None
+            ),
         },
         "model": model_metadata,
         "metrics": {

@@ -164,6 +164,16 @@ def test_run_benchmark_rejects_invalid_connection_mode():
         )
 
 
+def test_run_benchmark_rejects_invalid_declared_setting_before_engine_probe():
+    with patch("mlx_chronos.benchmark.get_engine") as get_engine:
+        with pytest.raises(ValueError, match="finite"):
+            run_benchmark(
+                engine_name="omlx", model_name="test", model_quantization="4bit",
+                declared_serving_config={"context_length": float("nan")},
+            )
+    get_engine.assert_not_called()
+
+
 def test_cached_ttft_warning_ratio_env_override(monkeypatch):
     monkeypatch.setenv(CACHED_TTFT_WARNING_RATIO_ENV, "0.4")
 
@@ -405,6 +415,9 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         finish_reason="length",
     )
     mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.observed_serving_configuration.return_value = {
+        "allocated_context_length": 8192,
+    }
     mock_engine.get_server_pid.return_value = 12345
     mock_get_engine.return_value = mock_engine
     
@@ -429,11 +442,18 @@ def test_run_benchmark(mock_detect, mock_get_engine):
             model_reference_url=" https://huggingface.co/org/test-model ",
             trials=2,
             notes="test run",
-            ram_sample_interval=0.1
+            ram_sample_interval=0.1,
+            declared_serving_config={
+                "allocated_context_length": 4096, "cache_policy": "off",
+            },
         )
     
     assert result["engine"]["name"] == "omlx"
     assert result["engine"]["version"] == "1.0.0"
+    assert result["engine"]["serving_config"] == {
+        "observed": {"allocated_context_length": 8192},
+        "declared": {"allocated_context_length": 4096, "cache_policy": "off"},
+    }
     assert result["model"]["name"] == "org/test-model"
     assert result["model"]["reference_url"] == "https://huggingface.co/org/test-model"
     assert result["metrics"]["tokens_per_second"]["mean"] == 20.0
