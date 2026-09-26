@@ -32,6 +32,15 @@ from mlx_chronos.concurrency_profile import (
     run_concurrency_profile,
 )
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
+from mlx_chronos.energy_profile import (
+    DEFAULT_ENERGY_MAX_TOKENS,
+    DEFAULT_ENERGY_TRIALS,
+    DEFAULT_IDLE_SECONDS,
+    DEFAULT_SAMPLE_INTERVAL_MS,
+    DEFAULT_SETTLE_SECONDS,
+    run_energy_profile,
+    save_energy_report,
+)
 from mlx_chronos.engines import ENGINES, get_engine
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.matrix import (
@@ -869,6 +878,44 @@ def cmd_matrix(args):
     logger.info("Matrix complete. Local manifest: %s", manifest_path)
 
 
+def cmd_energy(args):
+    """Run an isolated, local-only macmon system-power diagnostic."""
+    try:
+        report = run_energy_profile(
+            args.engine, args.model,
+            model_quantization=args.quantization,
+            model_reference_url=args.model_url,
+            trials=args.trials,
+            max_tokens=args.max_tokens,
+            settle_seconds=args.settle_seconds,
+            idle_seconds=args.idle_seconds,
+            interval_ms=args.sample_interval_ms,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    except (RuntimeError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    output_dir = args.output_dir or Path.cwd() / "results" / "local" / "energy"
+    try:
+        path = save_energy_report(report, output_dir)
+    except (OSError, ValueError) as exc:
+        print(f"Error: could not save local energy report: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    logger.info(
+        "Estimated macmon-reported system energy during throughput: %.3f J over %.3f s.",
+        report["throughput"]["estimated_system_energy_joules"],
+        report["throughput"]["duration_seconds"],
+    )
+    logger.info(
+        "Pre-throughput no-request power: %.3f W; not a model-only idle baseline.",
+        report["pre_throughput_no_request"]["estimated_mean_system_power_watts"],
+    )
+    logger.warning("%s", report["warning"])
+    logger.info("Local diagnostic saved to: %s", path)
+
+
 def cmd_engines(args):
     """List available engines and their status."""
     logger.info("\nAvailable engines:\n")
@@ -1662,6 +1709,35 @@ def main():
     matrix_parser.add_argument("--output-dir", type=Path, default=None,
                                help="Local report directory (default: results/local/matrix)")
     matrix_parser.set_defaults(func=cmd_matrix)
+
+    # --- energy (local diagnostic, separate from the public benchmark) ---
+    energy_parser = subparsers.add_parser(
+        "energy",
+        help="Estimate macmon system energy with a separate no-request phase",
+    )
+    energy_parser.add_argument("--engine", choices=list(ENGINES), required=True)
+    energy_parser.add_argument("--model", required=True)
+    energy_parser.add_argument("--quantization", default=None)
+    energy_parser.add_argument("--model-url", default=None)
+    energy_parser.add_argument("--trials", type=int, default=DEFAULT_ENERGY_TRIALS)
+    energy_parser.add_argument("--max-tokens", type=int, default=DEFAULT_ENERGY_MAX_TOKENS)
+    energy_parser.add_argument(
+        "--settle-seconds", type=float, default=DEFAULT_SETTLE_SECONDS,
+        help="Pause after model warm-up and before the no-request phase",
+    )
+    energy_parser.add_argument(
+        "--idle-seconds", type=float, default=DEFAULT_IDLE_SECONDS,
+        help="Duration of the separate no-request phase (default: 5)",
+    )
+    energy_parser.add_argument(
+        "--sample-interval-ms", type=int, default=DEFAULT_SAMPLE_INTERVAL_MS,
+        help="macmon sample interval in milliseconds (default: 500)",
+    )
+    energy_parser.add_argument(
+        "--output-dir", type=Path, default=None,
+        help="Local report directory (default: results/local/energy)",
+    )
+    energy_parser.set_defaults(func=cmd_energy)
 
     # --- doctor ---
     doctor_parser = subparsers.add_parser(
