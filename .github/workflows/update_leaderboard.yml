@@ -26,16 +26,5 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install package and dependencies
-        run: pip install .
-
-      - name: Generate results index
-        run: python -m mlx_chronos.leaderboard
-
-      - name: Commit index
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/results_index.json
-          git diff --staged --quiet || git commit -m "chore: update leaderboard index [skip ci]"
-          git push
+      - name: Regenerate and publish results index
+        run: bash .github/scripts/update_leaderboard_index.sh

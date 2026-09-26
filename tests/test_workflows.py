@@ -155,8 +155,12 @@ def test_readme_current_release_matches_pyproject_version():
 
 def test_update_leaderboard_workflow_uses_publishable_result_policy():
     text = workflow_text("update_leaderboard.yml")
+    script = (ROOT / ".github" / "scripts" / "update_leaderboard_index.sh").read_text()
 
-    assert "python -m mlx_chronos.leaderboard" in text
+    assert "bash .github/scripts/update_leaderboard_index.sh" in text
+    assert "python -m mlx_chronos.leaderboard" in script
+    assert "git fetch --no-tags origin refs/heads/main" in script
+    assert "git push origin HEAD:refs/heads/main" in script
     assert "python - <<'EOF'" not in text
 
 
