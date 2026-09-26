@@ -20,6 +20,7 @@ from mlx_chronos.cli import (
     _ensure_publishable_run_args,
     _log_result_summary,
     _log_publishability_summary,
+    _result_warning_labels,
     _maybe_start_update_check,
     _publishability_fix,
     _publishable_environment_errors,
@@ -75,6 +76,13 @@ def test_result_timestamp_handles_non_object_metadata(tmp_path, meta):
     assert _result_timestamp(path) == datetime.fromtimestamp(
         path.stat().st_mtime, tz=timezone.utc
     )
+
+
+def test_result_summary_flags_recorded_swap_growth():
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["meta"]["memory_pressure_warning"] = True
+
+    assert "system swap growth" in _result_warning_labels(result)
 
 
 def test_engine_options_are_declared_only_and_typed():

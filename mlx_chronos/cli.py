@@ -417,6 +417,7 @@ def _result_warning_labels(result: dict) -> list[str]:
         ("engine_version_warning", "unknown engine version"),
         ("sustained_throttling_warning", "possible sustained throttling"),
         ("cached_ttft_warning", "cached TTFT close to cold TTFT"),
+        ("memory_pressure_warning", "system swap growth"),
     ):
         if meta.get(field):
             labels.append(label)
