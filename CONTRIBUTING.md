@@ -277,3 +277,8 @@ environment details needed to reproduce the problem.
 ## Code of Conduct
 
 Be respectful. This is an open project welcoming contributors of all levels.
+
+## Releases
+
+Maintainers should follow [the release checklist](docs/releasing.md), including
+the manual workflow rehearsal before creating a tag that publishes to PyPI.

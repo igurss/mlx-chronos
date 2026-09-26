@@ -28,6 +28,16 @@
   chart, and link-preview metadata.
 
 ### Fixes and maintenance
+- Add a manual release rehearsal that builds, downloads and installs wheel and
+  source distributions on Python 3.10 and 3.14; only tag pushes can publish to
+  PyPI, after the package-installation checks pass.
+- Preserve contributor attribution in the wizard and its generated command,
+  and reject Markdown-only output for publishable runs before execution.
+- Tolerate malformed local result metadata and non-UTF-8 JSON in local result
+  discovery; accept only exact positive integers as streamed token usage.
+- Include system swap growth in the final result warning summary.
+- Explicitly request a Pages rebuild after an automated leaderboard-index push,
+  and update the GitHub Actions used by CI and release workflows.
 - Regenerate the leaderboard index from the latest `main` and retry a rejected
   push only when `main` actually advanced.
 - Correct the Compare table emphasis and sustained-throughput early window.
