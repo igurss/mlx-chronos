@@ -45,10 +45,31 @@ def test_release_workflow_runs_full_quality_gates():
     assert "ruff check mlx_chronos tests" in text
     assert "mypy" in text
     assert "pytest --cov" in text
-    assert "python -m mlx_chronos.leaderboard" in text
-    assert "git diff --exit-code docs/results_index.json" in text
-    assert "python -m twine check dist/*" in text
+    assert "python -m mlx_chronos.leaderboard --check" in text
+    assert "python -m twine check --strict dist/*" in text
     assert "needs: [test, quality]" in text
+
+
+def test_release_manual_runs_validate_artifacts_without_publishing():
+    text = workflow_text("release.yml")
+    assert "workflow_dispatch:" in text
+    install = text.split("  install:\n", 1)[1].split("  publish:\n", 1)[0]
+    publish = text.split("  publish:\n", 1)[1]
+
+    assert "needs: build" in install
+    assert "distribution: [wheel, sdist]" in install
+    assert "actions/download-artifact@" in install
+    assert "actions/checkout@" not in install
+    assert "python -m venv installed" in install
+    assert "installed/bin/python -m pip check" in install
+    assert "needs: install" in publish
+    assert (
+        "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')"
+        in publish
+    )
+    # Only the guarded publisher can request an identity token from GitHub.
+    assert text.count("id-token: write") == 1
+    assert "id-token: write" in publish
 
 
 def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
