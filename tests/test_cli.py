@@ -4,6 +4,7 @@ import json
 import copy
 import logging
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from argparse import Namespace
@@ -13,6 +14,7 @@ import httpx
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.cli import (
     _parse_engine_options,
+    _result_timestamp,
     _parse_concurrency_levels,
     _emit_result_warnings,
     _ensure_publishable_run_args,
@@ -63,6 +65,16 @@ class FakeTTY:
 
     def isatty(self):
         return self._is_tty
+
+
+@pytest.mark.parametrize("meta", [None, [], "unrelated"])
+def test_result_timestamp_handles_non_object_metadata(tmp_path, meta):
+    path = tmp_path / "unrelated.json"
+    path.write_text(json.dumps({"meta": meta}), encoding="utf-8")
+
+    assert _result_timestamp(path) == datetime.fromtimestamp(
+        path.stat().st_mtime, tz=timezone.utc
+    )
 
 
 def test_engine_options_are_declared_only_and_typed():

@@ -182,7 +182,8 @@ def _result_timestamp(path: Path) -> datetime | None:
     except Exception:
         data = None
     if isinstance(data, dict):
-        timestamp = _parse_timestamp(data.get("meta", {}).get("timestamp"))
+        meta = data.get("meta")
+        timestamp = _parse_timestamp(meta.get("timestamp")) if isinstance(meta, dict) else None
         if timestamp is not None:
             return timestamp
 

@@ -79,6 +79,14 @@ def test_load_result_for_compare_rejects_invalid_json(tmp_path):
         load_result_for_compare(path)
 
 
+def test_load_result_for_compare_rejects_non_utf8_file(tmp_path):
+    path = tmp_path / "non-utf8.json"
+    path.write_bytes(b"\xff\xfe")
+
+    with pytest.raises(CompareError, match="could not read file"):
+        load_result_for_compare(path)
+
+
 def test_load_result_for_compare_rejects_a_file_that_fails_schema_validation(tmp_path):
     path = tmp_path / "invalid.json"
     path.write_text(json.dumps({"not": "a benchmark result"}), encoding="utf-8")

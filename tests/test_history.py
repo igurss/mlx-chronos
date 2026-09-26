@@ -77,6 +77,17 @@ def test_list_history_skips_invalid_files_without_hiding_the_valid_ones(tmp_path
     assert "not valid JSON" in skipped[0][1]
 
 
+def test_list_history_skips_non_utf8_files_without_hiding_valid_results(tmp_path):
+    write_result(tmp_path / "good.json", tps=20.0)
+    (tmp_path / "non-utf8.json").write_bytes(b"\xff\xfe")
+
+    entries, skipped = list_history(tmp_path)
+
+    assert len(entries) == 1
+    assert len(skipped) == 1
+    assert skipped[0][0] == tmp_path / "non-utf8.json"
+
+
 def test_list_history_ignores_non_json_files(tmp_path):
     write_result(tmp_path / "good.json", tps=20.0)
     (tmp_path / "notes.txt").write_text("hello", encoding="utf-8")

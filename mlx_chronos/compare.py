@@ -38,7 +38,7 @@ def load_result_for_compare(path: Path) -> BenchmarkResult:
         raise CompareError(f"{path}: not a file")
     try:
         raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         raise CompareError(f"{path}: could not read file: {exc}") from exc
     try:
         data = json.loads(raw)
