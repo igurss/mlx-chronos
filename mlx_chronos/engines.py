@@ -563,8 +563,11 @@ class BaseEngine(ABC):
         if not isinstance(usage, dict):
             return None
         tokens = usage.get("completion_tokens")
-        if isinstance(tokens, (int, float)) and tokens > 0:
-            return int(tokens)
+        # Usage is an exact token count only when the server supplies a JSON
+        # integer. Booleans and floats must not acquire public-comparable
+        # provenance through Python's bool-is-int or float-to-int coercion.
+        if type(tokens) is int and tokens > 0:
+            return tokens
         return None
 
     def _estimated_completion_words(self, text_parts: list[str]) -> int:

@@ -116,6 +116,18 @@ def test_stream_chunk_invalid_choice_shape_is_ignored():
     chunk = {"choices": ["not-a-dict"]}
     assert engine._stream_chunk_has_content(chunk) is False
 
+
+@pytest.mark.parametrize("value", [True, 100.0, 3.5, float("inf"), float("nan")])
+def test_stream_usage_only_accepts_exact_positive_integer_counts(value):
+    engine = OMLXEngine()
+
+    assert engine._extract_stream_usage_tokens(
+        {"usage": {"completion_tokens": value}}
+    ) is None
+    assert engine._extract_stream_usage_tokens(
+        {"usage": {"completion_tokens": 100}}
+    ) == 100
+
 def test_mlx_lm_install_check_does_not_import_mlx_lm(monkeypatch):
     called = {}
     def fake_find_spec(name):
