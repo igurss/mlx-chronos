@@ -34,7 +34,7 @@ result submission, one fix, or one feature.
 
 | Requirement | Details |
 | --- | --- |
-| Hardware | Apple Silicon Mac: M1, M2, M3, M4, or M5 |
+| Hardware | Apple Silicon Mac with an M-series chip |
 | Python | Python 3.10 or newer |
 | Engine | One supported engine installed and running |
 | Power mode | Low Power Mode must be off for public leaderboard rows |

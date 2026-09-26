@@ -13,13 +13,17 @@ goals.
 - [Memory Metrics](#memory-metrics)
 - [Thermal and Power Context](#thermal-and-power-context)
 - [Engine Metadata](#engine-metadata)
+- [Concurrency: Local Throughput-Under-Load Diagnostic](#concurrency-local-throughput-under-load-diagnostic)
+- [Local Multi-Engine Matrix](#local-multi-engine-matrix)
+- [Local Context Diagnostic](#local-context-diagnostic)
+- [Experimental Local Energy Diagnostic](#experimental-local-energy-diagnostic)
+- [Local Comparison and History](#local-comparison-and-history)
 - [Trial Protocol](#trial-protocol)
 - [Public Leaderboard Policy](#public-leaderboard-policy)
 - [Trust Model](#trust-model)
+- [Leaderboard Export and Chart](#leaderboard-export-and-chart)
 - [What Is Not Measured Yet](#what-is-not-measured-yet)
 - [Reproducibility Checklist](#reproducibility-checklist)
-- [Local Context Diagnostic](#local-context-diagnostic)
-- [Experimental Local Energy Diagnostic](#experimental-local-energy-diagnostic)
 
 ---
 
@@ -44,7 +48,7 @@ The protocol is built around four principles:
 | Cold TTFT | `metrics.ttft_cold` | Request start to first non-empty streamed token with cache-avoiding prompts | Yes |
 | Cached TTFT | `metrics.ttft_cached` | Request start to first token after one cache-priming call | Yes |
 | Request throughput | `metrics.tokens_per_second`, `metrics.request_tokens_per_second` | Completion tokens divided by full client-observed request time | Yes, with usage-based token counts |
-| Decode throughput | `metrics.decode_tokens_per_second` | Completion tokens divided by first-token-to-stream-end time | Context metric |
+| Decode throughput | `metrics.decode_tokens_per_second` | Completion tokens after the first, divided by first-token-to-stream-end time | Context metric |
 | System RAM peak | `metrics.system_ram_peak_gb`, `metrics.system_ram_peak_percent` | Peak total Mac RAM in use during the benchmark | Yes |
 | Engine RSS | `metrics.ram_peak_gb` with `metrics.ram_measurement_method=process_rss` | Post-warmup server-process RSS when identifiable | Diagnostic only |
 | Thermal monitor | `meta.thermal_monitor` | Start/end/worst thermal state and affected phases | Context metric |
@@ -473,10 +477,11 @@ and visible instead of being merged under a misleading common source.
 Ollama's `/api/ps` can report the **allocated** context length of an exactly
 matched running model. The model capacity in `/api/show` is not substituted for
 it. LM Studio's optional `/api/v1/models` loaded-instance configuration can
-report context length, evaluation batch size, parallelism, Flash Attention and
-KV-cache offload when exactly one MLX instance matches. This read does not
-replace the existing v0 model-format and active-runtime checks. Unsupported,
-ambiguous or inaccessible APIs yield no observed value, not a guessed setting.
+report context length and, when present, other documented instance fields.
+Some optional fields are backend-specific and may be absent for MLX; their
+absence is not filled with a default. This read does not replace the existing
+v0 model-format and active-runtime checks. Unsupported, ambiguous or
+inaccessible APIs yield no observed value, not a guessed setting.
 
 The field is bounded and part of the integrity-sealed result. Historical results
 without it remain valid. The leaderboard displays it in row details, but does
@@ -506,7 +511,7 @@ because they use the non-MLX model format and are not comparable with the MLX
 leaderboard entries.
 The response's quantization is treated as authoritative and must match the
 quantization requested on the mlx-Chronos command line. Family and parameter
-size are retained when Ollama reports them.
+size are not stored in the result.
 
 ### LM Studio: MLX-Only Gate
 
@@ -887,8 +892,8 @@ They are not a cryptographic hardware attestation system.
 The Raw tab exports the currently filtered and sorted index rows. CSV includes
 only the currently visible columns and uses plain values rather than rendered
 HTML. JSON includes all indexed fields in each filtered row; neither export is
-a full benchmark result with trials and an integrity seal. For original result
-files, use the linked submitted JSON records.
+a full benchmark result with trials and an integrity seal. The original public
+result files are in the repository's `results/submitted/` directory.
 
 The Compare tab uses the same representative rows as its table to draw an
 inline chart of request throughput by engine. It is hidden when fewer than two
