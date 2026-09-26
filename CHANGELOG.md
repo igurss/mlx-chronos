@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Features
+- Add a local-only `context` TTFT-versus-input-length diagnostic. Run/bucket/
+  trial-specific prefixes remain unique at the maximum trial count; optional
+  input token counts are kept per trial, with no misleading prefill-speed claim.
 - Add an experimental local-only `energy` diagnostic with a separate
   no-request phase and macmon power trace; it makes no model-energy or
   leaderboard claim.

@@ -18,6 +18,8 @@ goals.
 - [Trust Model](#trust-model)
 - [What Is Not Measured Yet](#what-is-not-measured-yet)
 - [Reproducibility Checklist](#reproducibility-checklist)
+- [Local Context Diagnostic](#local-context-diagnostic)
+- [Experimental Local Energy Diagnostic](#experimental-local-energy-diagnostic)
 
 ---
 
@@ -615,6 +617,43 @@ not submit-able; individual result files retain their normal schema, but a
 matrix sweep alone does not establish leaderboard comparability or justify
 publishing them as an engine ranking. There is deliberately no automatically
 computed winner.
+
+---
+
+## Local Context Diagnostic
+
+`mlx-chronos context --engine ENGINE --model MODEL` examines how time to first
+token (TTFT) changes with *requested character length*. The default buckets
+are `small` (2,000 characters) and `medium` (8,000). `large` (32,000) and
+`xlarge` (128,000) are available only when explicitly selected with
+`--buckets`; long requests may consume substantial RAM, time out, exceed the
+model's context limit, or be silently truncated by a server. The command
+cannot verify a uniform context limit across all supported engines.
+
+Each trial starts with a run/bucket/trial-specific marker before the rotating
+filler text. Even at the maximum of ten trials in each of four buckets, no two
+generated prompts are identical; a new run uses a new nonce. The report stores
+each prompt's actual character length and SHA-256 hash so the input set can be
+audited without embedding up to megabytes of prompt text. Distinct text reduces
+exact-prefix reuse but **does not prove a cold server cache**.
+
+The streaming TTFT clock stops when the first content or terminal token is
+observed. The request continues only to read optional `usage.prompt_tokens`
+from the server's trailing usage chunk. Token counts are never inferred from
+characters. The report keeps the count alongside each TTFT; its mean is shown
+only when *every* trial in that bucket has an engine-reported count. Partial
+coverage is labelled `partial_engine`. Because TTFT also includes HTTP,
+queueing, and first-token overhead, dividing input tokens by TTFT would not
+yield pure prefill throughput; this command deliberately does not publish that
+number. Before/after system conditions are recorded per bucket, but sequential
+buckets can still have different cache, memory, and thermal states.
+
+This is a local diagnostic, not a sealed `BenchmarkResult`. JSON and Markdown
+reports go to `results/local/context/` by default; they are not listed by
+`history`, accepted by `submit`, or included in the leaderboard. Comparing
+different engines or machines by bucket alone is not justified without a
+verified, equivalent model artifact, actual input token counts, context
+retention, and controlled runtime conditions.
 
 ---
 
