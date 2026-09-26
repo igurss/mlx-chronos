@@ -193,6 +193,8 @@ def validate_run_config(config: RunWizardConfig) -> list[str]:
             errors.append("publishable runs do not allow min tokens")
         if config.connection_mode != CONNECTION_MODE_PERSISTENT:
             errors.append("publishable runs require persistent HTTP connections")
+        if config.output_format == "markdown":
+            errors.append("publishable runs require JSON output")
     if config.profile not in PROFILE_DESCRIPTIONS:
         errors.append(
             "profile must be one of "
@@ -276,6 +278,8 @@ def build_run_command(config: RunWizardConfig) -> str:
         parts.append("--preflight")
     if config.notes:
         parts.extend(["--notes", config.notes])
+    if config.submitted_by:
+        parts.extend(["--submitted-by", config.submitted_by])
     return " ".join(shlex.quote(part) for part in parts)
 
 
@@ -629,6 +633,13 @@ class WizardSession:
         if setting == "notes":
             notes = self._ask_optional_text("Notes saved in result JSON", config.notes)
             return replace(config, notes=notes)
+        if setting == "submitted_by":
+            return replace(
+                config,
+                submitted_by=self._ask_optional_text(
+                    "GitHub handle for optional attribution", config.submitted_by,
+                ),
+            )
         raise ValueError(f"unknown wizard setting: {setting}")
 
     def _render_run_summary(self, config: RunWizardConfig) -> None:
@@ -668,6 +679,7 @@ class WizardSession:
             ("Repeat", str(config.repeat)),
             ("Preflight", "yes" if config.preflight else "no"),
             ("Notes", _format_optional(config.notes, "none")),
+            ("Submitted by", _format_optional(config.submitted_by, "anonymous")),
         ]
         for key, value in rows:
             table.add_row(key, value)

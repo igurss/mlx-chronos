@@ -175,6 +175,19 @@ def test_validate_run_config_rejects_incomplete_publishable_config():
     assert "publishable runs require persistent HTTP connections" in errors
 
 
+def test_validate_run_config_rejects_markdown_only_publishable_run():
+    errors = validate_run_config(
+        RunWizardConfig(
+            model="test",
+            model_url="https://huggingface.co/org/model",
+            publishable=True,
+            output_format="markdown",
+        )
+    )
+
+    assert "publishable runs require JSON output" in errors
+
+
 def test_wizard_model_url_prompt_validates_inline():
     captured = {}
 
@@ -237,6 +250,27 @@ def test_build_run_command_includes_repeat_when_set():
 
     parts = shlex.split(command)
     assert parts[parts.index("--repeat") + 1] == "5"
+
+
+def test_build_run_command_preserves_optional_contributor_attribution():
+    command = build_run_command(
+        RunWizardConfig(model="test", submitted_by="example-user")
+    )
+
+    parts = shlex.split(command)
+    assert parts[parts.index("--submitted-by") + 1] == "example-user"
+
+
+def test_wizard_can_set_optional_contributor_attribution():
+    session = object.__new__(WizardSession)
+    session._ask_optional_text = lambda _message, _default: "example-user"
+
+    config = session._prompt_run_setting(
+        RunWizardConfig(model="test"), "submitted_by"
+    )
+
+    assert config.submitted_by == "example-user"
+    assert config.to_namespace().submitted_by == "example-user"
 
 
 def test_build_run_command_includes_publishable_flag():
