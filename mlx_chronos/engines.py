@@ -33,6 +33,9 @@ from mlx_chronos.constants import (
 from mlx_chronos.measurements import (
     DECODE_TIMING_CLIENT_STREAM,
     DECODE_TIMING_UNAVAILABLE,
+    INPUT_TOKEN_COUNT_ENGINE,
+    INPUT_TOKEN_COUNT_UNAVAILABLE,
+    TTFTMeasurement,
     ThroughputMeasurement,
 )
 from mlx_chronos.http_retry import request_with_retry, stream_with_retry
@@ -745,6 +748,82 @@ class BaseEngine(ABC):
                 request_model=request_model,
             )
         )
+
+    def measure_ttft_with_input_tokens(
+        self,
+        prompt: str,
+        model: str = "default",
+        client: httpx.Client | None = None,
+        timeout_seconds: float = 120.0,
+    ) -> TTFTMeasurement:
+        """Stop the TTFT clock at first content, then read optional usage."""
+        payload_base = self.build_payload(
+            prompt=prompt, model=model, max_tokens=1, stream=True,
+        )
+        url = f"{self.base_url()}{self.endpoint()}"
+        request_model = str(payload_base["model"])
+        action = "measure context TTFT"
+        for include_usage in (True, False):
+            payload = dict(payload_base)
+            if include_usage:
+                payload["stream_options"] = {"include_usage": True}
+            started = time.perf_counter()
+            ttft: float | None = None
+            input_tokens: int | None = None
+            try:
+                with self._stream_request(
+                    client, "POST", url, json=payload, timeout=timeout_seconds,
+                ) as response:
+                    response.raise_for_status()
+                    for line in response.iter_lines():
+                        if isinstance(line, bytes):
+                            line = line.decode("utf-8", errors="ignore")
+                        if not line or not line.startswith("data:"):
+                            continue
+                        raw = line.removeprefix("data:").strip()
+                        if not raw or raw == "[DONE]":
+                            continue
+                        try:
+                            chunk = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+                        if not isinstance(chunk, dict):
+                            continue
+                        if ttft is None and (
+                            self._stream_chunk_has_content(chunk)
+                            or self._stream_chunk_has_terminal_token(chunk)
+                        ):
+                            ttft = round(max(time.perf_counter() - started, 0.001), 3)
+                        usage = chunk.get("usage")
+                        if isinstance(usage, dict):
+                            count = usage.get("prompt_tokens")
+                            if isinstance(count, int) and not isinstance(count, bool) and count > 0:
+                                input_tokens = count
+            except httpx.HTTPError as exc:
+                if include_usage and self._should_retry_without_stream_usage(exc):
+                    continue
+                raise RuntimeError(
+                    self._request_error_message(
+                        action, url, exc, model=model, request_model=request_model,
+                    )
+                ) from exc
+            if ttft is None:
+                raise RuntimeError(
+                    self._invalid_response_message(
+                        action, url,
+                        "stream ended before a valid content token was received",
+                        model=model, request_model=request_model,
+                    )
+                )
+            return TTFTMeasurement(
+                ttft_seconds=ttft,
+                input_tokens=input_tokens,
+                input_token_count_source=(
+                    INPUT_TOKEN_COUNT_ENGINE
+                    if input_tokens is not None else INPUT_TOKEN_COUNT_UNAVAILABLE
+                ),
+            )
+        raise RuntimeError("unreachable context TTFT retry state")
 
     def measure_throughput(
         self,
