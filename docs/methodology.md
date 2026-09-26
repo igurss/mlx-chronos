@@ -618,6 +618,45 @@ computed winner.
 
 ---
 
+## Experimental Local Energy Diagnostic
+
+`mlx-chronos energy --engine ENGINE --model MODEL` is deliberately separate
+from `run`. Install [macmon](https://github.com/vladkens/macmon) first (for
+example, `brew install macmon`), start the engine server, and ensure the model
+is accessible. This command does not change the public benchmark protocol and
+does not produce a sealed or submit-able `BenchmarkResult`.
+
+The command validates model access, performs one short warm-up completion,
+starts one long-lived `macmon pipe` sampler, waits for it to produce data, and
+optionally settles (5 seconds by default). It then records a distinct
+5-second **no-request** window, followed immediately by three unique
+throughput requests by default. The engine server and loaded model remain
+running during the no-request window, so this is **not** the Mac's unloaded
+idle power. No Chronos requests are sent during that window; other apps and
+server background work can still affect power. On fast models, increase
+`--trials` or `--max-tokens` so the throughput phase lasts at least 5 seconds.
+
+Each valid `macmon` `sys_power` sample is time-stamped on receipt with the
+local monotonic clock. The diagnostic rejects absent/invalid values, ambiguous
+`sys_power` fallbacks, insufficient duration, incomplete boundary coverage and
+large sample gaps. It linearly interpolates at phase boundaries and integrates
+power using trapezoids to estimate joules for each window. The JSON report in
+`results/local/energy/` stores both estimates, the sample trace, phase offsets,
+macmon version, request token counts, thermal state and RAM/swap snapshots.
+The local file is not indexed by `history` or accepted by `submit`.
+
+`sys_power` is a macmon-reported SMC system-power estimate, **not** an
+independently calibrated wall-plug measurement. macmon may internally floor it
+at its component-power sum; equal values are rejected because their origin is
+ambiguous. Sampling and phase boundaries are approximate, especially over
+short windows. The reported no-request power is not subtracted from throughput
+energy, and neither value isolates model energy, proves cross-machine
+comparability, or supports a leaderboard ranking. Interpret it only as a local
+diagnostic under recorded conditions. On hardware without a valid macmon
+`sys_power` stream, the command fails without saving a misleading report.
+
+---
+
 ## Local Comparison and History
 
 `mlx-chronos compare <file1> <file2> [...]` and `mlx-chronos history` are

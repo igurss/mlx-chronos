@@ -252,6 +252,10 @@ mlx-chronos concurrency --engine vllm-mlx --model "Qwen3.5-4B-OptiQ-4bit" \
 mlx-chronos matrix --engine-model 'omlx=org/model-id' \
   --engine-model 'ollama=model-alias:tag'
 
+# Experimental local power diagnostic (requires macmon and a running server).
+# A no-request phase follows model warm-up and precedes throughput measurement.
+mlx-chronos energy --engine ollama --model 'model-alias:tag'
+
 # Enforce cooldown after a recent run in the same output directory
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
 
@@ -294,6 +298,7 @@ mlx-chronos run --engine omlx \
 | `mlx-chronos run --publishable --engine <name> --model <model> --model-url <url>` | Run only if public leaderboard settings are satisfied |
 | `mlx-chronos concurrency --engine <name> --model <model>` | Measure local aggregate throughput under simultaneous requests; never a leaderboard result |
 | `mlx-chronos matrix --engine-model <engine>=<model> ...` | Preflight and rotate local full runs across engines; not a comparability verdict |
+| `mlx-chronos energy --engine <name> --model <model>` | Experimental local macmon system-power diagnostic with a separate no-request phase; never a leaderboard result |
 | `mlx-chronos compare <file1> <file2>` | Compare sealed local results against the first file |
 | `mlx-chronos history [--limit N]` | List local results newest first |
 | `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |

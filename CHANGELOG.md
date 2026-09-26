@@ -3,6 +3,9 @@
 ## Unreleased
 
 ### Features
+- Add an experimental local-only `energy` diagnostic with a separate
+  no-request phase and macmon power trace; it makes no model-energy or
+  leaderboard claim.
 - Add a local multi-engine `matrix` sweep with explicit per-engine model IDs,
   all-engine preflight, seeded rotating order, cooldown and condition manifest;
   it does not assert artifact identity or comparable performance.
