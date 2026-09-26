@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from mlx_chronos.concurrency_profile import run_concurrency_profile
+from mlx_chronos.context_profile import run_context_profile
 from mlx_chronos.engines import OMLXEngine
 
 
@@ -28,6 +29,7 @@ def openai_mock_server(
     models_status: int = 200,
     completion_payload: dict | None = None,
     completion_status: int = 200,
+    stream_prompt_tokens: int | None = None,
 ):
     requests = []
     state = {
@@ -39,6 +41,7 @@ def openai_mock_server(
             "usage": {"completion_tokens": 7},
         },
         "completion_status": completion_status,
+        "stream_prompt_tokens": stream_prompt_tokens,
         "requests": requests,
     }
 
@@ -55,10 +58,13 @@ def openai_mock_server(
             self.wfile.write(body)
 
         def _send_stream(self) -> None:
+            usage = {"completion_tokens": 7}
+            if state["stream_prompt_tokens"] is not None:
+                usage["prompt_tokens"] = state["stream_prompt_tokens"]
             body = (
                 'data: {"choices": [{"delta": {"role": "assistant"}}]}\n\n'
                 'data: {"choices": [{"delta": {"content": "hello"}}]}\n\n'
-                'data: {"choices": [], "usage": {"completion_tokens": 7}}\n\n'
+                f'data: {json.dumps({"choices": [], "usage": usage})}\n\n'
                 "data: [DONE]\n\n"
             ).encode("utf-8")
             self.send_response(200)
@@ -162,6 +168,30 @@ def test_concurrency_profile_sends_distinct_requests_to_a_real_http_server():
     assert len(set(prompts)) == 4
     assert report["levels"][0]["waves"][0]["total_completion_tokens"] == 14
     assert report["levels"][0]["waves"][0]["cache_clear_confirmed"] is False
+
+
+def test_context_profile_reads_trailing_prompt_tokens_from_local_http_server():
+    with openai_mock_server(stream_prompt_tokens=512) as (base_url, requests):
+        engine = LocalOMLXEngine(base_url)
+        with (
+            patch("mlx_chronos.context_profile.get_engine", return_value=engine),
+            patch.object(engine, "is_installed", return_value=True),
+            patch("mlx_chronos.context_profile.sample_matrix_conditions",
+                  return_value={"thermal_state": "nominal"}),
+            patch("mlx_chronos.context_profile.detect_hardware",
+                  return_value={"chip": "Apple test", "memory_gb": 64}),
+        ):
+            report = run_context_profile(
+                "omlx", "org/test-model", buckets=["small"], trials_per_bucket=1,
+            )
+
+    bucket = report["buckets"][0]
+    assert bucket["input_tokens_raw"] == [512]
+    assert bucket["input_tokens_mean"] == 512
+    assert bucket["input_token_count_source"] == "engine"
+    posts = [r for r in requests if r["method"] == "POST"]
+    assert len(posts) == 3  # preflight, warm-up, measured request
+    assert posts[-1]["payload"]["stream_options"] == {"include_usage": True}
 
 
 def test_mock_openai_server_malformed_model_response_raises():

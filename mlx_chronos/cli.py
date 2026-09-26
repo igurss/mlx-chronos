@@ -31,6 +31,14 @@ from mlx_chronos.concurrency_profile import (
     MIN_TRIALS_PER_LEVEL,
     run_concurrency_profile,
 )
+from mlx_chronos.context_profile import (
+    CONTEXT_LENGTH_BUCKETS,
+    DEFAULT_CONTEXT_BUCKETS,
+    DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    DEFAULT_TRIALS_PER_BUCKET,
+    run_context_profile,
+    save_context_reports,
+)
 from mlx_chronos.detect import detect_hardware, get_benchmark_condition_warnings
 from mlx_chronos.energy_profile import (
     DEFAULT_ENERGY_MAX_TOKENS,
@@ -916,6 +924,45 @@ def cmd_energy(args):
     logger.info("Local diagnostic saved to: %s", path)
 
 
+def cmd_context(args):
+    """Measure local TTFT against approximate character-length buckets."""
+    buckets = (
+        None if args.buckets is None
+        else [part.strip() for part in args.buckets.split(",") if part.strip()]
+    )
+    try:
+        report = run_context_profile(
+            args.engine, args.model,
+            model_quantization=args.quantization,
+            model_reference_url=args.model_url,
+            buckets=buckets,
+            trials_per_bucket=args.trials_per_bucket,
+            connection_mode=args.connection_mode,
+            request_timeout_seconds=args.request_timeout_seconds,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    except (RuntimeError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    output_dir = args.output_dir or Path.cwd() / "results" / "local" / "context"
+    try:
+        paths = save_context_reports(report, output_dir, args.format)
+    except (RuntimeError, ValueError, OSError) as exc:
+        print(f"Error: could not save context report: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    for bucket in report["buckets"]:
+        logger.info(
+            "%s: %.3f s mean TTFT (%s input tokens)",
+            bucket["label"], bucket["ttft_seconds"]["mean"],
+            bucket["input_token_count_source"],
+        )
+    logger.warning("%s", report["warning"])
+    for path in paths:
+        logger.info("Local diagnostic saved to: %s", path)
+
+
 def cmd_engines(args):
     """List available engines and their status."""
     logger.info("\nAvailable engines:\n")
@@ -1738,6 +1785,38 @@ def main():
         help="Local report directory (default: results/local/energy)",
     )
     energy_parser.set_defaults(func=cmd_energy)
+
+    # --- context (local diagnostic, never a public benchmark result) ---
+    context_parser = subparsers.add_parser(
+        "context",
+        help="Measure TTFT versus approximate input length (local only)",
+    )
+    context_parser.add_argument("--engine", choices=list(ENGINES), required=True)
+    context_parser.add_argument("--model", required=True)
+    context_parser.add_argument("--quantization", default=None)
+    context_parser.add_argument("--model-url", default=None)
+    context_parser.add_argument(
+        "--buckets", default=None,
+        help=("Comma-separated buckets; default " + ",".join(DEFAULT_CONTEXT_BUCKETS)
+              + "; explicit choices: " + ",".join(CONTEXT_LENGTH_BUCKETS)),
+    )
+    context_parser.add_argument(
+        "--trials-per-bucket", type=int, default=DEFAULT_TRIALS_PER_BUCKET,
+        help="Unique-prompt trials per bucket (1-10; default: 3)",
+    )
+    context_parser.add_argument(
+        "--connection-mode", choices=sorted(VALID_CONNECTION_MODES),
+        default=CONNECTION_MODE_PERSISTENT,
+    )
+    context_parser.add_argument(
+        "--request-timeout-seconds", type=float,
+        default=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    )
+    context_parser.add_argument(
+        "--format", choices=("json", "markdown", "all"), default="all",
+    )
+    context_parser.add_argument("--output-dir", type=Path, default=None)
+    context_parser.set_defaults(func=cmd_context)
 
     # --- doctor ---
     doctor_parser = subparsers.add_parser(
