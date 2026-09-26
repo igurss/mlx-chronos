@@ -164,6 +164,17 @@ def test_update_leaderboard_workflow_uses_publishable_result_policy():
     assert "python - <<'EOF'" not in text
 
 
+def test_update_leaderboard_requests_pages_build_after_bot_push():
+    text = workflow_text("update_leaderboard.yml")
+
+    assert "pages: write" in text
+    assert "GH_TOKEN: ${{ github.token }}" in text
+    assert 'gh api --method POST "repos/${GITHUB_REPOSITORY}/pages/builds"' in text
+    assert text.index("bash .github/scripts/update_leaderboard_index.sh") < text.index(
+        "gh api --method POST"
+    )
+
+
 def test_result_workflows_use_single_error_handler():
     for name in ("update_leaderboard.yml", "validate_result.yml"):
         text = workflow_text(name)

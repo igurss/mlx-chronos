@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 concurrency:
   group: update-leaderboard-${{ github.ref }}
@@ -28,3 +29,10 @@ jobs:
 
       - name: Regenerate and publish results index
         run: bash .github/scripts/update_leaderboard_index.sh
+
+      # A push made with GITHUB_TOKEN does not itself trigger a Pages build.
+      # This repository publishes main/docs with the legacy branch source.
+      - name: Request Pages build for the latest main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/${GITHUB_REPOSITORY}/pages/builds"
