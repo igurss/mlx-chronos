@@ -218,9 +218,13 @@ exact counts. Missing or unusable usage can trigger a local word estimate;
 diagnostics that require exact completion counts, such as `concurrency`, fail
 instead of accepting that estimate.
 
-If an engine rejects `stream_options.include_usage`, mlx-Chronos retries the
-same streaming request without that option and records the run as a local
-fallback instead of failing the whole benchmark.
+If an engine explicitly rejects `stream_options.include_usage`, the standard
+throughput measurement allows one compatibility attempt without that option,
+with a fresh timer. Token-count provenance depends on the accepted response:
+exact integer usage is retained if the server still supplies it; otherwise
+the word estimate makes the run local-only. Removing the unsupported option
+does not by itself establish or invalidate exact token counts. `concurrency`
+disables this compatibility retry and stops on the unsupported request.
 
 When the final streaming choice supplies `finish_reason`, it is recorded per
 throughput trial in `trials.finish_reasons_raw`. This is diagnostic provenance:
