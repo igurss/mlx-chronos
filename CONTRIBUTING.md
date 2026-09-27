@@ -3,9 +3,10 @@
 Thanks for helping improve mlx-Chronos. Contributions usually fall into two
 paths: submitting benchmark results or improving the project itself.
 
-This guide follows `main`. Check [Unreleased](CHANGELOG.md#unreleased) for
-features not yet in the published package, and use the
-[source installation](README.md#development-version-from-main) when testing them.
+This guide follows `main`. Check the [changelog](CHANGELOG.md) for changes
+after the latest release; use the
+[source installation](README.md#development-version-from-main) to test those
+changes before publication.
 
 ## Contents
 

@@ -4,7 +4,7 @@ This document explains what mlx-Chronos measures, how it measures it, and how
 to interpret the resulting JSON. Reproducibility and transparency are the main
 goals.
 
-This document follows the current `main` branch. Features in
+This document follows the current `main` branch. Changes in
 [Unreleased](../CHANGELOG.md#unreleased) require the
 [development installation](../README.md#development-version-from-main) until
 they are included in a published release.

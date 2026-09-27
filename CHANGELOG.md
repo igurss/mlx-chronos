@@ -2,10 +2,15 @@
 
 ## Unreleased
 
-Changes on `main` since the `0.4.1` tag. These entries describe implemented
-behavior, not a published version or a promise of comparable results from the
-local diagnostics. See [README](README.md#development-version-from-main) for
-source installation and [Methodology](docs/methodology.md) for limits.
+No changes since `0.5.0`.
+
+## [0.5.0] — 2026-09-27
+
+Minor release adding local diagnostics, experimental MLX-only LM Studio
+support, more explicit benchmark provenance, and leaderboard improvements.
+Baseline and sustained remain the public benchmark profiles. The new local
+diagnostics have separate interpretation limits described in the
+[methodology](docs/methodology.md).
 
 ### Features
 

@@ -10,9 +10,10 @@
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 
 > **Documentation scope**
-> This README describes the current `main` branch, including changes not yet
-> released on PyPI. See [Current Release](#current-release),
-> [Unreleased changes](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md#unreleased), and the
+> This README describes the current `main` branch. See
+> [Current Release](#current-release) for the published version,
+> the [changelog](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md)
+> for its full change history, and the
 > [source installation instructions](#development-version-from-main) below.
 
 ## Start Here
@@ -82,8 +83,8 @@ The public leaderboard is available at
 
 | Metric | Meaning | Public comparison use |
 | --- | --- | --- |
-| TTFT cold | Time from request start to first non-empty streamed token with cache-avoiding prompts | Yes |
-| TTFT cached | Time to first token after a cache-priming call with the same prompt | Yes |
+| TTFT cold | Request start to first streamed content or terminal token-limit signal, with cache-avoiding prompts | Yes |
+| TTFT cached | Same timing after a cache-priming call with the fixed prompt | Yes |
 | Request throughput | Completion tokens divided by full client-observed request time | Yes, when engine token usage is reliable |
 | Sustained throughput | Optional long throughput run for heat buildup and late-run degradation | Yes, under the sustained profile |
 | System RAM peak | Peak total Mac RAM in use during the benchmark | Stress context |
@@ -95,16 +96,12 @@ The public leaderboard is available at
 
 ### Current Release
 
-`0.4.1` fixes Low Power Mode detection on newer MacBook Pro hardware and
-accepts terminal `finish_reason=length` responses as a valid TTFT signal for
-reasoning models.
-
-The changes in [Unreleased](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md#unreleased) are on `main`, not part of
-the `0.4.1` tag: experimental LM Studio support; `concurrency`, `matrix`,
-`context` and `energy`; `run --repeat`, `compare`, `history` and contributor
-attribution; RAM/swap and server-configuration diagnostics; leaderboard
-exports/chart; and the subsequent measurement, validation and CI fixes.
-Installing a published release does not select the development branch.
+`0.5.0` adds local `concurrency`, `matrix`, `context` and experimental `energy`
+diagnostics, plus experimental MLX-only LM Studio support. It also adds
+`run --repeat`, local `compare` and `history`, opt-in contributor attribution,
+RAM/swap and server-setting context, and leaderboard exports and a comparison
+chart. Measurement, validation and CI fixes are detailed in the
+[changelog](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md).
 
 ---
 
@@ -171,7 +168,7 @@ Python environment as mlx-Chronos when preparing leaderboard submissions.
 
 #### Development Version from Main
 
-To use the unreleased features documented here, install the source in a separate
+To test the exact current `main` revision, install the source in a separate
 environment (Git is required):
 
 ```bash
@@ -183,10 +180,10 @@ python -m pip install ".[thermal]"
 git rev-parse HEAD
 ```
 
-Record that commit SHA for reproducibility. Until the version is bumped,
-`--version` alone does not distinguish `main` from the published `0.4.1`.
-`mlx-chronos upgrade` checks PyPI; it does not update a Git checkout. For source
-development and test dependencies, see [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md#setup).
+Record that commit SHA for reproducibility: `--version` identifies the package
+release but not the exact source commit. `mlx-chronos upgrade` checks PyPI; it
+does not update a Git checkout. For source development and test dependencies,
+see [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md#setup).
 
 ### 3. Check Version and Updates
 

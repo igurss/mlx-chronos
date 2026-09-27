@@ -55,8 +55,8 @@ EXAMPLE_RESULT = {
         "finish_reasons_raw": ["length", "length", "length", "length", "length"],
     },
     "meta": {
-        "chronos_version": "0.4.1",
-        "timestamp": "2026-06-08T12:00:00Z",
+        "chronos_version": "0.5.0",
+        "timestamp": "2026-09-27T12:00:00Z",
         "benchmark_profile": "baseline",
         "ram_sample_interval_seconds": 0.05,
         "elapsed_since_last_benchmark_seconds": None,
@@ -180,6 +180,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "d2c3ec0d221ab33d25d4c4e8c389e279335b0308692e7b4e51c83e98111e835b",
+        "digest": "6d748128bc62e70a7f2a032983cd92085ef47b3da4f6286090b74eaeededbea9",
     },
 }
