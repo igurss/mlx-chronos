@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+Changes on `main` since the `0.4.1` tag. These entries describe implemented
+behavior, not a published version or a promise of comparable results from the
+local diagnostics. See [README](README.md#development-version-from-main) for
+source installation and [Methodology](docs/methodology.md) for limits.
+
 ### Features
+
 - Record bounded, sealed server settings with separate API-observed and
   operator-declared values; unknown settings remain unknown and do not change
   leaderboard grouping.
@@ -26,8 +32,21 @@
   runtime that serves a probe request.
 - Add filtered leaderboard CSV/JSON export, a request-throughput comparison
   chart, and link-preview metadata.
+- Record optional Rapid-MLX cache-clear and text-prefix-hit evidence and
+  per-trial server finish reasons.
 
 ### Fixes and maintenance
+
+- Reject non-finite timing inputs (`NaN`, positive and negative infinity)
+  before waits, timeouts, sampling and retry arithmetic; apply the checks to
+  CLI/wizard and the affected direct APIs.
+- Add a read-only `python -m mlx_chronos.leaderboard --check` freshness check
+  and enforce it in CI.
+- Require exact Rapid-MLX model IDs returned by `/v1/models` instead of
+  resolving potentially ambiguous short suffixes.
+- Accept an LM Studio MLX runtime that lists `safetensors` in
+  `supported_formats`, while still requiring both MLX model compatibility
+  and an MLX-named active runtime.
 - Add a manual release rehearsal that builds, downloads and installs wheel and
   source distributions on Python 3.10 and 3.14; only tag pushes can publish to
   PyPI, after the package-installation checks pass.
@@ -40,9 +59,17 @@
   and update the GitHub Actions used by CI and release workflows.
 - Regenerate the leaderboard index from the latest `main` and retry a rejected
   push only when `main` actually advanced.
-- Correct the Compare table emphasis and sustained-throughput early window.
-- Keep anonymous inbox submissions unattributed by default.
+- Make the Compare table emphasize request throughput consistently with its
+  primary metric, rather than emphasizing decode throughput.
+- Exclude prefill from the sustained-throughput early window and skip windows
+  that cross a token-count-source transition.
+- Stop using the maintainer's email as the fallback inbox contact; keep
+  optional sealed contributor attribution separate from the contact address.
 - Check result-submission PR scope before installing code from the PR in CI.
+- Make shared test helpers importable in clean CI environments.
+- Align README, contributor and release instructions, methodology and
+  leaderboard copy with the unreleased features, public-validation rules and
+  experimental scope; distinguish source installation from the PyPI release.
 
 ## [0.4.1] — 2026-07-21
 
