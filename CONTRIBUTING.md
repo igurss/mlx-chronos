@@ -3,6 +3,10 @@
 Thanks for helping improve mlx-Chronos. Contributions usually fall into two
 paths: submitting benchmark results or improving the project itself.
 
+This guide follows `main`. Check [Unreleased](CHANGELOG.md#unreleased) for
+features not yet in the published package, and use the
+[source installation](README.md#development-version-from-main) when testing them.
+
 ## Contents
 
 - [Ways to Contribute](#ways-to-contribute)
@@ -10,6 +14,7 @@ paths: submitting benchmark results or improving the project itself.
 - [Contribute Code or Docs](#contribute-code-or-docs)
 - [Open an Issue](#open-an-issue)
 - [Code of Conduct](#code-of-conduct)
+- [Releases](#releases)
 
 ---
 
@@ -34,11 +39,12 @@ result submission, one fix, or one feature.
 
 | Requirement | Details |
 | --- | --- |
-| Hardware | Apple Silicon Mac with an M-series chip |
+| Hardware | Apple Silicon Mac with an M-series chip, `arm64`, and a valid macOS version |
 | Python | Python 3.10 or newer |
-| Engine | One supported engine installed and running |
+| Engine | One supported engine installed and running, with a known engine version |
 | Power mode | Low Power Mode must be off for public leaderboard rows |
 | Token counts | Public rows must use `usage.completion_tokens` |
+| Monitoring | Continuous Foundation thermal sampling and error-free RAM/RSS monitoring |
 
 Supported engines:
 
@@ -47,7 +53,8 @@ Supported engines:
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
 - [vllm-mlx](https://github.com/waybarrios/vllm-mlx)
 - [mlx-lm](https://github.com/ml-explore/mlx-lm)
-- [LM Studio](https://lmstudio.ai), MLX runtime only (see the note below)
+- [LM Studio](https://lmstudio.ai), experimental MLX-runtime-only support
+  (see the note below)
 
 ### 1. Install mlx-Chronos
 
@@ -55,11 +62,15 @@ Supported engines:
 pip install mlx-chronos
 ```
 
-Optional thermal-state support:
+Thermal-state support is optional for local runs but required for new public
+results using the Foundation monitor:
 
 ```bash
 pip install "mlx-chronos[thermal]"
 ```
+
+These commands install from PyPI. For unreleased features, follow the
+[development installation](README.md#development-version-from-main) instead.
 
 ### 2. Start an Engine Server
 
@@ -82,16 +93,22 @@ mlx_lm.server --model /path/to/model --port 8080
 ollama serve
 
 # LM Studio (desktop app) — from the Developer tab, start the server, and load
-# an MLX model. Headless equivalent:
+# an MLX model. This CLI command starts only the server, not a model:
 lms server start --port 1234
 ```
 
-> **LM Studio: MLX only**
+> **LM Studio: experimental, MLX only**
 > LM Studio also serves llama.cpp/GGUF models. mlx-Chronos checks both the
 > model's `compatibility_type` and the runtime that actually answered a probe
 > request, and rejects anything that is not confirmed MLX end to end. Load an
 > MLX build (for example from the `mlx-community` publisher in LM Studio's
 > model browser) and make sure its runtime is set to MLX before benchmarking.
+> `supported_formats: ["safetensors"]` is valid alongside an MLX runtime name;
+> the format by itself is not runtime proof. Starting the server without a
+> usable model is enough to test reachability, not to verify inference or the
+> MLX runtime. Use `models --engine lmstudio` and then
+> `validate --engine lmstudio --model <exact-id>` to check an actual model.
+> See [the gate and API scope](docs/methodology.md#lm-studio-mlx-only-gate).
 
 Default OpenAI-compatible endpoints:
 
@@ -107,10 +124,13 @@ Default OpenAI-compatible endpoints:
 Override ports with environment variables:
 
 ```bash
-MLX_CHRONOS_VLLM_MLX_PORT=8003
-MLX_CHRONOS_MLX_LM_PORT=8002
-MLX_CHRONOS_LMSTUDIO_PORT=1235
+export MLX_CHRONOS_VLLM_MLX_PORT=8003
+export MLX_CHRONOS_MLX_LM_PORT=8002
+export MLX_CHRONOS_LMSTUDIO_PORT=1235
 ```
+
+Set only the variables for servers you actually moved. These values tell
+mlx-Chronos where to connect; they do not reconfigure or start those servers.
 
 > **Port note**
 > oMLX and vllm-mlx both default to port `8000`. Run only one of them on that
@@ -135,7 +155,7 @@ listing, and an optional tiny completion request.
 ### 4. Run the Benchmark
 
 ```bash
-mlx-chronos run --engine omlx \
+mlx-chronos run --publishable --engine omlx \
   --model "Qwen3.5-4B-OptiQ-4bit" \
   --model-url "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit" \
   --trials 5
@@ -144,9 +164,17 @@ mlx-chronos run --engine omlx \
 The result JSON is written to `results/local/`. Use `--format all` if you also
 want a Markdown summary for local reading.
 
+`--publishable` performs preflight and rejects incompatible requested settings
+before measurement; final eligibility still depends on the measured result.
+It requires JSON output (`json` or `all`), not Markdown alone. Add
+`--submitted-by YOUR_HANDLE` if you want optional public contributor credit;
+the wizard offers the same choice.
+
 Local runs may use custom trial counts, token bounds, profiles, cooldown,
 connection mode, and notes. Keep non-standard runs in `results/local/` for your
-own diagnostics.
+own diagnostics and omit `--publishable` for them. The separate `concurrency`,
+`context` and `energy` reports and the `matrix` manifest are not public result
+files; see [Local Diagnostics](README.md#local-diagnostics).
 
 ### 5. Check Public Eligibility
 
@@ -170,10 +198,16 @@ Additional public requirements:
 - `model.reference_url` must point to the model used for the run.
 - `meta.warmup_failures` must be `0`.
 - `hardware.low_power_mode` must be `off`.
+- Engine version and hardware identity must satisfy the requirements above;
+  timestamps may not be more than 10 minutes in the future.
+- RAM/RSS and thermal monitors must record no sampling errors, and the thermal
+  monitor must use Foundation with at least one sample.
 - Benchmark protocol metadata must remain unchanged.
 - Generation parameters must remain deterministic: `temperature=0.0`,
   `top_p=1.0`.
 - Throughput timing fields and raw trial arrays must not be edited by hand.
+- Raw decode timings must allow reconstruction, and the result must not
+  duplicate an archived integrity digest or run identity.
 
 Model pages can change over time when maintainers update files or tags.
 
@@ -190,8 +224,9 @@ release versions.
 1. Copy the checked JSON into `results/submitted/` with a clear filename.
 2. Open a pull request that changes only that JSON file.
 3. GitHub Actions labels the PR as `result-submission`.
-4. CI validates schema, raw trials, integrity seal, public-profile rules, and
-   PR scope.
+4. The result-validation workflow checks PR scope and rejects deletions before
+   installing the package, then validates schema, raw trials, integrity and
+   public-profile rules.
 5. A maintainer reviews the result before merge.
 
 > **Do not edit result JSON by hand**
@@ -207,6 +242,13 @@ inbox:
 ```bash
 mlx-chronos submit --file results/local/your-result.json
 ```
+
+Add `--email you@example.com` (or set `MLX_CHRONOS_SUBMITTER_EMAIL`) if you
+want the maintainer to be able to reply. Without it, the inbox uses an anonymous
+placeholder contact, never the maintainer's address. This does **not** remove
+`meta.submitted_by` or other identifying information already in the attached
+JSON. The public handle is independently set during `run`, not inferred from
+the contact email, and it is not proof of GitHub account ownership.
 
 Maintainers can override the inbox endpoint with `--endpoint` or
 `MLX_CHRONOS_SUBMIT_ENDPOINT`.
@@ -224,9 +266,9 @@ details.
 ### Setup
 
 ```bash
-git clone https://github.com/igurss/mlx-chronos.git
+git clone --branch main https://github.com/igurss/mlx-chronos.git
 cd mlx-chronos
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[test]"
 ```
@@ -240,14 +282,42 @@ pip install -e ".[test]"
 5. Run the relevant tests locally.
 6. Open a pull request back to `igurss/mlx-chronos`.
 
-### Test Command
+### Local Checks
 
 ```bash
 python -m pytest
 ```
 
 For targeted work, run the smallest relevant subset first, then the full suite
-before opening the PR when practical.
+before opening the PR when practical. To run the other CI quality gates from
+the repository root (Node.js is needed for the frontend tests):
+
+```bash
+python -m ruff check mlx_chronos tests
+python -m mypy
+python -m pytest --cov --cov-report=term-missing
+python -m mlx_chronos.leaderboard --check
+node --test tests/frontend.test.cjs
+git diff --check
+```
+
+Coverage must meet the threshold in `pyproject.toml` (currently 78%). The
+leaderboard `--check` command is read-only: it fails if the checked-in index
+differs from the validated submitted archive. For an intentional archive or
+index-format change, regenerate with `python -m mlx_chronos.leaderboard`, review
+the generated diff, and run `--check` again. Keep generated-data work separate
+from unrelated source changes.
+
+CI tests Python 3.10 through 3.14 on macOS; one local Python run does not replace
+that matrix. Mock-engine tests do not prove every real server configuration.
+Record the engine/runtime version, model, hardware, command and scope of any
+real-engine smoke test, and never submit a short diagnostic as a public run.
+
+When changing documented behavior, update README examples, the relevant
+methodology section and `CHANGELOG.md` under **Unreleased**. Check local links,
+heading anchors and CLI options as well as prose; no version bump is needed
+for an ordinary unreleased change. Packaging and publication checks are in the
+[release checklist](docs/releasing.md).
 
 ### Guidelines
 
