@@ -4,6 +4,11 @@ This document explains what mlx-Chronos measures, how it measures it, and how
 to interpret the resulting JSON. Reproducibility and transparency are the main
 goals.
 
+This document follows the current `main` branch. Features in
+[Unreleased](../CHANGELOG.md#unreleased) require the
+[development installation](../README.md#development-version-from-main) until
+they are included in a published release.
+
 ## Contents
 
 - [Design Goals](#design-goals)
@@ -49,7 +54,9 @@ The protocol is built around four principles:
 | Cached TTFT | `metrics.ttft_cached` | Request start to first token after one cache-priming call | Yes |
 | Request throughput | `metrics.tokens_per_second`, `metrics.request_tokens_per_second` | Completion tokens divided by full client-observed request time | Yes, with usage-based token counts |
 | Decode throughput | `metrics.decode_tokens_per_second` | Completion tokens after the first, divided by first-token-to-stream-end time | Context metric |
-| System RAM peak | `metrics.system_ram_peak_gb`, `metrics.system_ram_peak_percent` | Peak total Mac RAM in use during the benchmark | Yes |
+| System RAM peak | `metrics.system_ram_peak_gb`, `metrics.system_ram_peak_percent` | Peak total Mac RAM in use during the benchmark | Whole-device stress context |
+| RAM baseline and rise | `metrics.system_ram_baseline_gb`, `metrics.system_ram_delta_gb` | First sample and peak minus first sample | Diagnostic only; not engine memory |
+| Swap growth | `metrics.swap_growth_gb` | Largest rise from the first valid system swap sample | Diagnostic; warning at 0.5 GB |
 | Engine RSS | `metrics.ram_peak_gb` with `metrics.ram_measurement_method=process_rss` | Post-warmup server-process RSS when identifiable | Diagnostic only |
 | Thermal monitor | `meta.thermal_monitor` | Start/end/worst thermal state and affected phases | Context metric |
 | Phase timings | `meta.phase_timings_seconds` | Wall time spent in benchmark phases | Context metric |
@@ -69,6 +76,11 @@ first non-empty streamed content, reasoning, or text delta. Whitespace-only
 streamed text counts because it is still generated output observed from the
 engine.
 
+For the one-token TTFT request, a terminal `finish_reason=length` without
+visible content is also accepted. Some reasoning models consume the token
+budget without emitting text; that terminal signal is not a measurement of
+time to visible text. The same rule applies to cached TTFT and `context`.
+
 Implementation details:
 
 - Timing uses Python's monotonic high-resolution performance counter, so
@@ -81,9 +93,10 @@ Implementation details:
 - Prompt text is recorded in `meta.benchmark_protocol`.
 
 Cold prompts are fixed protocol text, not tokenizer-normalized strings. Input
-length can vary slightly by tokenizer and engine. Input token counts remain
-`unavailable` until mlx-Chronos can obtain them without adding unreliable
-engine-specific estimates.
+length can vary slightly by tokenizer and engine. In the standard `run`
+protocol, input token counts remain `unavailable`. The separate local
+[`context` diagnostic](#local-context-diagnostic) can retain optional
+engine-reported input counts; it does not change the standard protocol.
 
 ### Cached TTFT
 
@@ -198,6 +211,12 @@ This lets one request expose both time-to-first-content and final
 Leaderboard submissions must use `usage.completion_tokens`. Local runs that
 fall back to a word-based estimate are marked as `word_fallback` or `mixed` in
 `metrics.token_count_source` and are not considered public-comparable.
+
+Streamed token counts must be positive JSON integers. Booleans, strings,
+fractional values and non-finite numbers are not converted into apparently
+exact counts. Missing or unusable usage can trigger a local word estimate;
+diagnostics that require exact completion counts, such as `concurrency`, fail
+instead of accepting that estimate.
 
 If an engine rejects `stream_options.include_usage`, mlx-Chronos retries the
 same streaming request without that option and records the run as a local
@@ -324,7 +343,7 @@ people most want to look up. The leaderboard marks affected rows with a
 The default sampling interval is 50ms:
 
 ```bash
-mlx-chronos run ... --ram-sample-interval 0.05
+mlx-chronos run --engine ollama --model 'model-alias:tag' --ram-sample-interval 0.05
 ```
 
 Lower values can catch shorter spikes but add measurement overhead. Higher
@@ -339,7 +358,8 @@ observed RSS peak.
 
 This metric is diagnostic only. It is not a public comparison metric because it
 may not include model weights or Metal allocations mapped outside ordinary
-process RSS. Use System RAM Peak for memory comparison.
+process RSS. Use System RAM Peak to describe whole-device occupancy, not to
+rank the engines' own memory footprints.
 
 Child processes are resolved when RSS sampling starts and refreshed
 periodically during long runs. That allows late-spawned workers to be included
@@ -461,9 +481,9 @@ still record `unknown` when detection is unavailable.
 | Ollama | server `/api/version`, then `ollama --version` fallback |
 | LM Studio | version of the runtime that answered the MLX backend probe below |
 
-If detection fails, the result records `unknown` instead of blocking the run.
-Results also set `meta.engine_version_warning=true` so reports and the public
-leaderboard can call out the comparability risk.
+If detection fails, a local result may record `unknown` rather than blocking
+measurement. `meta.engine_version_warning=true` calls out that uncertainty in
+reports. Public validation rejects an unknown engine version.
 
 ### Serving Configuration
 
@@ -474,6 +494,22 @@ while `declared` values were supplied by the operator with repeatable
 configure the server. Conflicting observed and declared values remain separate
 and visible instead of being merged under a misleading common source.
 
+For example, after checking the server yourself:
+
+```bash
+mlx-chronos run --engine ollama --model 'model-alias:tag' \
+  --engine-opt allocated_context_length=8192 \
+  --engine-opt flash_attention=true
+```
+
+Keys are lowercased and must match `[a-z0-9][a-z0-9_.-]{0,63}`. The CLI parses
+booleans, integers and floating-point values; non-finite numbers are rejected,
+and other values remain text. Duplicate declared keys are rejected. There are
+at most 24 entries across the two maps; string values are limited to 200
+characters and cannot contain
+control characters. Do not include secrets or private paths: declarations are
+stored in the result and become public if that result is submitted.
+
 Ollama's `/api/ps` can report the **allocated** context length of an exactly
 matched running model. The model capacity in `/api/show` is not substituted for
 it. LM Studio's optional `/api/v1/models` loaded-instance configuration can
@@ -482,6 +518,11 @@ Some optional fields are backend-specific and may be absent for MLX; their
 absence is not filled with a default. This read does not replace the existing
 v0 model-format and active-runtime checks. Unsupported, ambiguous or
 inaccessible APIs yield no observed value, not a guessed setting.
+
+The current observed keys are `allocated_context_length` for Ollama and, when
+provided for one unambiguous MLX instance, `context_length`, `eval_batch_size`,
+`parallel`, `flash_attention` and `offload_kv_cache_to_gpu` for LM Studio.
+Other engines currently contribute no API-observed serving settings.
 
 The field is bounded and part of the integrity-sealed result. Historical results
 without it remain valid. The leaderboard displays it in row details, but does
@@ -529,8 +570,8 @@ measured call:
    can report the latter as the weight format. `safetensors` alone is not
    evidence of an MLX runtime. This describes what actually answered.
 
-A GGUF model is rejected at step 1 without ever reaching step 2. An MLX model
-whose runtime was switched to llama.cpp inside LM Studio is rejected at step 2.
+A GGUF model is rejected at step 1 without ever reaching step 2. Any probe
+answered by a non-MLX runtime is rejected at step 2.
 `engine.version` for LM Studio records the MLX runtime version returned by
 that probe, not the LM Studio application version, because the runtime is what
 determines the measured performance.
@@ -553,6 +594,11 @@ per level, 60 requested maximum output tokens per request, and one additional
 unmeasured warm-up wave immediately before each measured wave. Thus the
 default workload sends 45 warm-up and 45 measured requests. Start with low
 levels if memory headroom is limited.
+
+`--levels` accepts distinct integers from 1 to 32, `--trials-per-level` accepts
+1 to 10 measured waves per level, and `--request-max-tokens` controls each
+request's output bound. JSON and Markdown are both written by default;
+`--format` and `--output-dir` can change report output.
 
 Each worker waits on a barrier before starting its request. The wave clock
 starts when the barrier releases; it excludes thread creation and queued
@@ -628,9 +674,10 @@ experimentation but are marked as position-unbalanced. This balances *position*,
 not every pairwise carryover or changing background activity. One full standard
 benchmark is run per engine per round, using the same requested protocol
 settings: with N engines the default is N² full benchmarks and N² cooldown
-intervals including the one after preflight. Inspect the printed plan before
-allowing a long sweep to proceed. The command stops at the first measured
-failure instead of presenting a partial sweep as complete.
+intervals including the one after preflight. Plan the workload before invoking
+the command: it prints the schedule but does not wait for interactive
+confirmation. The command stops at the first measured failure instead of
+presenting a partial sweep as complete.
 
 Standard sealed result files and an incrementally updated `matrix_*.json`
 manifest are saved under `results/local/matrix/` by default. The manifest
@@ -656,6 +703,11 @@ are `small` (2,000 characters) and `medium` (8,000). `large` (32,000) and
 `--buckets`; long requests may consume substantial RAM, time out, exceed the
 model's context limit, or be silently truncated by a server. The command
 cannot verify a uniform context limit across all supported engines.
+
+`--trials-per-bucket` defaults to 3 (allowed range 1–10), and
+`--request-timeout-seconds` defaults to 120. JSON and Markdown are both written
+by default; `--format` can select only one. A failed trial aborts the diagnostic
+instead of being silently excluded from an apparently complete report.
 
 Each trial starts with a run/bucket/trial-specific marker before the rotating
 filler text. Even at the maximum of ten trials in each of four buckets, no two
@@ -696,11 +748,15 @@ The command validates model access, performs one short warm-up completion,
 starts one long-lived `macmon pipe` sampler, waits for it to produce data, and
 optionally settles (5 seconds by default). It then records a distinct
 5-second **no-request** window, followed immediately by three unique
-throughput requests by default. The engine server and loaded model remain
-running during the no-request window, so this is **not** the Mac's unloaded
-idle power. No Chronos requests are sent during that window; other apps and
-server background work can still affect power. On fast models, increase
-`--trials` or `--max-tokens` so the throughput phase lasts at least 5 seconds.
+throughput requests of at most 100 completion tokens each by default. The
+default macmon sampling interval is 500 milliseconds. The engine server and
+loaded model remain running during the no-request window, so this is **not**
+the Mac's unloaded idle power. No Chronos requests are sent during that window;
+other apps and server background work can still affect power. On fast models, increase
+`--trials` or `--max-tokens` so the throughput phase lasts long enough: both
+measured windows must span at least the greater of 5 seconds and eight requested
+sampling intervals. `--trials` accepts 1–30; `--idle-seconds`,
+`--settle-seconds` and `--sample-interval-ms` control the windows and sampler.
 
 Each valid `macmon` `sys_power` sample is time-stamped on receipt with the
 local monotonic clock. The diagnostic rejects absent/invalid values, ambiguous
@@ -736,23 +792,33 @@ metric-by-metric table with each file's value and its percentage delta against t
 file, which is always the baseline. A metric missing from one file (for
 example, an older result with no `decode_tokens_per_second`, or one taken
 before `system_ram_delta_gb` existed) shows as `-` rather than a fabricated
-number, and its delta shows as unavailable rather than 0%. Warnings flag
-different hardware, model/quantization, benchmark profiles or protocol; the
+number, and its delta shows as unavailable rather than 0%. A zero baseline
+also has no percentage delta. Warnings flag differences in chip/RAM, model
+reference URL/quantization, benchmark profile or protocol; the
 percentage is descriptive and does not establish a causal performance gain.
+These warnings are not an exhaustive equivalence check: inspect model names,
+formats, engine versions and serving settings as well, even with no warning.
 System RAM rise is a whole-device diagnostic, not memory attributable to the
 engine.
 
-`history` lists every result file directly under `results/local/` (not its
-`context/`, `concurrency/` or `matrix/` subdirectories), newest first. A file that
-fails to parse, or fails schema or integrity validation, is reported as skipped
-by name rather than silently vanishing — one corrupted file should never hide every
-other result.
+`history` lists valid JSON results directly under `results/local/`, newest
+first, without recursing into `context/`, `concurrency/`, `energy/` or `matrix/`.
+Use `--output-dir` to select another directory and `--limit N` to limit the
+display (default: all). A file that cannot be read as UTF-8 JSON or fails schema
+or integrity validation is reported as skipped by name rather than silently
+vanishing. Selecting a matrix directory can list its sealed results, while its
+manifest is correctly reported as an invalid benchmark result.
 
 ---
 
 ## Trial Protocol
 
 ### Baseline Defaults
+
+Timing inputs such as timeout, cooldown and sampling interval must be finite;
+`NaN` and infinity are rejected rather than used in waits or arithmetic.
+Each option also enforces its positive or non-negative range. Trial counts
+and output bounds must satisfy the selected command's limits.
 
 | Parameter | Value |
 | --- | --- |
@@ -812,6 +878,13 @@ opt-in, validated against GitHub's own handle format, and shown as a column on
 the public leaderboard. Leaving it out is always allowed and never affects
 whether a result is publishable.
 
+The wizard also offers this field and preserves it in the equivalent command.
+It is a self-declared handle, not proof of account ownership. Inbox contact
+email (`submit --email` or `MLX_CHRONOS_SUBMITTER_EMAIL`) is separate from the
+sealed attribution. Without an email, the inbox uses an anonymous placeholder,
+but any handle already in the JSON remains visible. Never edit sealed results
+to add, remove or change attribution.
+
 ### Integrity Metadata
 
 Results include a top-level `integrity` seal. The seal is a SHA-256 digest over
@@ -840,21 +913,38 @@ Public submissions must also:
 
 - use `usage.completion_tokens` token counts;
 - include `model.reference_url`, a link to the model used;
+- report a known engine version, Apple M-series chip, `arm64` architecture and
+  valid macOS version, with a timestamp no more than 10 minutes in the future;
 - complete all warmup calls without failures (`warmup_failures=0`);
 - report Low Power Mode as `off`;
+- include error-free RAM/RSS monitor diagnostics and continuous Foundation
+  thermal sampling, plus reconstructible raw decode timing;
 - use standard deterministic generation parameters;
 - keep exact standard protocol metadata;
 - pass schema validation;
 - pass raw-trial consistency validation;
 - pass integrity-seal validation;
+- avoid duplicate integrity digests or duplicate run identities in the archive;
 - be added or modified only as submitted JSON files in result-submission PRs.
 
 Model reference URLs are human-readable references. Model pages can change over
 time when maintainers update files or tags.
 
+The full URL remains part of leaderboard model grouping along with model name,
+quantization and format. It is not reduced to a Hugging Face repository name,
+and no `canonical_id` or automatic alias merging is used. Different engine
+request IDs in a matrix are routing identifiers, not artifact identity proofs.
+Even an identical URL does not verify unchanged weights, revision or tokenizer.
+
 GitHub Actions enforces this policy before generating the leaderboard index.
 Baseline and sustained rows are kept as separate profile choices in the
 leaderboard UI.
+
+Use `submit --dry-run` to check a newly generated JSON against the complete
+current policy. The repository loader has explicit compatibility handling for
+some already archived legacy results; this does not exempt new submissions
+from required diagnostics. Swap-growth and thermal warnings provide context
+and are not, by themselves, submission blockers.
 
 ---
 
@@ -881,6 +971,11 @@ integrity-seal validation, standard protocol metadata checks, usage-based
 completion-token requirements, fixed public trial counts, minimum generated
 output length, Low Power Mode checks, deterministic generation checks, phase
 timing consistency, and PR-scope checks.
+
+The result-validation workflow checks that the PR changes only submitted JSON
+and does not delete results **before installing the PR's package code**. This
+ordering reduces that workflow's exposure to mixed result/code PRs; it is not
+a general sandbox guarantee for every CI job.
 
 These checks improve comparability and catch accidental or casual tampering.
 They are not a cryptographic hardware attestation system.

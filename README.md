@@ -9,6 +9,12 @@
 [![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1_|_M2_|_M3_|_M4_|_M5_|_M6-black?logo=apple)](https://apple.com)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 
+> **Documentation scope**
+> This README describes the current `main` branch, including changes not yet
+> released on PyPI. See [Current Release](#current-release),
+> [Unreleased changes](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md#unreleased), and the
+> [source installation instructions](#development-version-from-main) below.
+
 ## Start Here
 
 If you already have a supported local engine server running on an Apple Silicon
@@ -47,15 +53,18 @@ mlx-chronos submit --file results/local/your-result.json --dry-run
 ## Contents
 
 - [Start Here](#start-here)
-- [Quick Start](#quick-start)
 - [Overview](#overview)
+- [Current Release](#current-release)
 - [Supported Engines](#supported-engines)
+- [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
+- [Local Diagnostics](#local-diagnostics)
 - [Configuration](#configuration)
 - [Benchmark Protocol](#benchmark-protocol)
 - [Leaderboard Rules](#leaderboard-rules)
 - [Submit Results](#submit-results)
-- [Roadmap](#roadmap)
+- [Documentation and Development](#documentation-and-development)
+- [License](#license)
 
 ---
 
@@ -82,13 +91,20 @@ The public leaderboard is available at
 | Swap growth | Increase in system-wide macOS swap usage during the run | Warning at 0.5 GB |
 | Engine RSS | Post-warmup RSS of the engine server process when identifiable | Diagnostic only |
 | Thermal state | Start, end, worst state, samples, and affected benchmark phases when available | Context metadata |
-| Tool calling | Planned future success-rate benchmark | Not yet available |
+| Tool calling | Success-rate measurement is not implemented | Not available |
 
 ### Current Release
 
 `0.4.1` fixes Low Power Mode detection on newer MacBook Pro hardware and
 accepts terminal `finish_reason=length` responses as a valid TTFT signal for
 reasoning models.
+
+The changes in [Unreleased](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md#unreleased) are on `main`, not part of
+the `0.4.1` tag: experimental LM Studio support; `concurrency`, `matrix`,
+`context` and `energy`; `run --repeat`, `compare`, `history` and contributor
+attribution; RAM/swap and server-configuration diagnostics; leaderboard
+exports/chart; and the subsequent measurement, validation and CI fixes.
+Installing a published release does not select the development branch.
 
 ---
 
@@ -101,7 +117,7 @@ reasoning models.
 | Rapid-MLX | [raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX) | OpenAI-compatible server |
 | vllm-mlx | [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx) | OpenAI-compatible server |
 | mlx-lm | [ml-explore/mlx-lm](https://github.com/ml-explore/mlx-lm) | Apple MLX |
-| LM Studio | [lmstudio.ai](https://lmstudio.ai) | MLX runtime only — see note below |
+| LM Studio | [lmstudio.ai](https://lmstudio.ai) | Experimental; MLX runtime only — see note below |
 
 > **Note**
 > The engine server must already be running before `mlx-chronos run`,
@@ -109,13 +125,15 @@ reasoning models.
 > See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 > for engine setup details.
 
-> **LM Studio scope**
+> **LM Studio scope — experimental**
 > LM Studio ships two runtimes on Apple Silicon: MLX and llama.cpp. This
 > project benchmarks MLX engines only, so mlx-Chronos accepts an LM Studio
 > model only when the weights are an MLX build *and* a live probe confirms the
-> MLX runtime is the one that actually answered the request. A GGUF model, or
-> an MLX model whose runtime was switched to llama.cpp in LM Studio, is
-> rejected with a message explaining why.
+> MLX runtime is the one that actually answered the request. GGUF models and
+> probes answered by a non-MLX runtime are rejected. The runtime's
+> `supported_formats` may report `safetensors`; that is accepted only alongside
+> an MLX runtime name. See the [two-stage gate](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md#lm-studio-mlx-only-gate)
+> for API details and the distinction between application and runtime version.
 
 ---
 
@@ -135,6 +153,8 @@ start, install, or download model weights for the engine.
 
 ### 2. Install
 
+For the published release:
+
 ```bash
 pip install mlx-chronos
 ```
@@ -144,6 +164,29 @@ Optional thermal-state support through macOS Foundation/PyObjC:
 ```bash
 pip install "mlx-chronos[thermal]"
 ```
+
+The thermal extra is optional for local diagnostics, but new public results
+require continuous Foundation thermal monitoring. Install it in the same
+Python environment as mlx-Chronos when preparing leaderboard submissions.
+
+#### Development Version from Main
+
+To use the unreleased features documented here, install the source in a separate
+environment (Git is required):
+
+```bash
+git clone --branch main https://github.com/igurss/mlx-chronos.git
+cd mlx-chronos
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install ".[thermal]"
+git rev-parse HEAD
+```
+
+Record that commit SHA for reproducibility. Until the version is bumped,
+`--version` alone does not distinguish `main` from the published `0.4.1`.
+`mlx-chronos upgrade` checks PyPI; it does not update a Git checkout. For source
+development and test dependencies, see [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md#setup).
 
 ### 3. Check Version and Updates
 
@@ -184,10 +227,11 @@ mlx-chronos wizard
 
 The wizard provides a terminal menu for common actions and a guided benchmark
 builder with engine, model, profile, token bounds, output format, cooldown,
-preflight, notes, and other run options. When the selected engine server is
-running, the wizard loads `/models` and lets you select a model from the exposed
-IDs, with manual entry as a fallback. Before launching a benchmark, it shows the
-equivalent `mlx-chronos run ...` command so the same configuration can be reused
+preflight, optional contributor handle, notes, and other run options. When the
+selected engine server is running, the wizard loads `/models` and lets you
+select a model from the exposed IDs, with manual entry as a fallback. Before
+launching a benchmark, it shows the equivalent `mlx-chronos run ...` command so
+the same configuration can be reused
 in scripts. You can return to the main menu from benchmark setup without
 starting a run.
 
@@ -313,6 +357,33 @@ mlx-chronos run --engine omlx \
 | `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |
 | `mlx-chronos submit --file <result.json>` | Send a validated result to the maintainer inbox |
 
+Use `mlx-chronos <command> --help` for that command's complete option list.
+The wizard builds standard `run` commands; use the dedicated commands below
+for the new local diagnostics.
+
+## Local Diagnostics
+
+These commands are not additional public benchmark profiles:
+
+| Command | Purpose and main limit | Default report directory |
+| --- | --- | --- |
+| `concurrency` | Simultaneous requests to one server; client concurrency does not prove parallel model execution | `results/local/concurrency/` |
+| `matrix` | Rotating, preflighted runs across explicit engine/model pairs; does not prove identical model artifacts or isolated conditions | `results/local/matrix/` |
+| `context` | TTFT versus requested input length; not pure prefill speed or proof that a server retained the whole input | `results/local/context/` |
+| `energy` | Experimental macmon system-power estimate with a separate no-request window; not model-only or wall-plug energy | `results/local/energy/` |
+
+Start with small workloads on memory-constrained Macs. None of these commands
+starts or stops an engine server. `context`, `concurrency` and `energy` reports
+are not sealed benchmark results and cannot be submitted. A matrix manifest
+cannot be submitted either; its individual standard results must be validated
+separately, and passing validation does not prove that the engines used the
+same weights or runtime conditions.
+
+See [Methodology](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md) for defaults, cache evidence, warm-up,
+cooldown, report fields and interpretation limits. The leaderboard's filtered
+CSV/JSON exports and chart are described [there too](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md#leaderboard-export-and-chart);
+exports are index data, not sealed result files.
+
 ---
 
 ## Configuration
@@ -368,6 +439,12 @@ metadata, hardware metadata, and an integrity seal.
   includes request overhead, prefill, and decode.
 - Timed TTFT and throughput requests are never retried. A transient request
   failure invalidates the run instead of becoming part of a published timing.
+  A specific rejection of `stream_options.include_usage` permits a fresh-timed
+  compatibility attempt without that option; fallback token estimates are not
+  publishable.
+- TTFT normally ends at the first content, reasoning or text delta. With no
+  visible output, a terminal `finish_reason=length` also counts as a signal
+  for the one-token TTFT request; it is not proof of visible-text latency.
 - Cached TTFT is recorded only after cache priming completes successfully.
 - Rapid-MLX uses exact IDs returned by `/v1/models`; short suffixes are not
   resolved automatically because aliases can be ambiguous in multi-model serving.
@@ -392,10 +469,11 @@ default and records progress samples every 100 generated output units.
 Intermediate samples are estimates when the stream only reports exact token
 usage at the end.
 
-If the sustained run observes a thermal-state change or non-nominal thermal
-state, result metadata includes a sustained throttling warning. The warning
-compares early and late progress-window averages, not a single first/last
-sample.
+The sustained throttling warning requires both a late-run estimated throughput
+drop and an observed thermal-state change or non-nominal thermal state. It
+compares early and late progress-window averages, excluding prefill and
+incompatible token-count transitions. This is a conservative warning, not
+proof of thermal throttling or a specific hardware cause.
 
 ### Cooldown Metadata
 
@@ -452,6 +530,9 @@ Model reference URLs point to the model page used for the run. Model pages can
 change over time when maintainers update files or tags.
 Leaderboard comparisons keep model name, quantization, format, and model
 reference URL separate so distinct variants are not grouped together.
+The full reference URL is retained, including revision or file paths; no
+repository-only `canonical_id` merges results. A server's model ID selects
+what to run, but does not independently prove artifact identity.
 
 ---
 
@@ -486,14 +567,33 @@ mlx-chronos submit --file results/local/your-result.json
 ```
 
 Pass `--email you@example.com` (or set `MLX_CHRONOS_SUBMITTER_EMAIL`) so
-maintainers can reply about your submission. Without it the result is sent
-anonymously and cannot be attributed or followed up.
+maintainers can reply about your submission. Without it, the inbox uses an
+anonymous placeholder contact address, never the maintainer's address.
+Public attribution is separate: `run --submitted-by <handle>` records the
+optional handle in the sealed JSON, and it remains present even if no email
+is supplied. Omitting an email therefore does not anonymize an attributed
+result. Neither an email nor a handle is required for eligibility; do not add
+a handle by editing an already sealed JSON file.
 
 Maintainers can override the inbox endpoint with `--endpoint` or
 `MLX_CHRONOS_SUBMIT_ENDPOINT`.
 
 See [CONTRIBUTING.md](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md)
 for detailed contributor instructions.
+
+---
+
+## Documentation and Development
+
+- [Changelog](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md): released changes and the current Unreleased section.
+- [Methodology](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md): measurement definitions, diagnostic limits,
+  model-reference policy and public validation rules.
+- [Contributing](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md): engine setup, submissions and local CI checks.
+- [Release checklist](https://github.com/igurss/mlx-chronos/blob/main/docs/releasing.md): manual package validation before
+  tagging, and the separate publication step.
+
+Features listed as not measured are limitations, not release commitments.
+Discuss proposals through [GitHub issues](https://github.com/igurss/mlx-chronos/issues).
 
 ---
 
