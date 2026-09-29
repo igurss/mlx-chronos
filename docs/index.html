@@ -285,13 +285,6 @@
         value: row => escapeHtml(row.engine_version),
       },
       {
-        key: "submitted_by",
-        label: "Submitted by",
-        description: "GitHub handle of the contributor who ran and submitted this row, when they chose to be credited.",
-        sortKey: "submitted_by",
-        value: row => submittedByCell(row),
-      },
-      {
         key: "quantization",
         label: "Quant",
         description: "Model quantization or format declared in the result, when available.",
@@ -442,7 +435,6 @@
         macos_version: row.macos_version || "",
         model_reference_url: row.model_reference_url || "",
         engine_serving_config: row.engine_serving_config ?? null,
-        submitted_by: row.submitted_by || "",
         system_ram_baseline_gb: row.system_ram_baseline_gb ?? null,
         system_ram_delta_gb: row.system_ram_delta_gb ?? null,
         system_ram_headroom_gb: row.system_ram_headroom_gb ?? null,
@@ -691,7 +683,6 @@
         ["Quantization", row.quantization],
         ["Model format", row.model_format || "not recorded"],
         ["Model reference", row.model_reference_url || "not recorded"],
-        ["Submitted by", row.submitted_by ? `@${row.submitted_by}` : "not recorded"],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
         ["Thermal", conditionValue(row.thermal_state)],
@@ -768,7 +759,6 @@
         const searchable = [
           row.model,
           row.model_label,
-          row.submitted_by,
           row.engine,
           row.chip,
           row.benchmark_profile,
@@ -993,14 +983,6 @@
           <span>${escapeHtml(label)}</span>
         </div>
       `;
-    }
-
-    // The handle is schema-validated to GitHub's own character set before it can
-    // reach the index, and is escaped again here.
-    function submittedByCell(row) {
-      if (!row.submitted_by) return "-";
-      const handle = escapeHtml(row.submitted_by);
-      return `<a class="submitter-link" href="https://github.com/${handle}" rel="noopener noreferrer">@${handle}</a>`;
     }
 
     // Both figures describe the whole Mac. Keep peak as the primary stress

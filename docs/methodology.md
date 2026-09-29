@@ -878,9 +878,9 @@ release versions.
 
 `meta.submitted_by` optionally records the GitHub handle of the contributor who
 ran the benchmark, set with `mlx-chronos run --submitted-by <handle>`. It is
-opt-in, validated against GitHub's own handle format, and shown as a column on
-the public leaderboard. Leaving it out is always allowed and never affects
-whether a result is publishable.
+opt-in and validated against GitHub's own handle format. The handle remains in
+the sealed result but is not displayed on the leaderboard. Leaving it out is
+always allowed and never affects whether a result is publishable.
 
 The wizard also offers this field and preserves it in the equivalent command.
 It is a self-declared handle, not proof of account ownership. Inbox contact

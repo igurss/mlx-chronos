@@ -211,8 +211,6 @@ tbody tr:not(.details-row):hover td { background: var(--surface-muted); }
 .metric-strong { color: var(--blue-hot); font-weight: 750; font-variant-numeric: tabular-nums; }
 .ram-cell { display: flex; flex-direction: column; line-height: 1.28; }
 .ram-cell .muted { font-size: 0.82em; }
-.submitter-link { color: var(--muted); }
-.submitter-link:hover, .submitter-link:focus-visible { color: var(--text); text-decoration: underline; }
 .muted { color: var(--muted); }
 .row-badges { display: flex; flex-wrap: wrap; gap: 5px; max-width: 250px; white-space: normal; }
 .details-toggle, .export-button, .columns-menu summary { display: inline-flex; align-items: center; justify-content: center; min-height: 35px; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 0.81rem; font-weight: 650; white-space: nowrap; }
