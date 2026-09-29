@@ -279,9 +279,11 @@ def test_leaderboard_has_persistent_theme_toggle():
 
 def test_leaderboard_column_menu_is_not_clipped_by_panel():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
+    css = (ROOT / "docs" / "leaderboard.css").read_text(encoding="utf-8")
 
-    assert ".raw-panel {\n      overflow: visible;" in html
-    assert "--columns-popover-max-height" in html
+    assert 'href="leaderboard.css"' in html
+    assert re.search(r"\.raw-panel\s*\{[^}]*overflow:\s*visible\s*;", css)
+    assert "--columns-popover-max-height" in css
     assert "updateColumnPopoverLayout" in html
     assert 'columnsMenu.dataset.openDirection = openUp ? "up" : "down";' in html
 
