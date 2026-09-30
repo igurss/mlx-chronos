@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-No changes since `0.5.0`.
+- Add the selected Chronos logo to the leaderboard header and replace the
+  lightning favicon with the same artwork.
 
 ## [0.5.0] — 2026-09-27
 

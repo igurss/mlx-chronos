@@ -93,11 +93,20 @@ button { cursor: pointer; }
 .project-id {
   display: flex;
   align-items: center;
+  gap: 10px;
   color: var(--text);
   font-size: 1.32rem;
   font-weight: 780;
   letter-spacing: -0.055em;
   white-space: nowrap;
+}
+
+.project-logo {
+  display: block;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  object-fit: contain;
 }
 
 .brand-name-light { font-weight: 520; }
