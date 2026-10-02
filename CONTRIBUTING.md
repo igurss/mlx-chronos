@@ -416,6 +416,11 @@ refuses to overwrite an existing image/checksum. Inspect the mounted app before
 distribution. This recipe intentionally accepts only an arm64 ad-hoc build;
 Developer ID distribution would require a separately reviewed recipe.
 
+Public DMG filenames include the app version and architecture, not the build
+number. The build remains in the app metadata and local candidate ZIP names.
+Renaming a download does not create a new binary or justify moving its source
+tag; changed binaries need a new release identity.
+
 To deliberately change the bundled CLI, run `scripts/bundle_runtime.py VERSION`
 inside the app folder, then review the manifest checksum, wheel provenance,
 tests and documentation. It downloads the named wheel; it does not change the

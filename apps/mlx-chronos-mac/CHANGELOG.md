@@ -9,6 +9,10 @@ Initial release: **0.1.0, build 3**, bundling **mlx-chronos 0.5.0**.
 Distributed as a free Apple Silicon DMG with a local/ad-hoc signature;
 **not Developer ID signed or notarized by Apple**.
 
+Distribution maintenance: the public DMG filename was simplified to
+`MLXChronos-0.1.0-arm64.dmg`, with a matching renamed checksum file. The DMG
+content, internal build 3 and published source tag are unchanged.
+
 ### Benchmarking and diagnostics
 
 - Native forms for all 13 non-interactive CLI commands. Environment and test

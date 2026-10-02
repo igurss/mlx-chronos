@@ -34,7 +34,8 @@ if [[ "$CHRONOS_SIGNATURE" != *'Signature=adhoc'* ]]; then
     printf 'This free-release recipe expects an ad-hoc build; review the signing/distribution instructions for other signatures.\n' >&2
     exit 1
 fi
-CHRONOS_NAME="MLXChronos-$CHRONOS_VERSION-$CHRONOS_BUILD-arm64.dmg"
+# The public download uses the release version; the app retains its build ID.
+CHRONOS_NAME="MLXChronos-$CHRONOS_VERSION-arm64.dmg"
 CHRONOS_DMG="$CHRONOS_OUTPUT_DIR/$CHRONOS_NAME"
 CHRONOS_CHECKSUM="$CHRONOS_DMG.sha256"
 if [[ -e "$CHRONOS_DMG" || -L "$CHRONOS_DMG" || -e "$CHRONOS_CHECKSUM" || -L "$CHRONOS_CHECKSUM" ]]; then

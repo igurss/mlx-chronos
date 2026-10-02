@@ -28,11 +28,13 @@ verify the package rather than ignoring the warning.
 Optional checksum verification from the folder containing both downloads:
 
 ```bash
-shasum -a 256 -c MLXChronos-0.1.0-3-arm64.dmg.sha256
+shasum -a 256 -c MLXChronos-0.1.0-arm64.dmg.sha256
 ```
 
 This detects an altered download relative to the published checksum; it is not
-Apple identity verification or notarization. Installation/launch instructions
+Apple identity verification or notarization. The download filename omits the
+internal app build number; check the release page for the current asset names.
+Installation/launch instructions
 are also included as a text file inside the DMG.
 
 ### Prepare the measurement environment
