@@ -1,0 +1,39 @@
+{
+  "fill-specializations": [
+    { "value": { "solid": "srgb:0.89804,0.90980,0.92941,1.00000" } },
+    { "appearance": "dark", "value": { "solid": "srgb:0.00000,0.00000,0.00000,1.00000" } }
+  ],
+  "groups": [
+    {
+      "blend-mode": "normal",
+      "blur-material": 0,
+      "layers": [
+        {
+          "image-name": "Icon-Light.png",
+          "name": "Light appearance",
+          "glass": false,
+          "hidden-specializations": [
+            { "value": false },
+            { "appearance": "dark", "value": true }
+          ],
+          "opacity": 1
+        },
+        {
+          "image-name": "Icon-Dark.png",
+          "name": "Dark appearance",
+          "glass": false,
+          "hidden-specializations": [
+            { "value": true },
+            { "appearance": "dark", "value": false }
+          ],
+          "opacity": 1
+        }
+      ],
+      "lighting": "individual",
+      "shadow": { "kind": "none", "opacity": 0 },
+      "specular": false,
+      "translucency": { "enabled": false, "value": 0 }
+    }
+  ],
+  "supported-platforms": { "squares": "shared" }
+}

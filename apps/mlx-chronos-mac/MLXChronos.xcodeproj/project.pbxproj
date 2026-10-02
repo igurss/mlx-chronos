@@ -1,0 +1,401 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1A0000000000000000000101 /* MLXChronosApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000201 /* MLXChronosApp.swift */; };
+		1A0000000000000000000102 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000202 /* ContentView.swift */; };
+		1A0000000000000000000103 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000203 /* Models.swift */; };
+		1A0000000000000000000104 /* ChronosStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000204 /* ChronosStore.swift */; };
+		1A0000000000000000000105 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000205 /* SetupView.swift */; };
+		1A0000000000000000000106 /* EnginesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000206 /* EnginesView.swift */; };
+		1A0000000000000000000107 /* BenchmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000207 /* BenchmarkView.swift */; };
+		1A0000000000000000000108 /* LogsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000208 /* LogsView.swift */; };
+		1A0000000000000000000109 /* ResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000209 /* ResultsView.swift */; };
+		1A0000000000000000000110 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000210 /* Assets.xcassets */; };
+		1A0000000000000000000111 /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000211 /* ProcessRunner.swift */; };
+		1A0000000000000000000112 /* RuntimeDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000212 /* RuntimeDiscovery.swift */; };
+		1A0000000000000000000113 /* CommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000213 /* CommandBuilder.swift */; };
+		1A0000000000000000000114 /* ResultRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000214 /* ResultRepository.swift */; };
+		1A0000000000000000000115 /* CommandLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000215 /* CommandLog.swift */; };
+		1A0000000000000000000116 /* CommandForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000216 /* CommandForm.swift */; };
+		1A0000000000000000000117 /* ChronosStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000217 /* ChronosStyle.swift */; };
+		1A0000000000000000000120 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000220 /* Resources */; };
+		1A0000000000000000000121 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000221 /* AppIcon.icon */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1A0000000000000000000003 /* MLXChronos.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MLXChronos.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000000000000000000201 /* MLXChronosApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXChronosApp.swift; sourceTree = "<group>"; };
+		1A0000000000000000000202 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000203 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		1A0000000000000000000204 /* ChronosStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronosStore.swift; sourceTree = "<group>"; };
+		1A0000000000000000000205 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000206 /* EnginesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnginesView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000207 /* BenchmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000208 /* LogsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogsView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000209 /* ResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultsView.swift; sourceTree = "<group>"; };
+		1A0000000000000000000210 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1A0000000000000000000211 /* ProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunner.swift; sourceTree = "<group>"; };
+		1A0000000000000000000212 /* RuntimeDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeDiscovery.swift; sourceTree = "<group>"; };
+		1A0000000000000000000213 /* CommandBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandBuilder.swift; sourceTree = "<group>"; };
+		1A0000000000000000000214 /* ResultRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultRepository.swift; sourceTree = "<group>"; };
+		1A0000000000000000000215 /* CommandLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLog.swift; sourceTree = "<group>"; };
+		1A0000000000000000000216 /* CommandForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandForm.swift; sourceTree = "<group>"; };
+		1A0000000000000000000217 /* ChronosStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronosStyle.swift; sourceTree = "<group>"; };
+		1A0000000000000000000220 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		1A0000000000000000000221 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1A0000000000000000000012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1A0000000000000000000004 = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000005 /* MLXChronos */,
+				1A0000000000000000000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1A0000000000000000000005 /* MLXChronos */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000201 /* MLXChronosApp.swift */,
+				1A0000000000000000000202 /* ContentView.swift */,
+				1A0000000000000000000203 /* Models.swift */,
+				1A0000000000000000000204 /* ChronosStore.swift */,
+				1A0000000000000000000211 /* ProcessRunner.swift */,
+				1A0000000000000000000212 /* RuntimeDiscovery.swift */,
+				1A0000000000000000000213 /* CommandBuilder.swift */,
+				1A0000000000000000000214 /* ResultRepository.swift */,
+				1A0000000000000000000215 /* CommandLog.swift */,
+				1A0000000000000000000220 /* Resources */,
+				1A0000000000000000000007 /* Views */,
+				1A0000000000000000000210 /* Assets.xcassets */,
+				1A0000000000000000000221 /* AppIcon.icon */,
+			);
+			path = MLXChronos;
+			sourceTree = "<group>";
+		};
+		1A0000000000000000000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000003 /* MLXChronos.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1A0000000000000000000007 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000205 /* SetupView.swift */,
+				1A0000000000000000000206 /* EnginesView.swift */,
+				1A0000000000000000000207 /* BenchmarkView.swift */,
+				1A0000000000000000000208 /* LogsView.swift */,
+				1A0000000000000000000209 /* ResultsView.swift */,
+				1A0000000000000000000216 /* CommandForm.swift */,
+				1A0000000000000000000217 /* ChronosStyle.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1A0000000000000000000002 /* MLXChronos */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1A0000000000000000000040 /* Build configuration list for PBXNativeTarget "MLXChronos" */;
+			buildPhases = (
+				1A0000000000000000000010 /* Sources */,
+				1A0000000000000000000012 /* Frameworks */,
+				1A0000000000000000000011 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MLXChronos;
+			productName = MLXChronos;
+			productReference = 1A0000000000000000000003 /* MLXChronos.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1A0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					1A0000000000000000000002 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = 1A0000000000000000000030 /* Build configuration list for PBXProject "MLXChronos" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 1A0000000000000000000004;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 60;
+			productRefGroup = 1A0000000000000000000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1A0000000000000000000002 /* MLXChronos */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1A0000000000000000000011 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A0000000000000000000110 /* Assets.xcassets in Resources */,
+				1A0000000000000000000120 /* Resources in Resources */,
+				1A0000000000000000000121 /* AppIcon.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1A0000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A0000000000000000000101 /* MLXChronosApp.swift in Sources */,
+				1A0000000000000000000102 /* ContentView.swift in Sources */,
+				1A0000000000000000000103 /* Models.swift in Sources */,
+				1A0000000000000000000104 /* ChronosStore.swift in Sources */,
+				1A0000000000000000000105 /* SetupView.swift in Sources */,
+				1A0000000000000000000106 /* EnginesView.swift in Sources */,
+				1A0000000000000000000107 /* BenchmarkView.swift in Sources */,
+				1A0000000000000000000108 /* LogsView.swift in Sources */,
+				1A0000000000000000000109 /* ResultsView.swift in Sources */,
+				1A0000000000000000000111 /* ProcessRunner.swift in Sources */,
+				1A0000000000000000000112 /* RuntimeDiscovery.swift in Sources */,
+				1A0000000000000000000113 /* CommandBuilder.swift in Sources */,
+				1A0000000000000000000114 /* ResultRepository.swift in Sources */,
+				1A0000000000000000000115 /* CommandLog.swift in Sources */,
+				1A0000000000000000000116 /* CommandForm.swift in Sources */,
+				1A0000000000000000000117 /* ChronosStyle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1A0000000000000000000031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1A0000000000000000000032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1A0000000000000000000041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 3;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "MLX Chronos";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				CHRONOS_BUNDLE_IDENTIFIER = com.igurss.mlxchronos;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CHRONOS_BUNDLE_IDENTIFIER)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		1A0000000000000000000042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 3;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "MLX Chronos";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				CHRONOS_BUNDLE_IDENTIFIER = com.igurss.mlxchronos;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CHRONOS_BUNDLE_IDENTIFIER)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1A0000000000000000000030 /* Build configuration list for PBXProject "MLXChronos" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000000000000000000031 /* Debug */,
+				1A0000000000000000000032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1A0000000000000000000040 /* Build configuration list for PBXNativeTarget "MLXChronos" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A0000000000000000000041 /* Debug */,
+				1A0000000000000000000042 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1A0000000000000000000001 /* Project object */;
+}
