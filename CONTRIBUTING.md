@@ -13,6 +13,7 @@ changes before publication.
 - [Ways to Contribute](#ways-to-contribute)
 - [Submit Benchmark Results](#submit-benchmark-results)
 - [Contribute Code or Docs](#contribute-code-or-docs)
+- [macOS App Development](#macos-app-development)
 - [Open an Issue](#open-an-issue)
 - [Code of Conduct](#code-of-conduct)
 - [Releases](#releases)
@@ -334,6 +335,111 @@ GitHub Actions rejects mixed PRs, deleted submitted result files, invalid
 schemas, broken integrity seals, non-standard public benchmark profiles,
 fallback token counts, requested `min_tokens`, Low Power Mode runs,
 short-output runs, and non-standard public trial counts or token bounds.
+
+---
+
+## macOS App Development
+
+The native app is part of this repository under `apps/mlx-chronos-mac/`.
+It is a SwiftUI front end; measurement/validation changes belong in the Python
+CLI, not a duplicate implementation in the app. Use the
+[app user guide](apps/mlx-chronos-mac/USER_GUIDE.md) for product behavior.
+
+### Source layout
+
+| Path inside the app folder | Purpose |
+| --- | --- |
+| `MLXChronos/` | Application state, runtime discovery, command construction, process execution, result loading and SwiftUI views. |
+| `MLXChronos/Resources/` | Python adapter, pinned published CLI wheel/manifest and bundled license notices. No interpreter or model weights. |
+| `MLXChronos/Assets.xcassets/`, `MLXChronos/AppIcon.icon/` | Sidebar artwork, colors and native light/dark app icons. |
+| `MLXChronos.xcodeproj/` | App target and shared build scheme. |
+| `Tests/` | Reusable bridge and Swift core regressions with mocks/temporary fixtures. |
+| `scripts/` | Local build, regression checks, opt-in disposable installation check and explicit CLI-wheel refresh. |
+
+Requires an Apple Silicon Mac, Xcode 26+ with its command-line tools, and an
+existing compatible Python 3.10+. The deployment target remains macOS 14.
+Open `MLXChronos.xcodeproj` and choose the `MLXChronos` scheme to run/debug.
+
+### Reusable checks
+
+Create a separate Python environment with the bundled CLI contract:
+
+```bash
+python3 -m venv .venv-app
+.venv-app/bin/python -m pip install "mlx-chronos[thermal]==0.5.0"
+bash apps/mlx-chronos-mac/scripts/check.sh "$PWD/.venv-app/bin/python"
+```
+
+These checks cover command/options parity, literal argument handling,
+validation/defaults, removal protections, result classification/order,
+process output, timeouts and cancellation. They use synthetic temporary
+fixtures and mocks, not your engines/models or app preferences. They are not
+an all-hardware or full-interface acceptance certification.
+
+The separate **macOS App** workflow runs these reusable bridge/core checks
+against the bundled wheel on app changes. It does not load real models, run
+personal acceptance scenarios, publish binaries or certify Gatekeeper trust.
+
+Optional networked setup/removal regression, using **only its own disposable
+environment**, never a selected user installation:
+
+```bash
+.venv-app/bin/python -I -B apps/mlx-chronos-mac/scripts/check_fresh_runtime.py
+```
+
+Python is preserved; this test checks targeted CLI removal and remaining
+dependencies. Owner-specific engine/model acceptance scripts and personal
+reports are not required to build or run the public project.
+
+### Local Release build
+
+```bash
+bash apps/mlx-chronos-mac/scripts/build_release.sh
+```
+
+The script saves an Apple Silicon app and version/build-named ZIP under the
+ignored app `dist/` directory, verifies its local signature and removes its
+temporary Xcode cache. It refuses to overwrite an existing app; choose a new
+output folder when comparing candidates. This is an **ad-hoc/local build**,
+not Developer ID signing, notarization, a DMG or publication.
+
+Package an already-built local app as the free DMG:
+
+```bash
+bash apps/mlx-chronos-mac/scripts/package_dmg.sh
+```
+
+This preserves/verifies the app signature, creates the Applications shortcut
+and first-launch instructions, verifies the image and writes a matching SHA-256
+file. It does not notarize, upload or change macOS security settings, and
+refuses to overwrite an existing image/checksum. Inspect the mounted app before
+distribution. This recipe intentionally accepts only an arm64 ad-hoc build;
+Developer ID distribution would require a separately reviewed recipe.
+
+To deliberately change the bundled CLI, run `scripts/bundle_runtime.py VERSION`
+inside the app folder, then review the manifest checksum, wheel provenance,
+tests and documentation. It downloads the named wheel; it does not change the
+CLI project version or silently update a user runtime.
+
+### Documentation, license and release identity
+
+Keep the app's `USER_GUIDE.md` focused on useful setup, command options and
+limits. Update its separate `CHANGELOG.md` for app behavior changes; use the
+root changelog for CLI changes. App source is covered by the root Apache 2.0
+license, and the app includes the full license and runtime notices. Preserve
+upstream notices when changing redistributed resources.
+
+App `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` are manual, independent
+of the CLI version. Assign a unique increasing build number to each distributed
+candidate; compiling or committing does not increment it automatically.
+The initial app version is 0.1.0. Reserve **`app-vX.Y.Z`** for app release tags:
+CLI tags are `vX.Y.Z` and trigger the separate PyPI publication workflow.
+Do not create either tag merely to record a local build.
+
+Public binary distribution is a separate maintainer step. A DMG is a container,
+not proof of trust: normal Gatekeeper distribution requires Developer ID
+signing and Apple notarization. Never commit certificates, private keys,
+credentials, personal results or local build artifacts.
 
 ---
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the native macOS app source, reusable tests and documentation under
+  `apps/mlx-chronos-mac/`. Its independent 0.1.0 release bundles the existing
+  CLI 0.5.0 without changing the CLI version. See the
+  [app changelog](apps/mlx-chronos-mac/CHANGELOG.md).
 - Add the selected Chronos logo to the leaderboard header and replace the
   lightning favicon with the same artwork.
 

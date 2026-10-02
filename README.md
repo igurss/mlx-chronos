@@ -18,6 +18,17 @@
 
 ## Start Here
 
+Choose your interface:
+
+- **macOS app:** configure tests, inspect your environment and work with results
+  without assembling terminal commands. [Download app **0.1.0**](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0),
+  bundling CLI **0.5.0**. See the
+  [app user guide](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/USER_GUIDE.md) and
+  [build instructions](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md#macos-app-development).
+  The free DMG is **not Apple-notarized**; follow the guide's first-launch
+  authorization instructions.
+- **CLI:** use the guided wizard below, direct commands or scripts.
+
 If you already have a supported local engine server running on an Apple Silicon
 Mac, the shortest path is:
 
@@ -56,6 +67,7 @@ mlx-chronos submit --file results/local/your-result.json --dry-run
 - [Start Here](#start-here)
 - [Overview](#overview)
 - [Current Release](#current-release)
+- [macOS App](#macos-app)
 - [Supported Engines](#supported-engines)
 - [Quick Start](#quick-start)
 - [CLI Reference](#cli-reference)
@@ -102,6 +114,27 @@ diagnostics, plus experimental MLX-only LM Studio support. It also adds
 RAM/swap and server-setting context, and leaderboard exports and a comparison
 chart. Measurement, validation and CI fixes are detailed in the
 [changelog](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md).
+
+### macOS App
+
+The native SwiftUI app lives in [`apps/mlx-chronos-mac/`](https://github.com/igurss/mlx-chronos/tree/main/apps/mlx-chronos-mac).
+Environment, Tests, Results and Activity cover the CLI's non-interactive
+commands; the forms replace the terminal wizard. Measurements, integrity
+checks and public eligibility still come from the selected Python CLI, not a
+second benchmark implementation.
+
+It requires Apple Silicon, macOS 14+ and an existing compatible Python 3.10+.
+The default app-managed environment installs the included CLI with mandatory
+thermal support. You can explicitly choose another detected installation or
+source checkout. The app does not install Python, inference engines or models,
+and running a test does not automatically share its result.
+
+App and CLI releases are independent: **app 0.1.0** initially bundles
+**CLI 0.5.0**. Follow the [app changelog](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/CHANGELOG.md) for
+app changes and the [user guide](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/USER_GUIDE.md) for setup,
+commands and diagnostic limits. [Download the app](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0).
+The DMG has a local/ad-hoc signature, not Developer ID signing or Apple
+notarization; macOS may require explicit first-launch authorization.
 
 ---
 
@@ -582,6 +615,8 @@ for detailed contributor instructions.
 
 ## Documentation and Development
 
+- [macOS app user guide](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/USER_GUIDE.md): setup, tests, options, results and local-data behavior.
+- [macOS app changelog](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/CHANGELOG.md): the app's independent release history.
 - [Changelog](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md): released changes and the current Unreleased section.
 - [Methodology](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md): measurement definitions, diagnostic limits,
   model-reference policy and public validation rules.
@@ -596,4 +631,6 @@ Discuss proposals through [GitHub issues](https://github.com/igurss/mlx-chronos/
 
 ## License
 
-Apache 2.0. See [LICENSE](https://github.com/igurss/mlx-chronos/blob/main/LICENSE).
+The CLI and macOS app source use Apache 2.0. See
+[LICENSE](https://github.com/igurss/mlx-chronos/blob/main/LICENSE) and the app's
+[bundled runtime notices](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/THIRD_PARTY_NOTICES.md).
