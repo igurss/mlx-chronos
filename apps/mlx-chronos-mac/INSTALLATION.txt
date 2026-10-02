@@ -1,0 +1,36 @@
+MLX Chronos for macOS — Installation and first launch
+
+Requirements: Apple Silicon, macOS 14 or later, an existing compatible Python
+3.10+ installation, and a supported inference engine. Python, engines and
+model weights are not included. First-time CLI setup downloads dependencies.
+
+1. Drag MLXChronos.app onto the Applications shortcut.
+2. Open MLX Chronos from Applications, not directly from this disk image.
+3. Eject the disk image after installation.
+
+This free build has a local/ad-hoc signature. It is NOT Developer ID signed
+or notarized by Apple. macOS may block its first launch.
+
+Only if you trust the official download and its integrity:
+- First try opening the installed app.
+- If macOS blocks it, open System Settings > Privacy & Security.
+- Find the notice for MLX Chronos, choose Open Anyway, and confirm Open.
+
+This authorizes this app; do not disable Gatekeeper globally or remove
+quarantine attributes. Managed Macs may prevent manual authorization.
+If macOS reports damage, a signature mismatch or malware, stop and verify
+the download rather than ignoring the warning.
+
+Verify the DMG against its matching .sha256 file from the same GitHub release.
+A matching checksum detects a changed download; it does not replace Apple's
+identity verification or notarization. Use only the official repository:
+https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0
+
+In Environment, use Detect installations, choose a compatible Python, then
+Prepare / repair app-managed copy. Start your inference server separately.
+Tests configure measurements; Results inspect or explicitly share saved data.
+
+User guide:
+https://github.com/igurss/mlx-chronos/blob/app-v0.1.0/apps/mlx-chronos-mac/USER_GUIDE.md
+Apple's explanation:
+https://support.apple.com/en-us/102445
