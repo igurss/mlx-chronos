@@ -1,0 +1,165 @@
+import Darwin
+import Foundation
+
+enum TestFailure: LocalizedError {
+    case failed(String)
+    var errorDescription: String? {
+        switch self { case .failed(let message): return message }
+    }
+}
+func expect(_ value: @autoclosure () -> Bool, _ message: String) throws {
+    if !value() { throw TestFailure.failed(message) }
+}
+func rejects(_ block: () throws -> Void) throws {
+    do { try block() } catch is CommandError { return }
+    throw TestFailure.failed("Expected a validation error")
+}
+
+@main
+struct CoreTests {
+    static func main() async {
+        do { try await runChecks() }
+        catch {
+            fputs("Core checks failed: \(error.localizedDescription)\n", stderr)
+            exit(EXIT_FAILURE)
+        }
+    }
+
+    static func runChecks() async throws {
+        guard CommandLine.arguments.count == 3 else {
+            throw TestFailure.failed("Usage: core-checks <Python executable> <bridge path>")
+        }
+        let python = CommandLine.arguments[1]
+        let bridge = URL(fileURLWithPath: CommandLine.arguments[2])
+        let runner = ProcessRunner()
+        let probeResult = await runner.run(executable: python, arguments: ["-I", "-B", bridge.path, "probe"],
+            directory: FileManager.default.temporaryDirectory, environment: RuntimeDiscovery.environment(), timeout: 20)
+        try expect(probeResult.succeeded, "probe failed: \(probeResult.stderr)")
+        let probe = try JSONDecoder().decode(RuntimeProbe.self, from: Data(probeResult.stdout.utf8))
+        try expect(probe.commands.count == 14, "all commands must decode")
+        try expect(OptionPresentation.compareGuidance.contains("Invalid schemas or seals are rejected")
+            && OptionPresentation.compareGuidance.contains("warnings, not a block"),
+            "Compare guidance no longer distinguishes invalid files from comparability warnings")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("chronos-core-tests-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for command in probe.commands where command.name != "wizard" {
+            var values = CommandBuilder.initialValues(command, outputRoot: root)
+            for option in command.options where option.required {
+                values[option.name] = ["engine": "omlx", "model": "model with spaces $(never execute)",
+                                      "engine_model": "omlx=first\nvllm-mlx=second", "files": "/tmp/-first.json\n/tmp/second file.json",
+                                      "file": "/tmp/one result.json"][option.name] ?? "required"
+            }
+            let args = try CommandBuilder.arguments(command, values: values)
+            try expect(args.first == command.name, "wrong command")
+            if command.name == "run" {
+                try expect(CommandBuilder.resultDirectory(command, values: values, workingDirectory: root)?.path == root.standardizedFileURL.path,
+                    "default output folder was not resolved")
+                try expect(CommandBuilder.resultDirectory(command, values: ["output_dir": "nested output"], workingDirectory: root)?.path
+                    == root.appendingPathComponent("nested output").path, "relative result folder did not match the CLI working directory")
+                try expect(args.contains("model with spaces $(never execute)"), "argument was split")
+                try expect(!args.contains("--trials"), "profile defaults must be delegated to CLI")
+                try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["ram_sample_interval": "nan"]) { _, rhs in rhs }) }
+                try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["repeat": "0"]) { _, rhs in rhs }) }
+                try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["cooldown_seconds": "-1"]) { _, rhs in rhs }) }
+                let repeated = try CommandBuilder.arguments(command, values: values.merging(["engine_opt": "context_length=4096\ncache=true"]) { _, rhs in rhs })
+                try expect(repeated.filter { $0 == "--engine-opt" }.count == 2, "repeat options lost")
+                let leadingDash = try CommandBuilder.arguments(command, values: values.merging(["model": "--literal-id", "notes": "-not-an-option"]) { _, rhs in rhs })
+                try expect(leadingDash.contains("--model=--literal-id") && leadingDash.contains("--notes=-not-an-option"), "literal leading dashes became options")
+                try expect(CommandBuilder.timeout(command, values: values) == nil, "benchmark has an arbitrary duration cap")
+            }
+            if command.name == "compare" { try expect(args.contains("--"), "positional option terminator missing") }
+            if command.name == "submit" {
+                try expect(CommandBuilder.resultDirectory(command, values: values, workingDirectory: root) == nil,
+                    "sharing changed the result browser's folder")
+                try expect(args.contains("--dry-run"), "sharing must default to validation-only")
+                try expect(CommandBuilder.timeout(command, values: ["timeout": "300"]) == 360, "network timeout was clipped")
+            }
+            if command.name == "matrix" {
+                try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["engine_model": "omlx=a\nomlx = b"]) { _, rhs in rhs }) }
+                try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["engine_model": "omlx= "]) { _, rhs in rhs }) }
+            }
+        }
+
+        let normal = RuntimeInstallation(candidate: RuntimeCandidate(pythonPath: python), probe: probe)
+        var builtIn = normal; builtIn.isBuiltIn = true
+        try expect(!builtIn.canUninstall, "app-managed runtime can be uninstalled")
+        var source = normal; source.candidate.sourcePath = "/tmp/source"
+        try expect(!source.canUninstall, "source checkout can be uninstalled")
+        var protected = normal; protected.probe?.externallyManaged = true
+        try expect(!protected.canUninstall, "externally-managed Python can be modified")
+        var inherited = normal; inherited.probe?.packageOwned = false
+        try expect(!inherited.canUninstall, "an inherited package can be uninstalled")
+        var pipx = normal; pipx.probe?.environmentManager = "pipx"
+        try expect(!pipx.canUninstall, "pipx metadata can be corrupted by direct pip removal")
+        var unknownThermal = probe; unknownThermal.thermalState = "unavailable_foundation_unknown_state_9"
+        try expect(!unknownThermal.thermalAvailable, "unknown Foundation thermal state was accepted as verified")
+
+        let result = root.appendingPathComponent("result.json")
+        try Data(#"{"engine":{"name":"test"},"model":{"name":"model"},"meta":{"timestamp":"2026-09-30T10:00:00Z"},"metrics":{"request_tokens_per_second":{"mean":12.5},"ttft_cold":{"mean":true}}}"#.utf8).write(to: result)
+        let summaries = ResultRepository.load(root)
+        try expect(summaries.count == 1 && summaries[0].throughput == 12.5 && summaries[0].coldTTFT == nil, "numeric result parsing is not strict")
+        try Data(#"{"unrelated":"JSON"}"#.utf8).write(to: root.appendingPathComponent("unknown.json"))
+        try expect(ResultRepository.load(root).first { $0.url.lastPathComponent == "unknown.json" }?.isBenchmark == false, "an unrelated JSON was labelled a benchmark")
+        let concurrency = root.appendingPathComponent("concurrency.json")
+        try Data(#"{"concurrency_profile_version":"1","protocol":{"name":"cache_minimized_concurrency","version":"1"},"engine":{"name":"lmstudio"},"model":{"name":"model"},"levels":[{"concurrency":32}]}"#.utf8).write(to: concurrency)
+        let concurrentSummary = ResultRepository.load(root).first { $0.url.lastPathComponent == "concurrency.json" }
+        try expect(concurrentSummary?.kind == "local_concurrency_diagnostic"
+            && concurrentSummary?.displayProfile == "Concurrent requests"
+            && concurrentSummary?.isBenchmark == false, "Concurrency was not recognized or became eligible for benchmark actions")
+        try Data(#"{"concurrency_profile_version":"1","protocol":{"name":"unrelated","version":"1"},"engine":{"name":"test"},"model":{"name":"model"},"levels":[{"concurrency":1}]}"#.utf8)
+            .write(to: root.appendingPathComponent("lookalike.json"))
+        try expect(ResultRepository.load(root).first { $0.url.lastPathComponent == "lookalike.json" }?.kind == "unknown",
+            "An unrelated protocol was labelled a concurrency diagnostic")
+        try Data(#"{"concurrency_profile_version":"1","protocol":{"name":"cache_minimized_concurrency","version":"1"},"engine":{"name":"test"},"model":{"name":"model"},"levels":[]}"#.utf8)
+            .write(to: root.appendingPathComponent("empty-concurrency.json"))
+        try expect(ResultRepository.load(root).first { $0.url.lastPathComponent == "empty-concurrency.json" }?.kind == "unknown",
+            "An empty diagnostic was classified as a recorded concurrency run")
+        let dated = root.appendingPathComponent("dated", isDirectory: true)
+        try FileManager.default.createDirectory(at: dated, withIntermediateDirectories: true)
+        try Data(#"{"kind":"local_matrix_diagnostic","created_at":"2026-10-02T09:00:00.123+02:00"}"#.utf8)
+            .write(to: dated.appendingPathComponent("matrix.json"))
+        try Data(#"{"kind":"local_context_diagnostic","timestamp":"2026-10-02T07:30:00Z"}"#.utf8)
+            .write(to: dated.appendingPathComponent("context.json"))
+        try Data(#"{"kind":"local_energy_diagnostic","timestamp":"2026-10-02T07:30:00Z"}"#.utf8)
+            .write(to: dated.appendingPathComponent("z-same-time.json"))
+        let undated = dated.appendingPathComponent("undated.json")
+        try Data(#"{"unrelated":"JSON"}"#.utf8).write(to: undated)
+        let fallbackDate = Date(timeIntervalSince1970: 1_700_000_000)
+        try FileManager.default.setAttributes([.modificationDate: fallbackDate], ofItemAtPath: undated.path)
+        let invalidDate = dated.appendingPathComponent("invalid-date.json")
+        try Data(#"{"kind":"local_matrix_diagnostic","created_at":"invalid date"}"#.utf8).write(to: invalidDate)
+        try FileManager.default.setAttributes([.modificationDate: fallbackDate.addingTimeInterval(-60)], ofItemAtPath: invalidDate.path)
+        let chronological = ResultRepository.load(dated)
+        try expect(chronological.map { $0.url.lastPathComponent } == ["context.json", "z-same-time.json", "matrix.json", "undated.json", "invalid-date.json"],
+            "Result ordering ignored created_at, fractional seconds, UTC offsets or file-date fallback")
+        try expect(chronological[2].timestamp == "2026-10-02T09:00:00.123+02:00"
+            && abs(chronological[3].recordedAt.timeIntervalSince(fallbackDate)) < 0.01,
+            "Recorded timestamp was not displayed or file-date fallback was lost")
+        let tooLarge = root.appendingPathComponent("large.json")
+        try Data(count: ResultRepository.fileLimit + 1).write(to: tooLarge)
+        try rejects { _ = try ResultRepository.read(tooLarge) }
+
+        let large = await ProcessRunner().run(executable: python,
+            arguments: ["-I", "-c", "import sys; sys.stdout.write('a'*600000); sys.stderr.write('b'*600000)"],
+            directory: root, environment: RuntimeDiscovery.environment(), timeout: 10)
+        try expect(large.succeeded && large.stdout.count == 600000 && large.stderr.count == 600000, "pipe output was lost or deadlocked")
+        let orphanStart = Date()
+        let orphan = await ProcessRunner().run(executable: python,
+            arguments: ["-I", "-c", "import subprocess,sys; subprocess.Popen([sys.executable,'-I','-c','import time; time.sleep(5)'])"],
+            directory: root, environment: RuntimeDiscovery.environment(), timeout: 10)
+        try expect(Date().timeIntervalSince(orphanStart) < 4.5, "an inherited pipe kept the app waiting")
+        try expect(orphan.outputTruncated && !orphan.succeeded, "incomplete output was reported as success")
+        let timed = await ProcessRunner().run(executable: python,
+            arguments: ["-I", "-c", "import time; time.sleep(30)"], directory: root,
+            environment: RuntimeDiscovery.environment(), timeout: 0.2)
+        try expect(timed.timedOut && !timed.succeeded, "timeout did not stop the process")
+        let cancelledRunner = ProcessRunner()
+        cancelledRunner.stop()
+        let cancelled = await cancelledRunner.run(executable: python, arguments: ["-V"], directory: root,
+            environment: RuntimeDiscovery.environment(), timeout: 10)
+        try expect(cancelled.cancelled, "cancel-before-launch was ignored")
+        print("Core checks passed: CLI parity, exact arguments, defaults, validation, removal policy, result parsing, pipes, timeout and cancellation.")
+    }
+}
