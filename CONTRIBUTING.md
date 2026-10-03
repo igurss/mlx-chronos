@@ -356,19 +356,19 @@ CLI, not a duplicate implementation in the app. Use the
 | Path inside the app folder | Purpose |
 | --- | --- |
 | `MLXChronos/` | Application state, runtime discovery, command construction, process execution, result loading and SwiftUI views. |
-| `MLXChronos/Resources/` | Python adapter, pinned published CLI wheel/manifest and bundled license notices. No interpreter or model weights. |
+| `MLXChronos/Resources/` | Python adapter and license notices. No CLI wheel, interpreter or model weights. |
 | `MLXChronos/Assets.xcassets/`, `MLXChronos/AppIcon.icon/` | Sidebar artwork, colors and native light/dark app icons. |
 | `MLXChronos.xcodeproj/` | App target and shared build scheme. |
 | `Tests/` | Reusable bridge and Swift core regressions with mocks/temporary fixtures. |
-| `scripts/` | Local build, regression checks, opt-in disposable installation check and explicit CLI-wheel refresh. |
+| `scripts/` | Local build, regression checks, disposable standalone bootstrap and published release registration. |
 
 Requires an Apple Silicon Mac, Xcode 26+ with its command-line tools, and an
-existing compatible Python 3.10+. The deployment target remains macOS 14.
+Python 3.10+ for developer checks. End users get a private Python download. The deployment target remains macOS 14.
 Open `MLXChronos.xcodeproj` and choose the `MLXChronos` scheme to run/debug.
 
 ### Reusable checks
 
-Create a separate Python environment with the bundled CLI contract:
+Create a separate Python environment with the approved published CLI:
 
 ```bash
 python3 -m venv .venv-app
@@ -383,7 +383,8 @@ fixtures and mocks, not your engines/models or app preferences. They are not
 an all-hardware or full-interface acceptance certification.
 
 The separate **macOS App** workflow runs these reusable bridge/core checks
-against the bundled wheel on app changes. It does not load real models, run
+against the approved published CLI and current source, including full Release
+build and disposable standalone Python bootstrap. It does not load real models, run
 personal acceptance scenarios, publish binaries or certify Gatekeeper trust.
 
 Optional networked setup/removal regression, using **only its own disposable
@@ -427,10 +428,32 @@ number. The build remains in the app metadata and local candidate ZIP names.
 Renaming a download does not create a new binary or justify moving its source
 tag; changed binaries need a new release identity.
 
-To deliberately change the bundled CLI, run `scripts/bundle_runtime.py VERSION`
-inside the app folder, then review the manifest checksum, wheel provenance,
-tests and documentation. It downloads the named wheel; it does not change the
-CLI project version or silently update a user runtime.
+### Approving independently released CLI updates
+
+The app reads `docs/app-runtime.json` from the official Pages site, then checks
+published versions on PyPI. Its compatibility contract is independent of the
+benchmark measurement protocol. Never infer app compatibility solely from a
+package version or a successful pip install.
+
+After publishing a CLI release, run:
+
+```bash
+python3 apps/mlx-chronos-mac/scripts/register_runtime_release.py X.Y.Z
+bash apps/mlx-chronos-mac/scripts/check_bootstrap.sh
+```
+
+The registrar verifies the published wheel hash and reads its literal
+`mlx_chronos/app_contract.py` declaration without executing wheel code. Review
+minimum app version, API version, required capabilities, supported commands and
+artifact identity before committing the catalog. Existing entries are immutable.
+The single 0.5.0 legacy entry is an explicitly reviewed exception for the initial
+published package; new entries must include the package-side contract.
+
+Run standalone bootstrap checks only on macOS with network access. They create
+and remove their own temporary directory, install no global Python, and verify
+fresh setup, reuse, repair, rollback and failed-update preservation. Catalog
+approval does not publish a CLI release or app DMG. A missing/unknown contract
+blocks automatic installation; incompatible versions prompt an app update.
 
 ### Documentation, license and release identity
 

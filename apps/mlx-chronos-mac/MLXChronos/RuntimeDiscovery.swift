@@ -5,11 +5,17 @@ enum RuntimeDiscovery {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MLXChronos", isDirectory: true)
     }
     static var managedCandidate: RuntimeCandidate {
-        RuntimeCandidate(pythonPath: applicationDirectory.appendingPathComponent("venv/bin/python").path)
+        ActiveRuntime.read(at: applicationDirectory)?.candidate(at: applicationDirectory)
+            ?? RuntimeCandidate(pythonPath: applicationDirectory.appendingPathComponent("venv/bin/python").path)
+    }
+    static func isManaged(_ candidate: RuntimeCandidate) -> Bool {
+        guard candidate.sourcePath == nil else { return false }
+        return candidate.pythonPath == applicationDirectory.appendingPathComponent("venv/bin/python").path
+            || candidate.pythonPath.hasPrefix(applicationDirectory.appendingPathComponent("managed-runtimes").path + "/")
     }
     static func candidates(registered: [RuntimeCandidate]) -> [RuntimeCandidate] {
         let fm = FileManager.default, home = fm.homeDirectoryForCurrentUser
-        var paths = [managedCandidate] + registered
+        var paths = [managedCandidate, RuntimeCandidate(pythonPath: applicationDirectory.appendingPathComponent("venv/bin/python").path)] + registered
         let inherited = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(String.init)
         for directory in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"] + inherited {
             for filename in ["python3"] + (10...15).map({ "python3.\($0)" }) {

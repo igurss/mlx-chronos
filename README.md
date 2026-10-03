@@ -129,10 +129,13 @@ thermal support. You can explicitly choose another detected installation or
 source checkout. The app does not install Python, inference engines or models,
 and running a test does not automatically share its result.
 
-App and CLI releases are independent: **app 0.1.0** initially bundles
-**CLI 0.5.0**. Follow the [app changelog](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/CHANGELOG.md) for
-app changes and the [user guide](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/USER_GUIDE.md) for setup,
-commands and diagnostic limits. [Download the app](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0).
+App and CLI releases are independent. The published **app 0.1.0** initially
+bundles CLI **0.5.0**. The upcoming **app 0.2.0** downloads private Python and
+approved compatible CLI releases at launch, retaining the prior copy until
+verification passes. CLI bug fixes can then be delivered without rebuilding
+its DMG; incompatible interfaces require an app update. See the
+[user guide](apps/mlx-chronos-mac/USER_GUIDE.md) for setup and options.
+[Download the published app](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0).
 The DMG has a local/ad-hoc signature, not Developer ID signing or Apple
 notarization; macOS may require explicit first-launch authorization.
 
@@ -633,4 +636,4 @@ Discuss proposals through [GitHub issues](https://github.com/igurss/mlx-chronos/
 
 The CLI and macOS app source use Apache 2.0. See
 [LICENSE](https://github.com/igurss/mlx-chronos/blob/main/LICENSE) and the app's
-[bundled runtime notices](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/THIRD_PARTY_NOTICES.md).
+[downloaded runtime notices](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/THIRD_PARTY_NOTICES.md).

@@ -14,7 +14,11 @@ fi
 CHRONOS_BUILD_DIR="$(mktemp -d -t chronos-release)"
 trap 'rm -rf "$CHRONOS_BUILD_DIR"' EXIT
 cd "$CHRONOS_PROJECT_DIR"
-test -f MLXChronos/Resources/runtime_manifest.json
+test -f MLXChronos/Resources/chronos_bridge.py
+if find MLXChronos/Resources -name "*.whl" -print -quit | /usr/bin/grep -q .; then
+    printf "The app must not bundle a CLI wheel.\n" >&2
+    exit 1
+fi
 xcodebuild -quiet -project MLXChronos.xcodeproj -scheme MLXChronos \
     -configuration Release -destination 'generic/platform=macOS' \
     -derivedDataPath "$CHRONOS_BUILD_DIR" ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build

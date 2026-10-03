@@ -73,12 +73,14 @@ struct RuntimeProbe: Decodable, Equatable {
     var sourcePath: String?
     var enginePackages: [String: String]
     var commands: [CLICommand]
+    var appContract: AppRuntimeContract?
     var error: String?
     var compatible: Bool {
         let parts = pythonVersion.split(separator: ".").compactMap { Int($0) }
         return parts.count >= 2 && parts[0] == 3 && parts[1] >= 10
     }
-    var ready: Bool { compatible && packageVersion != nil && !commands.isEmpty && error == nil }
+    var ready: Bool { compatible && packageVersion != nil && !commands.isEmpty && error == nil
+        && (appContract.map { AppRuntimePolicy.issue($0) == nil } ?? true) }
     var thermalAvailable: Bool { ["nominal", "fair", "serious", "critical"].contains(thermalState ?? "") }
     enum CodingKeys: String, CodingKey {
         case architecture, executable, prefix, installer, commands, error
@@ -87,6 +89,7 @@ struct RuntimeProbe: Decodable, Equatable {
         case pipAvailable = "pip_available", packageVersion = "package_version"
         case packagePath = "package_path", thermalState = "thermal_state"
         case sourcePath = "source_path", enginePackages = "engine_packages"
+        case appContract = "app_contract"
         case packageOwned = "package_owned", environmentManager = "environment_manager"
     }
 }

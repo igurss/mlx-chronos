@@ -133,7 +133,7 @@ def probe(source):
         "package_version": None, "package_path": None, "installer": None,
         "package_owned": False,
         "environment_manager": "pipx" if (Path(sys.prefix) / "pipx_metadata.json").is_file() else "python",
-        "error": None, "source_path": source,
+        "error": None, "source_path": source, "app_contract": None,
     }
     try:
         import mlx_chronos
@@ -150,6 +150,9 @@ def probe(source):
         except metadata.PackageNotFoundError:
             pass
         info["commands"] = cli_schema()
+        if importlib.util.find_spec("mlx_chronos.app_contract") is not None:
+            from mlx_chronos.app_contract import describe_app_contract
+            info["app_contract"] = describe_app_contract()
         from mlx_chronos.detect import get_thermal_state_from_foundation
         info["thermal_state"] = get_thermal_state_from_foundation()
     except Exception as exc:

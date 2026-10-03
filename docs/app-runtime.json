@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "python": {
+    "version": "3.13.16",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.13.16+20261003-aarch64-apple-darwin-install_only.tar.gz",
+    "sha256": "d8975d7df4f08f7b1c7aafcdfacbddcec3d366415f2c1a72b2466b6850815933"
+  },
+  "releases": [
+    {
+      "version": "0.5.0",
+      "url": "https://files.pythonhosted.org/packages/7c/db/984be4e49e30548e2ef9447ba7e7e8f654754af688e57ad1001dcd771750/mlx_chronos-0.5.0-py3-none-any.whl",
+      "sha256": "b4e0c04a4697f1ef01ec3fad48d57af8e567c94b7ff17732712b9d8de86495be",
+      "contract": {
+        "api_version": 1,
+        "minimum_app_version": "0.2.0",
+        "required_capabilities": [
+          "cli-options-v1",
+          "snapshot-v1",
+          "benchmark-json-v1",
+          "thermal-foundation-v1",
+          "command-safety-v1"
+        ],
+        "supported_commands": [
+          "run",
+          "matrix",
+          "context",
+          "concurrency",
+          "energy",
+          "doctor",
+          "validate",
+          "models",
+          "engines",
+          "history",
+          "compare",
+          "submit",
+          "upgrade",
+          "wizard"
+        ]
+      },
+      "allow_legacy_bridge": true
+    }
+  ]
+}

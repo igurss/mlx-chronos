@@ -1,17 +1,17 @@
 # MLX Chronos for macOS — User guide
 
-App version: **0.1.0**. Bundled CLI: **mlx-chronos 0.5.0**.
+App version: **0.2.0 (next release)**. Python and mlx-chronos are downloaded independently.
+The published 0.1.0 app retains its original bundled setup; this guide describes the new app source.
 
 The app configures and runs the Python CLI. It does not implement a separate
-measurement method. This guide covers the bundled version; selecting another
-CLI installation can change the available options and defaults.
+measurement method. Available options and defaults come from the selected CLI installation.
 
 ## First run
 
 ### Install and authorize the app
 
 Download the DMG and its matching `.sha256` file from the
-[official app release](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0).
+[official app release](https://github.com/igurss/mlx-chronos/releases).
 Open the DMG, drag `MLXChronos.app` to Applications, and launch the installed
 copy. Eject the DMG after installation.
 
@@ -28,7 +28,7 @@ verify the package rather than ignoring the warning.
 Optional checksum verification from the folder containing both downloads:
 
 ```bash
-shasum -a 256 -c MLXChronos-0.1.0-arm64.dmg.sha256
+shasum -a 256 -c MLXChronos-0.2.0-arm64.dmg.sha256
 ```
 
 This detects an altered download relative to the published checksum; it is not
@@ -39,16 +39,15 @@ are also included as a text file inside the DMG.
 
 ### Prepare the measurement environment
 
-You need an Apple Silicon Mac with macOS 14 or later, an existing compatible
-Python 3.10+ installation, and a supported inference engine. Python is **not**
-included or installed by the app. Engine installation, server startup and
-model downloads are also separate from the app.
+You need an Apple Silicon Mac with macOS 14 or later and a supported inference
+engine. On first launch the app downloads a private Python interpreter and a
+verified compatible mlx-chronos release with Foundation thermal support.
+Initial preparation requires Internet. Python already on your Mac is preserved.
+Engine installation, server startup and model downloads remain separate.
 
-1. In **Environment**, choose **Detect installations**.
-2. Choose a compatible Python under **App-managed setup**, then use
-   **Prepare / repair app-managed copy**. This installs the bundled CLI and
-   its dependencies, including mandatory Foundation thermal support, in a
-   dedicated environment. Initial preparation requires internet access.
+1. Open the app and wait for automatic environment preparation in **Environment**.
+2. If preparation fails or you disabled launch checks, use **Check / prepare
+   compatible CLI**. Activity contains the installation output.
 3. Start your engine's server and make a suitable model available there.
 4. Use **Refresh Mac and engines** to check the server and its model IDs.
 5. In **Tests**, choose **Standard benchmark**, the engine and its exact model
@@ -75,10 +74,17 @@ and location, and verified thermal support. Changing installations resets form
 drafts. An unavailable selected installation is reported rather than silently
 replaced.
 
-- **Prepare / repair app-managed copy** restores the bundled CLI version and
-  checks dependencies and thermal support. It does not install Python.
-- **Install / enable thermal support** installs the CLI with its thermal extra
-  in an eligible selected external Python environment.
+- **Check and update the app-managed CLI at launch** is enabled by default.
+  Checks run at each launch and install only approved compatible releases.
+  Unsupported or unknown releases are skipped with a visible explanation.
+- **Check / prepare compatible CLI** checks updates and prepares the private
+  copy if needed. It does not upgrade external Python environments.
+- **Repair private CLI** rebuilds a separate private copy and switches to it only
+  after verification. The previous copy remains available.
+- **Restore previous CLI** verifies and activates the previous copy, then pauses
+  automatic CLI updates. Re-enable launch updates when ready.
+- **Use app-managed CLI instead** prepares/selects the private copy when browsing
+  an external installation.
 - **Remove this mlx-chronos copy** removes only the selected, eligible pip-owned
   CLI package after confirmation and a fresh ownership check. It does not
   remove Python, other dependencies, models or results. The app-managed copy,
@@ -109,12 +115,18 @@ and the runtime answering a probe must confirm MLX. GGUF/llama.cpp is rejected;
 | Engine and model check / `validate` | Check the selected engine; optional `--model` performs a small completion and can trigger server-side model loading. Default `--engine`: omlx. |
 | List models / `models` | List server model IDs for `--engine` (default omlx). Does not download models or certify every listed model as MLX. |
 | List engines / `engines` | List supported engines and detected status. Does not install them. |
-| Update mlx-chronos / `upgrade` | Confirm and update the selected eligible pip-owned CLI. `--timeout` (default 1.5 seconds) limits the initial PyPI check, not the installation. Does not update the app or engines. |
+| Update mlx-chronos / `upgrade` | In the app, checks/prepares the newest approved compatible private CLI. External installations and engines are preserved. The terminal CLI retains its own upgrade behavior. |
 
-Source/protected installations are not upgraded through this action. After an
-upgrade the app rechecks the CLI contract, dependencies and thermal support.
-An upgraded app-managed installation can differ from the bundled wheel;
-repair restores the bundled version.
+Compatibility uses an explicit interface version, minimum app version,
+required capabilities and supported commands. Python/package compatibility
+alone is insufficient. A failed download, checksum or verification keeps the
+active copy. Installed copies remain usable offline; the first installation
+requires Internet. CLI versions without verified compatibility metadata are
+not installed automatically.
+
+The app separately checks GitHub app releases. **App VERSION available — open
+download page** opens the official release page; replacing the app remains a
+manual action. Updating the CLI does not update the app.
 
 ## Tests
 
@@ -247,9 +259,9 @@ changing the default for later tests; **Show default folder** returns to it.
 The browser reads JSON, including diagnostic subfolders, and orders by recorded
 date with file-date fallback. It is not a recursive whole-disk result search.
 
-In the current app source, folders with more than 5,000 JSON files show the
+Folders with more than 5,000 JSON files show the
 newest 5,000 and a notice with the total. Incomplete subfolder scans also show a
-notice. These changes will be included in the next app release.
+notice.
 
 **Inspect all recorded data** opens the selected JSON. Browsing alone does not
 verify its integrity seal or public eligibility.
@@ -284,12 +296,13 @@ are saved locally. Form drafts and console text are session state. Benchmark
 data stays local unless you deliberately share it. Review the full JSON and
 notes before sending, especially hardware, model/server metadata and paths.
 
-The app adds no analytics or tracking. Package preparation/updates contact
-package services; engine checks and tests contact the configured servers;
+The app adds no analytics or tracking. Launch checks contact the official runtime catalog, PyPI and GitHub releases.
+Preparation downloads Python from python-build-standalone and packages from
+PyPI; engine checks and tests contact the configured servers;
 confirmed sharing contacts the selected inbox. Engine applications have their
 own network and privacy behavior, separate from Chronos.
 
 App version and build identify the macOS bundle; CLI version identifies the
 measurement implementation. Updating the CLI does not update the app, and the
-app has no automatic app updater. For metric definitions and diagnostic
+app checks for app releases but does not automatically replace its own bundle. For metric definitions and diagnostic
 limitations, see [Methodology](../../docs/methodology.md).

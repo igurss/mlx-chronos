@@ -123,7 +123,8 @@ class BridgeTests(unittest.TestCase):
             def base_url(self): return "http://localhost:1234/v1"
             def root_url(self): return "http://localhost:1234"
             def is_installed(self):
-                if self.name == "broken": raise RuntimeError("detection failed")
+                if self.name == "broken":
+                    raise RuntimeError("detection failed")
                 return True
             def is_server_running(self): return self.name != "broken"
             def get_version(self): return "test-version"

@@ -9,6 +9,7 @@ on:
       - 'LICENSE'
       - 'mlx_chronos/**'
       - 'pyproject.toml'
+      - 'docs/app-runtime.json'
   push:
     branches: [main]
     paths:
@@ -17,6 +18,7 @@ on:
       - 'LICENSE'
       - 'mlx_chronos/**'
       - 'pyproject.toml'
+      - 'docs/app-runtime.json'
 
 permissions:
   contents: read
@@ -34,24 +36,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Prepare bundled CLI contract
+      - name: Prepare approved published CLI
         run: |
           python -m venv .venv-app
-          python - <<'PY'
-          import hashlib
-          import json
-          from pathlib import Path
-          import subprocess
-
-          resources = Path('apps/mlx-chronos-mac/MLXChronos/Resources')
-          manifest = json.loads((resources / 'runtime_manifest.json').read_text())
-          wheel = resources / manifest['wheel']
-          if hashlib.sha256(wheel.read_bytes()).hexdigest() != manifest['sha256']:
-              raise SystemExit('Bundled wheel checksum mismatch')
-          subprocess.run(['.venv-app/bin/python', '-m', 'pip', 'install',
-                          str(wheel) + '[thermal]'], check=True)
-          subprocess.run(['.venv-app/bin/python', '-m', 'pip', 'check'], check=True)
-          PY
+          python apps/mlx-chronos-mac/scripts/check_fresh_runtime.py --install-only "$PWD/.venv-app/bin/python"
 
       - name: Run reusable app regressions
         run: bash apps/mlx-chronos-mac/scripts/check.sh "$PWD/.venv-app/bin/python"
@@ -71,3 +59,11 @@ jobs:
 
       - name: Build and verify the complete app
         run: bash apps/mlx-chronos-mac/scripts/build_release.sh "$RUNNER_TEMP/chronos-app-build"
+
+  bootstrap:
+    name: Fresh private Python and CLI bootstrap
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check standalone runtime without system Python
+        run: bash apps/mlx-chronos-mac/scripts/check_bootstrap.sh

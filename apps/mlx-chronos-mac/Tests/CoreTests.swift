@@ -36,6 +36,7 @@ struct CoreTests {
             directory: FileManager.default.temporaryDirectory, environment: RuntimeDiscovery.environment(), timeout: 20)
         try expect(probeResult.succeeded, "probe failed: \(probeResult.stderr)")
         let probe = try JSONDecoder().decode(RuntimeProbe.self, from: Data(probeResult.stdout.utf8))
+        try checkRuntimePolicy(probe)
         try expect(probe.commands.count == 14, "all commands must decode")
         try expect(OptionPresentation.compareGuidance.contains("Invalid schemas or seals are rejected")
             && OptionPresentation.compareGuidance.contains("warnings, not a block"),
@@ -163,6 +164,48 @@ struct CoreTests {
             environment: RuntimeDiscovery.environment(), timeout: 10)
         try expect(cancelled.cancelled, "cancel-before-launch was ignored")
         print("Core checks passed: CLI parity, exact arguments, defaults, validation, removal policy, result parsing, pipes, timeout and cancellation.")
+    }
+    static func checkRuntimePolicy(_ probe: RuntimeProbe) throws {
+        let contract = AppRuntimeContract(apiVersion: 1, minimumAppVersion: "0.2.0",
+            requiredCapabilities: Array(AppRuntimePolicy.capabilities), supportedCommands: probe.commands.map(\.name))
+        try expect(AppRuntimePolicy.issue(contract, appVersion: "0.2.0") == nil, "Compatible CLI was blocked")
+        try expect(AppRuntimePolicy.issue(contract, appVersion: "0.1.0") != nil, "Minimum app version was ignored")
+        let future = AppRuntimeContract(apiVersion: 2, minimumAppVersion: "0.2.0", requiredCapabilities: [], supportedCommands: ["run"])
+        try expect(AppRuntimePolicy.issue(future) != nil, "Unknown interface version was accepted")
+        let feature = AppRuntimeContract(apiVersion: 1, minimumAppVersion: "0.2.0", requiredCapabilities: ["future-feature"], supportedCommands: ["run"])
+        try expect(AppRuntimePolicy.issue(feature) != nil, "Unsupported capability was accepted")
+        let command = AppRuntimeContract(apiVersion: 1, minimumAppVersion: "0.2.0", requiredCapabilities: [], supportedCommands: ["new-command"])
+        try expect(AppRuntimePolicy.issue(command) != nil, "Unsupported command was accepted")
+        let release = RuntimeRelease(version: probe.packageVersion!, url: URL(string: "https://files.pythonhosted.org/test.whl")!,
+            sha256: String(repeating: "a", count: 64), contract: contract, allowLegacyBridge: true)
+        try AppRuntimePolicy.validate(probe, release: release)
+        try rejects { try AppRuntimePolicy.validate(probe, release: release, expectedPrefix: "/wrong/environment") }
+        let strict = RuntimeRelease(version: release.version, url: release.url, sha256: release.sha256,
+            contract: contract, allowLegacyBridge: false)
+        if probe.appContract == nil { try rejects { try AppRuntimePolicy.validate(probe, release: strict) } }
+        let catalog = RuntimeCatalog(schema: 1, python: RuntimeArtifact(version: "3.13.16",
+            url: URL(string: "https://github.com/astral-sh/python-build-standalone/releases/download/test/aarch64-apple-darwin-install_only.tar.gz")!,
+            sha256: String(repeating: "b", count: 64)), releases: [release])
+        try catalog.validate()
+        try expect(catalog.newestCompatible(published: [release.version], appVersion: "0.2.0")?.version == release.version,
+            "Published compatible release was not selected")
+        try expect(catalog.newestCompatible(published: [], appVersion: "0.2.0") == nil, "Unpublished release was selected")
+        try expect(catalog.newestCompatible(published: [release.version], appVersion: "0.1.0") == nil, "Incompatible release was selected")
+        let exact = RuntimePublication(url: release.url, digests: .init(sha256: release.sha256), yanked: false)
+        let yanked = RuntimePublication(url: release.url, digests: exact.digests, yanked: true)
+        let altered = RuntimePublication(url: release.url, digests: .init(sha256: String(repeating: "c", count: 64)), yanked: false)
+        let publications = RuntimeProject(releases: [release.version: [exact], "0.9.0": [], "0.9.0rc1": [exact], "0.8.0": [yanked]])
+        try expect(publications.latestStable == release.version, "Empty, yanked or prerelease versions became latest stable")
+        try expect(catalog.verifiedPublished(in: publications) == [release.version], "Exact approved publication was skipped")
+        try expect(catalog.verifiedPublished(in: RuntimeProject(releases: [release.version: [yanked, altered]])).isEmpty,
+            "A withdrawn or altered wheel was approved")
+        if probe.appContract != nil { try AppRuntimePolicy.validate(probe, release: strict) }
+        var missing = probe; missing.appContract = nil
+        try rejects { try AppRuntimePolicy.validate(missing, release: strict) }
+        var unsafe = probe; unsafe.commands[0].options[0].kind = "unknown-kind"
+        try rejects { try AppRuntimePolicy.validate(unsafe, release: release) }
+        try expect(ReleaseVersion("0.5.0rc1") == nil && ReleaseVersion("0.5.10")! > ReleaseVersion("0.5.9")!, "Stable numeric version filtering failed")
+        try expect(!ActiveRuntime.safeName("../external") && !ActiveRuntime.safeName("/tmp/external"), "Runtime pointer escaped its private tree")
     }
     static func checkResultListing(_ root: URL) throws {
         let fm = FileManager.default

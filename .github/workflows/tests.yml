@@ -15,6 +15,7 @@ on:
       - 'tests/**'
       - 'pyproject.toml'
       - 'MANIFEST.in'
+      - 'docs/app-runtime.json'
   push:
     branches: [main]
     paths:
@@ -30,6 +31,7 @@ on:
       - 'tests/**'
       - 'pyproject.toml'
       - 'MANIFEST.in'
+      - 'docs/app-runtime.json'
 
 permissions:
   contents: read

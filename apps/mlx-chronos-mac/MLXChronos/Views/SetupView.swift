@@ -27,21 +27,21 @@ struct SetupView: View {
                         }
                         Divider()
                         Text("App-managed setup").font(ChronosStyle.label)
-                        Picker("Python for initial app setup", selection: $store.basePythonPath) {
-                            Text("Choose a compatible Python").tag("")
-                            ForEach(store.compatiblePythons) { runtime in
-                                Text("Python \(runtime.probe?.pythonVersion ?? "") · \(runtime.candidate.pythonPath)")
-                                    .tag(runtime.candidate.pythonPath)
-                            }
-                        }.disabled(store.isRunning)
-                        VStack(alignment: .leading, spacing: 10) {
-                            Button("Prepare / repair app-managed copy") { store.prepareManagedRuntime() }
+                        Toggle("Check and update the app-managed CLI at launch", isOn: $store.automaticRuntimeUpdates)
+                            .toggleStyle(.checkbox).disabled(store.isRunning)
+                        ChronosActions {
+                            Button("Check / prepare compatible CLI") { store.prepareManagedRuntime() }
                                 .buttonStyle(.borderedProminent).controlSize(.large)
                                 .tint(ChronosStyle.primaryButton).foregroundStyle(.white)
-                                .disabled(store.isRunning || (store.basePythonPath.isEmpty && store.runtimes.first(where: \.isBuiltIn)?.probe == nil))
-                            ChronosHelp("Includes mandatory Foundation thermal-state support. Python itself is not installed.")
+                            Button("Repair private CLI") { store.prepareManagedRuntime(force: true) }
+                            Button("Restore previous CLI") { store.rollbackManagedRuntime() }
+                        }.disabled(store.isRunning)
+                        ChronosHelp(store.runtimeUpdateNotice)
+                        ChronosHelp("Private Python and compatible mlx-chronos are downloaded automatically. Existing Python installations are kept separate. First setup requires Internet; installed copies work offline.")
+                        if let url = store.appReleaseURL, let version = store.appReleaseVersion {
+                            Link("App \(version) available — open download page", destination: url)
+                            ChronosHelp("The app download is separate from CLI updates.")
                         }
-                        ChronosHelp("mlx-chronos is bundled with the app; preparing an environment downloads its dependencies. The source folder is optional.")
                         DisclosureGroup("Detected Python interpreters and installations") {
                             ForEach(store.runtimes) { runtime in
                                 VStack(alignment: .leading, spacing: 7) {
@@ -114,10 +114,11 @@ struct SetupView: View {
             }
             InfoLine(title: "Thermal support", value: probe.thermalAvailable ? "Verified · \(probe.thermalState ?? "")" : "Not available in this Python")
             if let error = probe.error { ChronosHelp(error) }
+            if let contract = probe.appContract, let issue = AppRuntimePolicy.issue(contract) { ChronosHelp(issue) }
             if !runtime.isBuiltIn && runtime.candidate.sourcePath == nil {
                 ChronosActions {
-                    Button("Install / enable thermal support") { store.installInSelectedRuntime() }
-                        .disabled(store.isRunning || !probe.compatible || !probe.pipAvailable || probe.externallyManaged || probe.environmentManager != "python")
+                    Button("Use app-managed CLI instead") { store.installInSelectedRuntime() }
+                        .disabled(store.isRunning)
                     Button("Remove this mlx-chronos copy", role: .destructive) { store.uninstallSelectedRuntime() }
                         .foregroundStyle(ChronosStyle.secondary)
                         .disabled(store.isRunning || !runtime.canUninstall)

@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import CryptoKit
 import Foundation
 
 @MainActor
@@ -12,7 +11,6 @@ final class ChronosStore: ObservableObject {
             hardware = nil; engineStatuses = []; outcome = nil
         }
     }
-    @Published var basePythonPath = ""
     @Published var outputDirectory: URL {
         didSet {
             UserDefaults.standard.set(outputDirectory.path, forKey: "MLXChronos.outputDirectoryPath")
@@ -46,13 +44,17 @@ final class ChronosStore: ObservableObject {
     private var resultsTask: Task<Void, Never>?
     private var resultRevision = UUID()
     private var hasScanned = false
+    private let runtimeManager = RuntimeManager()
+    @Published private(set) var runtimeUpdateNotice = "Updates have not been checked yet."
+    @Published private(set) var appReleaseURL: URL?
+    @Published private(set) var appReleaseVersion: String?
+    @Published var automaticRuntimeUpdates = UserDefaults.standard.object(forKey: "MLXChronos.automaticRuntimeUpdates") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(automaticRuntimeUpdates, forKey: "MLXChronos.automaticRuntimeUpdates") }
+    }
 
     var isRunning: Bool { operation != nil }
     var selectedRuntime: RuntimeInstallation? { runtimes.first { $0.id == selectedRuntimeID } }
     var commands: [CLICommand] { selectedRuntime?.probe?.commands ?? [] }
-    var compatiblePythons: [RuntimeInstallation] {
-        runtimes.filter { $0.probe?.compatible == true && $0.candidate.sourcePath == nil && !$0.isBuiltIn }
-    }
     var selectedReady: Bool { selectedRuntime?.probe?.ready == true }
 
     init() {
@@ -78,7 +80,14 @@ final class ChronosStore: ObservableObject {
     func scanOnFirstAppearance() {
         guard !hasScanned else { return }
         hasScanned = true
-        scan()
+        start("Detecting installations and checking updates") {
+            try await self.scanInstallations()
+            if self.automaticRuntimeUpdates { await self.synchronizeManagedRuntime() }
+            if let release = await self.runtimeManager.checkAppRelease() {
+                self.appReleaseVersion = release.0; self.appReleaseURL = release.1
+            }
+            if self.selectedReady { try await self.readEnvironment() }
+        }
     }
 
     func scan() {
@@ -111,7 +120,7 @@ final class ChronosStore: ObservableObject {
                             .flatMap { try? JSONDecoder().decode(RuntimeProbe.self, from: $0) } : nil
                         let error = probe == nil ? (response.timedOut ? "Python detection timed out." : String(response.stderr.suffix(2000))) : probe?.error
                         return RuntimeInstallation(candidate: candidate, probe: probe, error: error,
-                            isBuiltIn: candidate.id == RuntimeDiscovery.managedCandidate.id)
+                            isBuiltIn: RuntimeDiscovery.isManaged(candidate))
                     }
                 }
                 var values: [RuntimeInstallation] = []
@@ -133,12 +142,6 @@ final class ChronosStore: ObservableObject {
         runtimes = found.sorted {
             if $0.isBuiltIn != $1.isBuiltIn { return $0.isBuiltIn }
             return ($0.probe?.ready == true ? "0" : "1") + $0.id < ($1.probe?.ready == true ? "0" : "1") + $1.id
-        }
-        if !compatiblePythons.contains(where: { $0.candidate.pythonPath == basePythonPath }) {
-            basePythonPath = compatiblePythons.sorted {
-                if $0.probe?.architecture != $1.probe?.architecture { return $0.probe?.architecture == "arm64" }
-                return ($0.probe?.pythonVersion ?? "").compare($1.probe?.pythonVersion ?? "", options: .numeric) == .orderedDescending
-            }.first?.candidate.pythonPath ?? ""
         }
         log.append("Detected \(found.filter { $0.probe?.packageVersion != nil }.count) mlx-chronos installations.\n")
     }
@@ -223,55 +226,47 @@ final class ChronosStore: ObservableObject {
         UserDefaults.standard.set(try? JSONEncoder().encode(registered), forKey: "MLXChronos.registeredRuntimes")
     }
 
-    func prepareManagedRuntime() {
-        start("Preparing app-managed mlx-chronos") {
-            let fm = FileManager.default
-            let candidate = RuntimeDiscovery.managedCandidate
-            let root = RuntimeDiscovery.applicationDirectory.appendingPathComponent("venv", isDirectory: true)
-            guard !root.isSymbolicLink else { throw CommandError.invalid("The app environment folder cannot be a symbolic link.") }
-            try fm.createDirectory(at: RuntimeDiscovery.applicationDirectory, withIntermediateDirectories: true)
-            let wheel = try self.bundledWheel()
-            if !fm.isExecutableFile(atPath: candidate.pythonPath) {
-                guard self.compatiblePythons.contains(where: { $0.candidate.pythonPath == self.basePythonPath }) else {
-                    throw CommandError.invalid("Choose an installed Python 3.10 or newer to prepare the app environment.")
-                }
-                _ = try await self.execute(RuntimeCandidate(pythonPath: self.basePythonPath), action: "venv", arguments: [root.path], timeout: 180)
+    func prepareManagedRuntime(force: Bool = false) {
+        start("Checking app-managed runtime") {
+            await self.synchronizeManagedRuntime(force: force, select: true)
+            if self.selectedReady { try await self.readEnvironment() }
+        }
+    }
+
+    private func synchronizeManagedRuntime(force: Bool = false, select: Bool = false) async {
+        let wasManaged = selectedRuntime.map { RuntimeDiscovery.isManaged($0.candidate) } ?? true
+        let logger = log
+        do {
+            let result = try await runtimeManager.synchronize(bridge: bridgeURL(), force: force,
+                status: { self.operation = $0 }, log: { text in Task { @MainActor in logger.append(text) } })
+            runtimeUpdateNotice = result.notice
+            try await scanInstallations()
+            if let candidate = result.candidate, wasManaged || select {
+                selectedRuntimeID = candidate.id; drafts = [:]
             }
-            _ = try await self.execute(candidate, action: "pip",
-                arguments: ["install", "--disable-pip-version-check", wheel.path + "[thermal]"], timeout: 600)
-            _ = try await self.execute(candidate, action: "pip", arguments: ["check"], timeout: 45)
+        } catch is CancellationError {
+            runtimeUpdateNotice = "Runtime setup stopped. The previous copy was kept."
+        } catch {
+            runtimeUpdateNotice = "Could not prepare or check updates: " + error.localizedDescription
+            log.append(runtimeUpdateNotice + "\n")
+        }
+    }
+
+    func rollbackManagedRuntime() {
+        start("Restoring previous CLI") {
+            let candidate = try await self.runtimeManager.rollback(bridge: self.bridgeURL())
+            self.automaticRuntimeUpdates = false
             try await self.scanInstallations()
-            guard let verified = self.runtimes.first(where: \.isBuiltIn), verified.probe?.ready == true,
-                  verified.probe?.thermalAvailable == true else {
-                throw CommandError.invalid("Installation did not pass the CLI and Foundation thermal-state checks. See Activity.")
-            }
-            self.selectedRuntimeID = candidate.id
-            self.drafts = [:]
-            try await self.readEnvironment()
-            self.log.append("App-managed mlx-chronos is ready, including verified thermal-state support.\n")
+            self.selectedRuntimeID = candidate.id; self.drafts = [:]
+            self.runtimeUpdateNotice = "Previous CLI restored. Automatic CLI updates are paused; enable them when ready."
+            if self.selectedReady { try await self.readEnvironment() }
         }
     }
 
     func installInSelectedRuntime() {
-        guard let runtime = selectedRuntime, !runtime.isBuiltIn,
-              runtime.candidate.sourcePath == nil, let probe = runtime.probe, probe.compatible,
-              probe.pipAvailable, !probe.externallyManaged, probe.environmentManager == "python" else {
-            lastError = "Use the app-managed environment, or select a Python environment that pip can safely modify."; return
-        }
-        pendingAction = PendingAction(title: "Install or update mlx-chronos with thermal support?",
-            message: "This installs the latest published mlx-chronos[thermal] and its dependencies using:\n\(runtime.candidate.pythonPath)\n\nAn existing mlx-chronos copy in this environment may be updated. It does not install a Python interpreter.",
-            button: "Install / update") {
-            self.start("Installing mlx-chronos") {
-                _ = try await self.execute(runtime.candidate, action: "pip", arguments: ["install", "--upgrade", "--disable-pip-version-check", "mlx-chronos[thermal]"], timeout: 600)
-                _ = try await self.execute(runtime.candidate, action: "pip", arguments: ["check"], timeout: 45)
-                try await self.scanInstallations()
-                guard self.selectedRuntime?.probe?.ready == true,
-                      self.selectedRuntime?.probe?.thermalAvailable == true else {
-                    throw CommandError.invalid("The selected installation did not pass CLI and thermal-state verification. See Activity.")
-                }
-                try await self.readEnvironment()
-            }
-        }
+        // Installation always targets the private app copy. External Python,
+        // source checkouts and package-manager environments are never upgraded.
+        prepareManagedRuntime()
     }
 
     func uninstallSelectedRuntime() {
@@ -334,6 +329,7 @@ final class ChronosStore: ObservableObject {
 
     func run(_ command: CLICommand) {
         guard !isRunning else { return }
+        if command.name == "upgrade" { prepareManagedRuntime(); return }
         do {
             let values = executionValues(for: command)
             let arguments = try CommandBuilder.arguments(command, values: values)
@@ -342,9 +338,6 @@ final class ChronosStore: ObservableObject {
             }
             if command.section == .benchmark && runtime.probe?.thermalAvailable != true {
                 throw CommandError.invalid("This Python cannot read thermal state through Foundation. Install thermal support in Environment before measuring.")
-            }
-            if command.name == "upgrade", runtime.candidate.sourcePath != nil || runtime.probe?.externallyManaged == true || runtime.probe?.packageOwned != true || runtime.probe?.environmentManager != "python" {
-                throw CommandError.invalid("Select a pip-managed installed copy to update. Source checkouts and package-manager Python are not updated here.")
             }
             if command.name == "energy" && !macmonAvailable {
                 throw CommandError.invalid("Energy requires macmon on PATH. Install macmon, then refresh Environment.")
@@ -358,10 +351,6 @@ final class ChronosStore: ObservableObject {
                 pendingAction = PendingAction(title: "Send this result?",
                     message: "The CLI validates and sends the full result JSON to:\n\(values["endpoint"].flatMap { $0.isEmpty ? nil : $0 } ?? "the mlx-chronos project inbox")\n\nFile: \(values["file"] ?? "")\nContact: \(values["email"].flatMap { $0.isEmpty ? nil : $0 } ?? "anonymous")",
                     button: "Send result", perform: action)
-            } else if command.name == "upgrade" {
-                pendingAction = PendingAction(title: "Update this installation?",
-                    message: "Update mlx-chronos from PyPI using:\n\(runtime.candidate.pythonPath)\n\nThe app will re-detect the updated CLI and verify thermal support.",
-                    button: "Update", perform: action)
             } else { action() }
         } catch { lastError = error.localizedDescription }
     }
@@ -380,14 +369,7 @@ final class ChronosStore: ObservableObject {
             self.outcome = CommandOutcome(title: command.title,
                 output: String((response.stdout + response.stderr).suffix(120_000)), succeeded: response.succeeded)
             if !response.succeeded { throw CommandError.invalid(self.failure(response)) }
-            if command.name == "upgrade" {
-                _ = try await self.execute(candidate, action: "pip", arguments: ["install", "--disable-pip-version-check", "mlx-chronos[thermal]"], timeout: 600)
-                _ = try await self.execute(candidate, action: "pip", arguments: ["check"], timeout: 45)
-                try await self.scanInstallations()
-                try await self.readEnvironment()
-                guard self.selectedRuntime?.probe?.thermalAvailable == true else { throw CommandError.invalid("Update finished, but thermal-state verification failed.") }
-                self.drafts = [:]
-            }
+
         }
     }
 
@@ -440,7 +422,7 @@ final class ChronosStore: ObservableObject {
 
     func stop() {
         guard isRunning else { return }
-        isStopping = true; task?.cancel(); runners.forEach { $0.stop() }
+        isStopping = true; task?.cancel(); runtimeManager.stop(); runners.forEach { $0.stop() }
     }
 
     func browseResults(at directory: URL) {
@@ -489,20 +471,5 @@ final class ChronosStore: ObservableObject {
         }
         return url
     }
-    private func bundledWheel() throws -> URL {
-        guard let manifestURL = Bundle.main.url(forResource: "runtime_manifest", withExtension: "json", subdirectory: "Resources"),
-              let object = try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: String],
-              let file = object["wheel"], URL(fileURLWithPath: file).lastPathComponent == file,
-              let expected = object["sha256"] else {
-            throw CommandError.invalid("The bundled mlx-chronos manifest is missing or invalid.")
-        }
-        let wheel = manifestURL.deletingLastPathComponent().appendingPathComponent(file)
-        let digest = SHA256.hash(data: try Data(contentsOf: wheel)).map { String(format: "%02x", $0) }.joined()
-        guard digest == expected else { throw CommandError.invalid("The bundled mlx-chronos package failed its checksum check.") }
-        return wheel
-    }
-}
 
-private extension URL {
-    var isSymbolicLink: Bool { (try? resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true }
 }

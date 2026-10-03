@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add an explicit app compatibility declaration independent of benchmark
+  protocol labels, and an approved artifact catalog for the upcoming app 0.2.0.
+  The app downloads private Python/CLI at launch, checks compatibility before
+  activation, preserves failed updates and supports verified rollback. App
+  release notifications remain separate from CLI updates.
+
+
 - Drain and validate completion streams while preserving first-token and
   completion timestamps, allowing actual HTTP keep-alive reuse. Reject stream
   errors, malformed events and incomplete responses; retain bounded HTTP error

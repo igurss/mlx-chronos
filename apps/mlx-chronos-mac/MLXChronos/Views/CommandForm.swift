@@ -5,11 +5,11 @@ struct CommandForm: View {
     var command: CLICommand
     @State private var advanced = false
     @State private var preview = false
-    private var basicOptions: [CLIOption] { command.options.filter { !OptionPresentation.isAdvanced($0.name, command: command.name) } }
-    private var advancedOptions: [CLIOption] { command.options.filter { OptionPresentation.isAdvanced($0.name, command: command.name) } }
+    private var basicOptions: [CLIOption] { command.name == "upgrade" ? [] : command.options.filter { !OptionPresentation.isAdvanced($0.name, command: command.name) } }
+    private var advancedOptions: [CLIOption] { command.name == "upgrade" ? [] : command.options.filter { OptionPresentation.isAdvanced($0.name, command: command.name) } }
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            ChronosCard(command.title, subtitle: guidance) {
+            ChronosCard(command.name == "upgrade" ? "Update app-managed CLI" : command.title, subtitle: guidance) {
                 VStack(alignment: .leading, spacing: 24) {
                     ForEach(basicOptions) { option in OptionField(option: option, command: command) }
                 }
@@ -29,11 +29,13 @@ struct CommandForm: View {
                         .tint(ChronosStyle.primaryButton).foregroundStyle(.white)
                         .disabled(store.isRunning || !store.selectedReady)
                         .accessibilityIdentifier("command.\(command.name).run")
-                    Button("Restore CLI defaults") { store.drafts[command.name] = nil }
-                        .disabled(store.isRunning)
-                    Toggle("Show command", isOn: $preview).toggleStyle(.checkbox)
+                    if command.name != "upgrade" {
+                        Button("Restore CLI defaults") { store.drafts[command.name] = nil }
+                            .disabled(store.isRunning)
+                        Toggle("Show command", isOn: $preview).toggleStyle(.checkbox)
+                    }
                 }
-                if preview {
+                if preview && command.name != "upgrade" {
                     Text(commandPreview).font(ChronosStyle.code).textSelection(.enabled)
                         .accessibilityIdentifier("command.preview")
                         .fixedSize(horizontal: false, vertical: true)
@@ -46,7 +48,7 @@ struct CommandForm: View {
     }
     private var actionTitle: String {
         if command.name == "submit" { return store.values(for: command)["dry_run"] == "true" ? "Validate result" : "Review and send…" }
-        if command.name == "upgrade" { return "Review and update…" }
+        if command.name == "upgrade" { return "Check compatible CLI" }
         return command.section == .benchmark ? "Start test" : "Run check"
     }
     private var commandPreview: String {
@@ -65,7 +67,7 @@ struct CommandForm: View {
         case "submit": return "Validate a sealed standard benchmark for the community leaderboard. Validation-only is selected by default. Contact email and contributor attribution are optional; sending requires a separate confirmation. Local diagnostics cannot be submitted."
         case "compare": return OptionPresentation.compareGuidance
         case "history": return "List the standard benchmark results in a folder, newest first. The browser above also includes local diagnostics and matrix manifests."
-        case "upgrade": return "Update the selected installed mlx-chronos copy from PyPI. Source checkouts are managed separately. The app rechecks the available commands and thermal-state support after the update."
+        case "upgrade": return "Prepare the newest verified compatible CLI in a private app environment. External installations are preserved. Compatibility and thermal support are checked before activation."
         default: return command.help
         }
     }

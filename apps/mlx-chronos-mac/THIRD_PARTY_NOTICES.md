@@ -1,21 +1,20 @@
-# Bundled CLI and runtime dependencies
+# Downloaded Python and CLI dependencies
 
-The app includes the unmodified published
-`mlx_chronos-0.5.0-py3-none-any.whl` package from PyPI:
+The app contains a small Python adapter and the project's Apache-2.0 license.
+It does not redistribute a CLI wheel, Python interpreter, engines or models.
 
-- Project/source: https://github.com/igurss/mlx-chronos
-- Published package: https://pypi.org/project/mlx-chronos/0.5.0/
-- License: Apache License 2.0. The full license is included inside the wheel at
-  `mlx_chronos-0.5.0.dist-info/licenses/LICENSE`, and is retained when installed.
-- The exact wheel SHA-256 is recorded in
-  `MLXChronos/Resources/runtime_manifest.json` and checked before preparation.
+At preparation time it downloads verified artifacts described by the official
+[compatibility catalog](https://igurss.github.io/mlx-chronos/app-runtime.json):
 
-The wheel is not a Python interpreter. Preparation downloads and installs the
-CLI's declared dependencies, including its mandatory thermal extra
-(`pyobjc-framework-Cocoa` and its dependencies), in the dedicated environment.
-Those dependencies retain their upstream package metadata and licenses. No
-engine application, model weights or Python interpreter is redistributed by
-this app build.
+- [python-build-standalone](https://github.com/astral-sh/python-build-standalone),
+  a CPython distribution with its upstream license files. See its
+  [licensing documentation](https://gregoryszorc.com/docs/python-build-standalone/main/licensing.html).
+- [mlx-chronos on PyPI](https://pypi.org/project/mlx-chronos/), Apache-2.0.
+  The installed wheel retains its license and distribution metadata.
+- CLI dependencies including mandatory Foundation thermal support
+  (`pyobjc-framework-Cocoa`). Each installed distribution retains its upstream
+  metadata and licenses.
 
-The Swift/Python adapter configures and invokes the package; it does not modify
-the bundled CLI code. App and CLI versions are separately recorded.
+Python archives and CLI wheels are checked against the catalog's SHA-256
+before use. The catalog and package services use HTTPS. App and CLI versions,
+app interface compatibility and benchmark protocol are separate identifiers.

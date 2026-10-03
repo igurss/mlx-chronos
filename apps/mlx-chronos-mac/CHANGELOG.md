@@ -3,7 +3,19 @@
 The macOS app is versioned independently of the Python CLI. This history starts
 with the first public app baseline; private prototypes are not earlier releases.
 
-## Unreleased
+## Unreleased — 0.2.0, build 4
+
+- Remove the embedded CLI wheel. At launch, download private Python and the
+  newest published CLI explicitly approved by the compatibility catalog.
+- Gate updates on app/interface versions, required capabilities, command support,
+  SHA-256 checks and post-install CLI/Foundation verification. Unknown releases
+  remain excluded; failed updates preserve the active environment.
+- Keep versioned environments and a verified rollback action. External Python,
+  source checkouts and package-manager installations are preserved.
+- Add independent app-release notifications linking to the official download.
+  The app does not replace its own bundle automatically.
+- Add fresh standalone bootstrap, rollback and failed-update regressions in CI.
+
 
 - Select the newest results by recorded date before applying the visible
   5,000-file limit, and scan all immediate diagnostic subfolders.
