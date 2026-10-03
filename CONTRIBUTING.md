@@ -202,8 +202,9 @@ Additional public requirements:
 - `hardware.low_power_mode` must be `off`.
 - Engine version and hardware identity must satisfy the requirements above;
   timestamps may not be more than 10 minutes in the future.
-- RAM/RSS and thermal monitors must record no sampling errors, and the thermal
-  monitor must use Foundation with at least one sample.
+- RAM/RSS and thermal monitors must record no sampling errors. The thermal
+  monitor must use Foundation with at least two valid samples and a recorded
+  maximum sample gap no larger than `max(1.0, 2.5 * sample_interval_seconds)`.
 - Benchmark protocol metadata must remain unchanged.
 - Generation parameters must remain deterministic: `temperature=0.0`,
   `top_p=1.0`.
@@ -217,9 +218,14 @@ If your JSON says `"token_count_source": "word_fallback"` or `"mixed"`, keep it
 as a local result until the engine can return real completion-token usage. New
 fallback results also set `meta.word_fallback_warning`.
 
-The small protocol labels stored in JSON, such as `1`, `2`, or `3`, are
+The small protocol labels stored in JSON, such as `1`, `2`, `3`, or `4`, are
 internal compatibility markers used by validators. They are not public protocol
 release versions.
+
+Current-source submissions require label `4`, which records fully drained and
+validated completion streams plus thermal sampling coverage. Archived label
+`3` results retain their original data and seals; they do not satisfy the
+current rules for a new submission. Never relabel an existing measurement.
 
 ### 6. Open a Result PR
 

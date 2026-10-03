@@ -50,7 +50,9 @@ class RAMTracker:
     def _refresh_child_processes(self) -> None:
         try:
             self._child_processes = self._process.children(recursive=True)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+            with self._lock:
+                self.sample_errors += 1
             self._child_processes = []
         self._children_refreshed = True
         self._last_child_refresh_at = time.monotonic()
@@ -72,8 +74,11 @@ class RAMTracker:
         for child in self._child_processes:
             try:
                 rss_bytes += child.memory_info().rss
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except psutil.NoSuchProcess:
                 continue
+            except (psutil.AccessDenied, OSError):
+                with self._lock:
+                    self.sample_errors += 1
         with self._lock:
             self.sample_count += 1
         return rss_bytes
@@ -85,7 +90,7 @@ class RAMTracker:
                 with self._lock:
                     if current_ram > self.peak_ram_bytes:
                         self.peak_ram_bytes = current_ram
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
                 with self._lock:
                     self.sample_errors += 1
                 try:
@@ -137,6 +142,7 @@ class SystemRAMTracker:
         self.peak_percent = 0.0
         self.baseline_swap_used_bytes: int | None = None
         self.peak_swap_used_bytes = 0
+        self._swap_incomplete = False
         self.sample_count = 0
         self.sample_errors = 0
         self._lock = threading.Lock()
@@ -160,6 +166,8 @@ class SystemRAMTracker:
         used_bytes, percent, total_bytes = self._sample_system_ram()
         swap_used_bytes = self._sample_swap_used()
         with self._lock:
+            if swap_used_bytes is None:
+                self._swap_incomplete = True
             self.sample_count += 1
             self.total_bytes = total_bytes
             if self.baseline_used_bytes is None:
@@ -223,7 +231,7 @@ class SystemRAMTracker:
         )
         swap_growth_gb = (
             None
-            if baseline_swap is None
+            if baseline_swap is None or self._swap_incomplete
             else max(0.0, (peak_swap - baseline_swap) / gibibyte)
         )
         return {
@@ -246,7 +254,7 @@ class ThermalStateTracker:
         self.interval = interval
         self.sampler = sampler or get_thermal_state_from_foundation
         self._phase = "setup"
-        self._samples: list[tuple[str, str]] = []
+        self._samples: list[tuple[str, str, float]] = []
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -254,14 +262,18 @@ class ThermalStateTracker:
 
     def _sample_thermal_state(self) -> str:
         state = self.sampler()
-        if isinstance(state, str) and state.strip():
-            return state.strip()
+        if isinstance(state, str):
+            normalized = state.strip()
+            if normalized in THERMAL_STATE_ORDER or normalized.startswith("unavailable"):
+                return normalized
         return "unavailable_foundation"
 
     def _record_sample(self):
         state = self._sample_thermal_state()
         with self._lock:
-            self._samples.append((self._phase, state))
+            self._samples.append((self._phase, state, time.monotonic()))
+            if state not in THERMAL_STATE_ORDER:
+                self.sample_errors += 1
 
     def _monitor(self):
         while not self._stop_event.wait(self.interval):
@@ -278,6 +290,7 @@ class ThermalStateTracker:
     def start(self):
         with self._lock:
             self._samples = []
+            self.sample_errors = 0
         self._stop_event.clear()
         try:
             self._record_sample()
@@ -300,7 +313,7 @@ class ThermalStateTracker:
         with self._lock:
             samples = list(self._samples)
 
-        states = [state for _phase, state in samples]
+        states = [state for _phase, state, _time in samples]
         start_state = states[0] if states else "unavailable_foundation"
         end_state = states[-1] if states else "unavailable_foundation"
         observed_known_states = [
@@ -319,7 +332,7 @@ class ThermalStateTracker:
         non_nominal_phases = sorted(
             {
                 phase
-                for phase, state in samples
+                for phase, state, _time in samples
                 if _is_non_nominal_thermal_state(state)
             }
         )
@@ -329,11 +342,15 @@ class ThermalStateTracker:
             "start_state": start_state,
             "end_state": end_state,
             "worst_state": worst_state,
-            "samples": len(samples),
+            "samples": len(observed_known_states),
             "changed_during_run": len(set(states)) > 1,
             "non_nominal_observed": any(
                 _is_non_nominal_thermal_state(state) for state in states
             ),
             "non_nominal_phases": non_nominal_phases,
             "sampling_errors": self.sample_errors,
+            "max_sample_gap_seconds": max(
+                (right[2] - left[2] for left, right in zip(samples, samples[1:])),
+                default=0.0,
+            ),
         }

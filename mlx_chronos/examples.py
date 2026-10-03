@@ -80,6 +80,7 @@ EXAMPLE_RESULT = {
             "non_nominal_observed": False,
             "non_nominal_phases": [],
             "sampling_errors": 0,
+            "max_sample_gap_seconds": 1.0,
         },
         "warmup_failures": 0,
         "system_ram_monitor_errors": 0,
@@ -95,7 +96,7 @@ EXAMPLE_RESULT = {
         },
         "benchmark_protocol": {
             "name": "baseline",
-            "version": "3",
+            "version": "4",
             "warmup": {
                 "prompts": [
                     "Describe one practical reason local inference can be useful on a laptop."
@@ -180,6 +181,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "6d748128bc62e70a7f2a032983cd92085ef47b3da4f6286090b74eaeededbea9",
+        "digest": "069fa684cd811f49d0b77c94ea4bc9cd859f03bf3ebacfab1a751697515e6cdf",
     },
 }

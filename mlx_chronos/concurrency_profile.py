@@ -20,6 +20,7 @@ from mlx_chronos.constants import (
     PUBLIC_MIN_COMPLETION_TOKEN_RATIO,
     TOKEN_COUNT_SOURCE_USAGE,
 )
+from mlx_chronos.measurements import validate_throughput_measurement
 from mlx_chronos.detect import detect_hardware, get_thermal_state
 from mlx_chronos.engines import get_engine
 from mlx_chronos.model_reference import normalize_model_reference_url
@@ -95,6 +96,8 @@ def _wave(
     # Do not return or close the shared client while any request remains active.
     wait(futures)
     observations = [future.result() for future in futures]
+    for _, _, measurement in observations:
+        validate_throughput_measurement(measurement, max_tokens=max_tokens)
     if require_exact_tokens:
         for _, _, measurement in observations:
             if measurement.token_count_source != TOKEN_COUNT_SOURCE_USAGE:

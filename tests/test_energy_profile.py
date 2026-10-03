@@ -140,7 +140,7 @@ def test_profile_uses_separate_idle_and_throughput_windows():
     engine.validate_model_backend.return_value = {"format": "mlx", "quantization": "4bit"}
     engine.get_version.return_value = "test"
     engine.measure_throughput.side_effect = lambda *a, **k: (
-        events.append("request") or ThroughputMeasurement(10, 100, "usage.completion_tokens", 2)
+        events.append("request") or ThroughputMeasurement(min(k["max_tokens"], 100) / 2, min(k["max_tokens"], 100), "usage.completion_tokens", 2)
     )
     sampler = MagicMock()
     sampler.invalid_samples = 0

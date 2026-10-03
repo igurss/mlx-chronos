@@ -7,12 +7,16 @@ on:
       - 'apps/mlx-chronos-mac/**'
       - '.github/workflows/macos_app.yml'
       - 'LICENSE'
+      - 'mlx_chronos/**'
+      - 'pyproject.toml'
   push:
     branches: [main]
     paths:
       - 'apps/mlx-chronos-mac/**'
       - '.github/workflows/macos_app.yml'
       - 'LICENSE'
+      - 'mlx_chronos/**'
+      - 'pyproject.toml'
 
 permissions:
   contents: read
@@ -51,3 +55,19 @@ jobs:
 
       - name: Run reusable app regressions
         run: bash apps/mlx-chronos-mac/scripts/check.sh "$PWD/.venv-app/bin/python"
+
+      - name: Verify current source CLI compatibility
+        run: |
+          python -m venv .venv-current
+          .venv-current/bin/python -m pip install ".[thermal]"
+          bash apps/mlx-chronos-mac/scripts/check.sh "$PWD/.venv-current/bin/python"
+
+  build:
+    name: Full macOS Release build
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build and verify the complete app
+        run: bash apps/mlx-chronos-mac/scripts/build_release.sh "$RUNNER_TEMP/chronos-app-build"

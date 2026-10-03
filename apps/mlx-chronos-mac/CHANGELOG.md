@@ -3,6 +3,15 @@
 The macOS app is versioned independently of the Python CLI. This history starts
 with the first public app baseline; private prototypes are not earlier releases.
 
+## Unreleased
+
+- Select the newest results by recorded date before applying the visible
+  5,000-file limit, and scan all immediate diagnostic subfolders.
+- Reuse unchanged display summaries during refresh and cooperatively cancel
+  superseded scans. Report incomplete folder scans in the Results view.
+- Verify the full Release build and compatibility with both the bundled and
+  current-source CLI in CI. The published 0.1.0 bundle remains unchanged.
+
 ## [0.1.0] — 2026-10-02
 
 Initial release: **0.1.0, build 3**, bundling **mlx-chronos 0.5.0**.

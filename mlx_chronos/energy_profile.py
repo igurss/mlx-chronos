@@ -23,7 +23,7 @@ from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware, get_thermal_state
 from mlx_chronos.engines import get_engine
 from mlx_chronos.model_reference import normalize_model_reference_url
-from mlx_chronos.measurements import ThroughputMeasurement
+from mlx_chronos.measurements import ThroughputMeasurement, validate_throughput_measurement
 from mlx_chronos.protocol import THROUGHPUT_PROMPTS
 from mlx_chronos.reporters import _write_text_atomic
 from mlx_chronos.schema import normalize_model_quantization
@@ -220,24 +220,8 @@ def _macmon_version() -> str:
     return completed.stdout.strip() if completed.returncode == 0 else "unknown"
 
 
-def _validate_measurement(measurement: ThroughputMeasurement) -> None:
-    if (
-        not isinstance(measurement, ThroughputMeasurement)
-        or isinstance(measurement.completion_tokens, bool)
-        or not isinstance(measurement.completion_tokens, int)
-        or measurement.completion_tokens <= 0
-        or isinstance(measurement.request_tokens_per_second, bool)
-        or not isinstance(measurement.request_tokens_per_second, (int, float))
-        or not math.isfinite(measurement.request_tokens_per_second)
-        or measurement.request_tokens_per_second <= 0
-        or isinstance(measurement.elapsed_seconds, bool)
-        or not isinstance(measurement.elapsed_seconds, (int, float))
-        or not math.isfinite(measurement.elapsed_seconds)
-        or measurement.elapsed_seconds <= 0
-        or not isinstance(measurement.token_count_source, str)
-        or not measurement.token_count_source
-    ):
-        raise RuntimeError("engine returned an invalid throughput measurement")
+def _validate_measurement(measurement: ThroughputMeasurement, max_tokens: int | None = None) -> None:
+    validate_throughput_measurement(measurement, max_tokens=max_tokens)
 
 
 def run_energy_profile(
@@ -299,7 +283,7 @@ def run_energy_profile(
             f"Energy diagnostic warm-up {nonce}. {THROUGHPUT_PROMPTS[0]}",
             model=model_name, max_tokens=min(max_tokens, 16), client=client,
         )
-        _validate_measurement(warmup)
+        _validate_measurement(warmup, min(max_tokens, 16))
         started = _now()
         try:
             sampler.start()
@@ -314,7 +298,7 @@ def run_energy_profile(
                     f"Energy diagnostic {nonce}-{index:03d}. {THROUGHPUT_PROMPTS[index]}",
                     model=model_name, max_tokens=max_tokens, client=client,
                 )
-                _validate_measurement(measurement)
+                _validate_measurement(measurement, max_tokens)
                 measurements.append(measurement)
             active_end = _now()
             sampler.wait_for_sample_after(active_end)

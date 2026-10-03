@@ -34,6 +34,7 @@ def test_engine_rejects_noninteger_usage_instead_of_truncating_it():
     lines = [
         'data: {"choices": [{"delta": {"content": "a"}}]}',
         'data: {"usage": {"prompt_tokens": 512.5}}',
+        'data: [DONE]',
     ]
     with patch.object(engine, "_stream_request", return_value=_stream_response(lines)), \
          patch("mlx_chronos.engines.time.perf_counter", side_effect=[1.0, 1.4]):

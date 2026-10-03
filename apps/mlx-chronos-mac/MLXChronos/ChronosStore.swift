@@ -30,6 +30,8 @@ final class ChronosStore: ObservableObject {
     @Published var engineStatuses: [EngineStatus] = []
     @Published var macmonAvailable = false
     @Published var results: [ResultSummary] = []
+    @Published private(set) var resultsNotice: String?
+    private let resultCache = ResultSummaryCache()
     @Published var drafts: [String: [String: String]] = [:]
     @Published var operation: String?
     @Published var isStopping = false
@@ -459,10 +461,24 @@ final class ChronosStore: ObservableObject {
         resultRevision = UUID()
         let revision = resultRevision, root = resultsDirectory
         resultsTask?.cancel()
+        let cache = resultCache
         resultsTask = Task {
-            let files = await Task.detached(priority: .utility) { ResultRepository.load(root) }.value
-            guard !Task.isCancelled, revision == resultRevision else { return }
-            results = files
+            let worker = Task.detached(priority: .utility) {
+                try ResultRepository.scan(root, cache: cache, checkCancellation: { try Task.checkCancellation() })
+            }
+            do {
+                let listing = try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: { worker.cancel() }
+                guard !Task.isCancelled, revision == resultRevision else { return }
+                results = listing.results
+                resultsNotice = listing.notice
+            } catch is CancellationError {
+                // A newer refresh owns the displayed list.
+            } catch {
+                guard !Task.isCancelled, revision == resultRevision else { return }
+                resultsNotice = "Could not scan results: " + error.localizedDescription
+            }
         }
     }
 

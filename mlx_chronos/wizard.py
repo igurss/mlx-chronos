@@ -35,6 +35,7 @@ from mlx_chronos.numeric import (
 )
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
 from mlx_chronos.updates import DEFAULT_UPDATE_CHECK_TIMEOUT
+from mlx_chronos.schema import normalize_submitted_by
 
 
 CommandCallback = Callable[[Namespace], None]
@@ -172,6 +173,10 @@ def validate_run_config(config: RunWizardConfig) -> list[str]:
     if not config.quantization.strip():
         errors.append("quantization must not be empty")
     try:
+        normalize_submitted_by(config.submitted_by)
+    except ValueError as exc:
+        errors.append(str(exc))
+    try:
         normalize_model_reference_url(config.model_url)
     except ValueError as exc:
         errors.append(str(exc))
@@ -280,7 +285,16 @@ def build_run_command(config: RunWizardConfig) -> str:
         parts.extend(["--notes", config.notes])
     if config.submitted_by:
         parts.extend(["--submitted-by", config.submitted_by])
-    return " ".join(shlex.quote(part) for part in parts)
+    safe_parts = parts[:2]
+    value_flags = {"--model", "--quantization", "--model-url", "--notes", "--output-dir", "--submitted-by"}
+    for part in parts[2:]:
+        if part.startswith("-") and safe_parts[-1].startswith("--"):
+            # Only values (not a following boolean flag) are paired below.
+            if safe_parts[-1] in value_flags:
+                safe_parts[-1] += "=" + part
+                continue
+        safe_parts.append(part)
+    return " ".join(shlex.quote(part) for part in safe_parts)
 
 
 def _format_number(value: float) -> str:

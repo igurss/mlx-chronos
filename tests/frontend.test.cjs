@@ -244,3 +244,24 @@ test("renderCompareChart hides the chart with fewer than 2 engines", () => {
   ]);
   assert.equal(context.document.getElementById("compare-chart-wrap").hidden, false);
 });
+
+test("conditions retain the worst thermal state and sampling failures", () => {
+  const badges = context.conditionBadges({
+    engine_version: "1.0", thermal_state: "nominal", thermal_worst_state: "serious",
+    thermal_sampling_errors: 1,
+  });
+  assert.match(badges, /thermal serious/);
+  assert.match(badges, /sampling errors/);
+  assert.equal(badges.includes("no flags"), false);
+});
+
+test("comparison variants separate different measurement protocols", () => {
+  const base = {model: "same-model", quantization: "4bit", protocol_version: "3"};
+  assert.notEqual(context.modelIdentityKey(base), context.modelIdentityKey({...base, protocol_version: "4"}));
+});
+
+test("missing thermal diagnostics are unknown rather than error-free", () => {
+  const badges = context.conditionBadges({engine_version: "1.0", thermal_state: "nominal", thermal_sampling_errors: null});
+  assert.match(badges, /sampling unknown/);
+  assert.equal(badges.includes("no flags"), false);
+});

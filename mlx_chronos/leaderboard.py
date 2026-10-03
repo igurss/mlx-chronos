@@ -95,6 +95,7 @@ def load_archive_results(results_dir: Path) -> list[ArchiveResult]:
                 allow_legacy_missing_ollama_model_format=True,
                 allow_legacy_missing_decode_elapsed=True,
                 allow_legacy_missing_monitor_diagnostics=True,
+                allow_archived_protocol=True,
             )
             records.append(ArchiveResult(path=path, result=result))
         except Exception as exc:
@@ -136,6 +137,7 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
         "model_format": model.get("format"),
         "model_reference_url": model.get("reference_url"),
         "benchmark_profile": meta["benchmark_profile"],
+        "protocol_version": meta["benchmark_protocol"]["version"],
         "tps": metrics["tokens_per_second"]["mean"],
         "tps_stddev": metrics["tokens_per_second"]["stddev"],
         "decode_tps": decode_stats.get("mean"),
@@ -157,6 +159,15 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
         "swap_growth_gb": metrics.get("swap_growth_gb"),
         "memory_pressure_warning": bool(meta.get("memory_pressure_warning")),
         "thermal_state": hardware["thermal_state"],
+        "thermal_worst_state": meta["thermal_monitor"]["worst_state"],
+        "thermal_sampling_errors": (
+            meta["thermal_monitor"]["sampling_errors"]
+            if "sampling_errors" in result.meta.thermal_monitor.model_fields_set else None
+        ),
+        "thermal_monitor_source": meta["thermal_monitor"]["source"],
+        "thermal_non_nominal_phases": meta["thermal_monitor"]["non_nominal_phases"],
+        "cached_ttft_warning": meta["cached_ttft_warning"],
+        "sustained_throttling_warning": meta["sustained_throttling_warning"],
         "warmup_failures": meta["warmup_failures"],
         "submitted_by": meta.get("submitted_by"),
         "chronos_version": meta["chronos_version"],

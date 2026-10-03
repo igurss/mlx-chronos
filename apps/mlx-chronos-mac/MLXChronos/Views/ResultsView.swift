@@ -23,6 +23,7 @@ struct ResultsView: View {
                             Button("Show default folder") { store.showDefaultResults() }
                         }
                     }
+                    if let notice = store.resultsNotice { ChronosHelp(notice) }
                     Table(store.results, selection: $selection) {
                         TableColumn("Model") { result in
                             Text(result.model).font(ChronosStyle.label).lineLimit(1).help(result.url.lastPathComponent)

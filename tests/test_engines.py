@@ -238,7 +238,7 @@ def test_measure_throughput_records_terminal_finish_reason(mock_stream):
     )
     mock_stream.return_value = stream_response(lines)
 
-    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.4, 1.5]):
         measurement = OMLXEngine().measure_throughput("test prompt")
 
     assert measurement.finish_reason == "stop"

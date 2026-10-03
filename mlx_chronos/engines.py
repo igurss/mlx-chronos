@@ -7,6 +7,7 @@ import os
 import re
 import importlib.metadata
 import importlib.util
+from collections.abc import Iterator
 import httpx
 import psutil
 from abc import ABC, abstractmethod
@@ -196,11 +197,8 @@ class BaseEngine(ABC):
         if response is None:
             return None
         try:
-            try:
-                response.read()
-            except Exception:
-                pass
-            body = response.text.strip()
+            cached = response.extensions.get("chronos_error_excerpt")
+            body = (cached if cached is not None else response.text).strip()
         except Exception:
             return None
         if not body:
@@ -209,6 +207,19 @@ class BaseEngine(ABC):
         if len(body) > ERROR_RESPONSE_BODY_LIMIT:
             body = f"{body[:ERROR_RESPONSE_BODY_LIMIT]}..."
         return body
+
+    def _raise_stream_status(self, response) -> None:
+        """Capture a bounded error body while a real HTTP stream is still open."""
+        if isinstance(response, httpx.Response) and response.status_code >= 400:
+            excerpt = bytearray()
+            for part in response.iter_bytes():
+                excerpt.extend(part[:ERROR_RESPONSE_BODY_LIMIT + 1 - len(excerpt)])
+                if len(excerpt) > ERROR_RESPONSE_BODY_LIMIT:
+                    break
+            response.extensions["chronos_error_excerpt"] = excerpt.decode(
+                response.encoding or "utf-8", errors="replace",
+            )
+        response.raise_for_status()
 
     def _request_error_message(
         self,
@@ -489,7 +500,7 @@ class BaseEngine(ABC):
 
     def _stream_chunk_has_content(self, chunk: dict) -> bool:
         choices = chunk.get("choices")
-        if not choices:
+        if not isinstance(choices, list) or not choices:
             return False
 
         choice = choices[0]
@@ -520,14 +531,14 @@ class BaseEngine(ABC):
         so Ollama may return an empty content delta together with length.
         """
         choices = chunk.get("choices")
-        if not choices or not isinstance(choices[0], dict):
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
             return False
         return choices[0].get("finish_reason") == "length"
 
     def _extract_stream_finish_reason(self, chunk: dict) -> str | None:
         """Return the terminal reason supplied by an OpenAI-style stream."""
         choices = chunk.get("choices")
-        if not choices or not isinstance(choices[0], dict):
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
             return None
         reason = choices[0].get("finish_reason")
         if not isinstance(reason, str):
@@ -537,7 +548,7 @@ class BaseEngine(ABC):
 
     def _extract_stream_text(self, chunk: dict) -> str:
         choices = chunk.get("choices")
-        if not choices:
+        if not isinstance(choices, list) or not choices:
             return ""
 
         choice = choices[0]
@@ -570,9 +581,51 @@ class BaseEngine(ABC):
             return tokens
         return None
 
-    def _estimated_completion_words(self, text_parts: list[str]) -> int:
-        completion_text = "".join(text_parts)
-        return len(completion_text.split())
+    def _completion_events(
+        self, response, *, timeout: float, context: str,
+    ) -> Iterator[dict | None]:
+        """Drain to HTTP EOF, yielding None at DONE, and reject failed streams.
+
+        A finish_reason also permits engines that end at HTTP EOF without DONE.
+        The read timeout bounds blocking reads; the deadline additionally bounds
+        streams that keep sending heartbeats without ever finishing.
+        """
+        deadline = time.monotonic() + timeout
+        done = False
+        terminal = False
+        for line in response.iter_lines():
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"{context}; completion stream deadline exceeded")
+            if isinstance(line, bytes):
+                line = line.decode("utf-8", errors="strict")
+            if not line or not line.startswith("data:"):
+                continue
+            raw = line.removeprefix("data:").strip()
+            if not raw:
+                continue
+            if done:
+                raise RuntimeError(f"{context}; data received after stream completion")
+            if raw == "[DONE]":
+                done = terminal = True
+                yield None
+                continue
+            try:
+                chunk = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"{context}; malformed completion stream JSON") from exc
+            if not isinstance(chunk, dict):
+                continue
+            if "error" in chunk:
+                detail = str(chunk["error"])[:ERROR_RESPONSE_BODY_LIMIT]
+                raise RuntimeError(f"{context}; completion stream error: {detail}")
+            reason = self._extract_stream_finish_reason(chunk)
+            if reason is not None:
+                if reason not in {"stop", "length", "tool_calls", "function_call", "content_filter"}:
+                    raise RuntimeError(f"{context}; unsupported finish_reason: {reason!r}")
+                terminal = True
+            yield chunk
+        if not terminal:
+            raise RuntimeError(f"{context}; stream ended without a completion marker")
 
     def _append_progress_sample(
         self,
@@ -713,29 +766,19 @@ class BaseEngine(ABC):
                 json=payload,
                 timeout=30.0,
             ) as r:
-                r.raise_for_status()
-
-                for line in r.iter_lines():
-                    if not line:
-                        continue
-                    if isinstance(line, bytes):
-                        line = line.decode("utf-8", errors="ignore")
-                    if not line.startswith("data:"):
-                        continue
-
-                    data = line.removeprefix("data:").strip()
-                    if not data or data == "[DONE]":
-                        continue
-
-                    try:
-                        chunk = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-
-                    if self._stream_chunk_has_content(chunk) or (
-                        self._stream_chunk_has_terminal_token(chunk)
+                self._raise_stream_status(r)
+                ttft = None
+                for chunk in self._completion_events(
+                    r, timeout=30.0,
+                    context=self._request_context(action, url, model, request_model),
+                ):
+                    if chunk is not None and ttft is None and (
+                        self._stream_chunk_has_content(chunk)
+                        or self._stream_chunk_has_terminal_token(chunk)
                     ):
-                        return round(time.perf_counter() - start, 3)
+                        ttft = round(time.perf_counter() - start, 3)
+                if ttft is not None:
+                    return ttft
         except httpx.HTTPError as exc:
             raise RuntimeError(
                 self._request_error_message(
@@ -782,20 +825,12 @@ class BaseEngine(ABC):
                 with self._stream_request(
                     client, "POST", url, json=payload, timeout=timeout_seconds,
                 ) as response:
-                    response.raise_for_status()
-                    for line in response.iter_lines():
-                        if isinstance(line, bytes):
-                            line = line.decode("utf-8", errors="ignore")
-                        if not line or not line.startswith("data:"):
-                            continue
-                        raw = line.removeprefix("data:").strip()
-                        if not raw or raw == "[DONE]":
-                            continue
-                        try:
-                            chunk = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
-                        if not isinstance(chunk, dict):
+                    self._raise_stream_status(response)
+                    for chunk in self._completion_events(
+                        response, timeout=timeout_seconds,
+                        context=self._request_context(action, url, model, request_model),
+                    ):
+                        if chunk is None:
                             continue
                         if ttft is None and (
                             self._stream_chunk_has_content(chunk)
@@ -874,7 +909,10 @@ class BaseEngine(ABC):
             start = time.perf_counter()
             first_token_at = None
             stream_finished_at = None
-            completion_text_parts = []
+            completion_text_parts: list[str] = []
+            estimated_words = 0
+            in_word = False
+            terminal_at = None
             completion_tokens = None
             finish_reason = None
             progress_samples: list[dict] = []
@@ -888,35 +926,14 @@ class BaseEngine(ABC):
                     json=payload,
                     timeout=self._throughput_timeout(max_tokens),
                 ) as r:
-                    if r.status_code >= 400:
-                        try:
-                            r.read()
-                        except Exception:
-                            pass
-                    r.raise_for_status()
-
-                    for line in r.iter_lines():
-                        if not line:
-                            continue
-                        if isinstance(line, bytes):
-                            line = line.decode("utf-8", errors="ignore")
-                        if not line.startswith("data:"):
-                            continue
-
-                        raw_chunk = line.removeprefix("data:").strip()
-                        if not raw_chunk:
-                            continue
-                        if raw_chunk == "[DONE]":
+                    self._raise_stream_status(r)
+                    for chunk in self._completion_events(
+                        r, timeout=self._throughput_timeout(max_tokens),
+                        context=self._request_context(action, url, model, request_model),
+                    ):
+                        if chunk is None:
                             stream_finished_at = time.perf_counter()
-                            break
-
-                        try:
-                            chunk = json.loads(raw_chunk)
-                        except json.JSONDecodeError:
                             continue
-                        if not isinstance(chunk, dict):
-                            continue
-
                         usage_tokens = self._extract_stream_usage_tokens(chunk)
                         if usage_tokens is not None:
                             completion_tokens = usage_tokens
@@ -924,17 +941,20 @@ class BaseEngine(ABC):
                         chunk_finish_reason = self._extract_stream_finish_reason(chunk)
                         if chunk_finish_reason is not None:
                             finish_reason = chunk_finish_reason
+                            terminal_at = time.perf_counter()
 
                         if self._stream_chunk_has_content(chunk):
                             if first_token_at is None:
                                 first_token_at = time.perf_counter()
                             text = self._extract_stream_text(chunk)
                             if text:
-                                completion_text_parts.append(text)
-                                if next_progress_sample_at is not None:
-                                    estimated_tokens = self._estimated_completion_words(
-                                        completion_text_parts
-                                    )
+                                if next_progress_sample_at is None:
+                                    completion_text_parts.append(text)
+                                else:
+                                    words = text.split()
+                                    estimated_words += len(words) - int(bool(words) and in_word and not text[0].isspace())
+                                    in_word = not text[-1].isspace()
+                                    estimated_tokens = estimated_words
                                     while estimated_tokens >= next_progress_sample_at:
                                         assert progress_sample_interval_tokens is not None
                                         self._append_progress_sample(
@@ -964,11 +984,10 @@ class BaseEngine(ABC):
                     )
                 ) from exc
 
-        elapsed = (
-            stream_finished_at - start
-            if stream_finished_at is not None
-            else time.perf_counter() - start
-        )
+        ended_at = stream_finished_at if stream_finished_at is not None else terminal_at
+        if ended_at is None:
+            raise RuntimeError("completion stream has no terminal timestamp")
+        elapsed = ended_at - start
         rounded_elapsed = round(max(elapsed, 0.0), 3)
         if rounded_elapsed <= 0:
             rounded_elapsed = 0.001
@@ -987,8 +1006,9 @@ class BaseEngine(ABC):
         if completion_tokens is not None:
             token_count_source = TOKEN_COUNT_SOURCE_USAGE
         else:
-            completion_text = "".join(completion_text_parts)
-            completion_tokens = max(1, len(completion_text.split()))
+            if progress_sample_interval_tokens is None:
+                estimated_words = len("".join(completion_text_parts).split())
+            completion_tokens = max(1, estimated_words)
             token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
         request_tps = round(completion_tokens / rounded_elapsed, 2)

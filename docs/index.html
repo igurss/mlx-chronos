@@ -453,6 +453,7 @@
         row.quantization || "",
         row.model_format || "",
         row.model_reference_url || "",
+        row.protocol_version || "unknown",
       ]);
     }
 
@@ -460,6 +461,7 @@
       const qualifiers = [
         row.quantization,
         row.model_format,
+        row.protocol_version ? `protocol ${row.protocol_version}` : "protocol unknown",
         (row.model_reference_url || "")
           .replace(/^https?:\/\//, "")
           .replace(/\/$/, ""),
@@ -661,10 +663,22 @@
       if (String(row.engine_version || "").toLowerCase() === "unknown") {
         badges.push(`<span class="badge badge-amber">unknown version</span>`);
       }
-      if (String(row.thermal_state || "").startsWith("unavailable")) {
+      const thermal = row.thermal_worst_state || row.thermal_state;
+      if (!thermal || String(thermal).startsWith("unavailable")) {
         badges.push(`<span class="badge badge-gray">thermal unknown</span>`);
-      } else if (row.thermal_state && row.thermal_state !== "nominal") {
-        badges.push(`<span class="badge badge-amber">thermal ${escapeHtml(row.thermal_state)}</span>`);
+      } else if (thermal !== "nominal") {
+        badges.push(`<span class="badge badge-amber">thermal ${escapeHtml(thermal)}</span>`);
+      }
+      if (row.thermal_sampling_errors == null || row.thermal_monitor_source === "unavailable") {
+        badges.push('<span class="badge badge-gray">thermal sampling unknown</span>');
+      } else if (row.thermal_sampling_errors > 0) {
+        badges.push(`<span class="badge badge-amber">thermal sampling errors</span>`);
+      }
+      if (row.cached_ttft_warning) {
+        badges.push(`<span class="badge badge-amber">cache benefit unconfirmed</span>`);
+      }
+      if (row.sustained_throttling_warning) {
+        badges.push(`<span class="badge badge-amber">sustained slowdown</span>`);
       }
       if (row.memory_pressure_warning) {
         badges.push(`<span class="badge badge-amber">swap grew</span>`);
@@ -686,7 +700,11 @@
         ["Model reference", row.model_reference_url || "not recorded"],
         ["Output tokens", fmtTokenCounts(row.completion_tokens_raw)],
         ["Decode timing", decodeTimingLabel(row.decode_timing_source)],
-        ["Thermal", conditionValue(row.thermal_state)],
+        ["Thermal at start", conditionValue(row.thermal_state)],
+        ["Worst thermal state", conditionValue(row.thermal_worst_state || row.thermal_state)],
+        ["Thermal sampling errors", row.thermal_sampling_errors ?? "not recorded"],
+        ["Non-nominal phases", (row.thermal_non_nominal_phases || []).join(", ") || "none recorded"],
+        ["Protocol", row.protocol_version || "unknown"],
         ["Machine", row.machine_model],
         ["macOS", row.macos_version || "unknown"],
         ["RAM before run", row.system_ram_baseline_gb == null ? "not recorded" : `${fmt(row.system_ram_baseline_gb, 2)} GB`],

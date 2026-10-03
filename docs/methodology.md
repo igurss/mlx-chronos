@@ -56,7 +56,7 @@ The protocol is built around four principles:
 | Decode throughput | `metrics.decode_tokens_per_second` | Completion tokens after the first, divided by first-token-to-stream-end time | Context metric |
 | System RAM peak | `metrics.system_ram_peak_gb`, `metrics.system_ram_peak_percent` | Peak total Mac RAM in use during the benchmark | Whole-device stress context |
 | RAM baseline and rise | `metrics.system_ram_baseline_gb`, `metrics.system_ram_delta_gb` | First sample and peak minus first sample | Diagnostic only; not engine memory |
-| Swap growth | `metrics.swap_growth_gb` | Largest rise from the first valid system swap sample | Diagnostic; warning at 0.5 GB |
+| Swap growth | `metrics.swap_growth_gb` | Largest rise from the first system swap sample; unknown if any reading is unavailable | Diagnostic; warning at 0.5 GB |
 | Engine RSS | `metrics.ram_peak_gb` with `metrics.ram_measurement_method=process_rss` | Post-warmup server-process RSS when identifiable | Diagnostic only |
 | Thermal monitor | `meta.thermal_monitor` | Start/end/worst thermal state and affected phases | Context metric |
 | Phase timings | `meta.phase_timings_seconds` | Wall time spent in benchmark phases | Context metric |
@@ -145,10 +145,18 @@ comparisons are still useful, but should be read as end-to-end user-observed
 latency rather than pure model latency.
 
 Current runs use one persistent `httpx.Client` across warmup, TTFT, and
-throughput requests by default. This allows keep-alive reuse when the engine
-supports it and better matches repeated agent-loop usage. Earlier result
-formats used independent per-request calls, so their TTFT may include more
-connection setup overhead.
+throughput requests by default. Internal protocol label `4` consumes and
+validates the complete HTTP body after capturing the first-token or completion
+timestamp. This allows keep-alive reuse when the engine supports it without
+adding response-drain time to those metrics. Stream errors, malformed JSON and
+EOF without `[DONE]` or a supported terminal `finish_reason` fail the request.
+Read timeouts and an overall stream deadline bound completion processing.
+
+Label `3` also reused the client object, but TTFT returned at the first token
+and throughput stopped at `[DONE]`, so incomplete body consumption could prevent
+TCP reuse. Older per-request runs used separate clients. These transport
+differences can affect connection overhead and cache priming; archived runs
+retain their original labels and appear as separate protocol variants.
 
 ---
 
@@ -417,6 +425,12 @@ source is retained in the full JSON but is not used as a leaderboard field.
 New public submissions also require error-free system RAM, engine RSS, and
 continuous Foundation thermal sampling. Sampling failures remain recorded for
 local diagnostics but make a run non-publishable.
+
+Current label `4` results count only known thermal states as valid samples;
+unavailable readings increment `sampling_errors`. Public eligibility requires
+at least two valid samples and `max_sample_gap_seconds` no larger than
+`max(1.0, 2.5 * sample_interval_seconds)`. Missing coverage fields remain unknown
+in historical files rather than being inferred from the initial state.
 
 The continuous thermal monitor samples only the Foundation path during the run.
 mlx-Chronos intentionally does not run `powermetrics` repeatedly during the
@@ -870,9 +884,13 @@ Results include `meta.benchmark_protocol`, which records:
 - requested generation parameters such as `temperature` and `top_p`;
 - input token count source, currently `unavailable`.
 
-The small numeric labels stored in result JSON, such as `1`, `2`, or `3`, are
+The small numeric labels stored in result JSON, such as `1`, `2`, `3`, or `4`, are
 internal compatibility markers for validators. They are not public protocol
 release versions.
+
+New public submissions use label `4`; the archived label `3` measurements remain
+readable with their original seals. A protocol change requires a new run,
+not an edit to the label in an existing result.
 
 ### Contributor Attribution
 

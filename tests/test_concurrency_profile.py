@@ -8,7 +8,7 @@ from mlx_chronos.measurements import ThroughputMeasurement
 
 def _measurement(source="usage.completion_tokens", tokens=50):
     return ThroughputMeasurement(
-        request_tokens_per_second=50.0,
+        request_tokens_per_second=float(tokens),
         completion_tokens=tokens,
         token_count_source=source,
         elapsed_seconds=1.0,
@@ -120,6 +120,21 @@ def test_short_completion_aborts_instead_of_changing_the_workload():
     engine.measure_throughput.return_value = _measurement(tokens=5)
     with pytest.raises(RuntimeError, match="ended too early"):
         _run(engine, levels=[1], trials_per_level=1)
+
+
+@pytest.mark.parametrize("phase", ["warmup", "measured"])
+def test_excess_completion_tokens_abort_before_wave_aggregation(phase):
+    engine = _engine()
+
+    def measurement(*_args, **kwargs):
+        measured = kwargs["request_stream_usage"]
+        if measured == (phase == "measured"):
+            return _measurement(tokens=100000)
+        return _measurement()
+
+    engine.measure_throughput.side_effect = measurement
+    with pytest.raises(RuntimeError, match="exceeded requested max_tokens"):
+        _run(engine, levels=[1], trials_per_level=1, request_max_tokens=60)
 
 
 def test_cache_evidence_is_recorded_without_claiming_unverified_coldness():

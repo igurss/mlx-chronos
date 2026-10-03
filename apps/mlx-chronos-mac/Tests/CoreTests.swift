@@ -141,6 +141,8 @@ struct CoreTests {
         try Data(count: ResultRepository.fileLimit + 1).write(to: tooLarge)
         try rejects { _ = try ResultRepository.read(tooLarge) }
 
+        try checkResultListing(root)
+
         let large = await ProcessRunner().run(executable: python,
             arguments: ["-I", "-c", "import sys; sys.stdout.write('a'*600000); sys.stderr.write('b'*600000)"],
             directory: root, environment: RuntimeDiscovery.environment(), timeout: 10)
@@ -162,4 +164,42 @@ struct CoreTests {
         try expect(cancelled.cancelled, "cancel-before-launch was ignored")
         print("Core checks passed: CLI parity, exact arguments, defaults, validation, removal policy, result parsing, pipes, timeout and cancellation.")
     }
+    static func checkResultListing(_ root: URL) throws {
+        let fm = FileManager.default
+        let archive = root.appendingPathComponent("many-results")
+        try fm.createDirectory(at: archive, withIntermediateDirectories: true)
+        let old = Data(#"{"meta":{"timestamp":"2026-01-01T00:00:00Z"},"engine":{"name":"fake"},"model":{"name":"old"},"metrics":{}}"#.utf8)
+        for index in 0..<5001 { try old.write(to: archive.appendingPathComponent("run-\(index).json")) }
+        let candidates = try fm.contentsOfDirectory(at: archive, includingPropertiesForKeys: nil)
+        let formerlyExcluded = candidates[5000]
+        let newest = Data(#"{"meta":{"timestamp":"2099-01-01T00:00:00Z"},"model":{"name":"newest"}}"#.utf8)
+        try newest.write(to: formerlyExcluded)
+        let cache = ResultSummaryCache()
+        let listing = try ResultRepository.scan(archive, cache: cache)
+        try expect(listing.total == 5001 && listing.results.count == 5000
+            && listing.results.first?.url == formerlyExcluded && listing.notice != nil,
+            "File limit was applied before chronological selection or was hidden")
+        let changed = Data(#"{"meta":{"timestamp":"2099-01-01T00:00:00Z"},"model":{"name":"changed with a different size"}}"#.utf8)
+        try changed.write(to: formerlyExcluded)
+        let refreshed = try ResultRepository.scan(archive, limit: 3, cache: cache)
+        try expect(refreshed.results.first?.model == "changed with a different size",
+            "Display cache did not invalidate a modified file")
+        var visited = 0
+        do {
+            _ = try ResultRepository.scan(archive, checkCancellation: {
+                visited += 1
+                if visited == 100 { throw CancellationError() }
+            })
+            throw TestFailure.failed("Cancelled scan completed")
+        } catch is CancellationError {}
+        let folders = root.appendingPathComponent("many-folders")
+        for index in 0..<31 {
+            let folder = folders.appendingPathComponent("folder-\(index)")
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try old.write(to: folder.appendingPathComponent("run.json"))
+        }
+        let allFolders = try ResultRepository.scan(folders)
+        try expect(allFolders.total == 31, "Subfolders were arbitrarily excluded")
+    }
+
 }

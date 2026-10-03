@@ -24,6 +24,20 @@ from mlx_chronos.measurements import (
 from mlx_chronos.model_reference import normalize_model_reference_url
 
 
+def normalize_submitted_by(value: str | None) -> str | None:
+    """Normalize attribution before requests and during result validation."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("submitted_by must be a GitHub handle")
+    normalized = value.strip().removeprefix("@")
+    if not normalized:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}", normalized):
+        raise ValueError("submitted_by must be a GitHub handle: letters, digits and single hyphens, up to 39 characters")
+    return normalized
+
+
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
 PositiveFloat = Annotated[float, Field(gt=0, allow_inf_nan=False)]
@@ -664,6 +678,9 @@ class ThermalMonitor(ChronosBaseModel):
         0,
         description="Number of thermal monitor sampling errors during the run",
     )
+    max_sample_gap_seconds: Optional[NonNegativeFloat] = Field(
+        None, description="Largest monotonic interval between thermal samples; absent in legacy results",
+    )
 
     @model_validator(mode="after")
     def validate_thermal_monitor(self):
@@ -816,20 +833,7 @@ class Meta(ChronosBaseModel):
     @field_validator("submitted_by")
     @classmethod
     def normalize_submitted_by(cls, value: str | None) -> str | None:
-        """Accept a GitHub handle, with or without a leading '@'."""
-        if value is None:
-            return None
-        normalized = value.strip()
-        if normalized.startswith("@"):
-            normalized = normalized[1:]
-        if not normalized:
-            return None
-        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}", normalized):
-            raise ValueError(
-                "submitted_by must be a GitHub handle: letters, digits and "
-                "single hyphens, up to 39 characters"
-            )
-        return normalized
+        return normalize_submitted_by(value)
 
     @field_validator("timestamp")
     @classmethod
@@ -909,6 +913,8 @@ class BenchmarkResult(ChronosBaseModel):
             ),
             start=1,
         ):
+            if elapsed > self.trials.throughput_elapsed_seconds_raw[index - 1] + 0.001:
+                raise ValueError("decode elapsed seconds cannot exceed request elapsed seconds")
             if tokens <= 1:
                 raise ValueError(
                     "decode throughput requires more than one completion token "

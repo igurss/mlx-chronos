@@ -68,7 +68,7 @@ def test_valid_schema():
     ]
     assert result.meta.benchmark_protocol is not None
     assert result.meta.benchmark_protocol.name == "baseline"
-    assert result.meta.benchmark_protocol.version == "3"
+    assert result.meta.benchmark_protocol.version == "4"
     assert result.meta.benchmark_protocol.throughput.requested_max_tokens == 100
     assert result.meta.benchmark_protocol.throughput.request_mode == "streaming"
     assert result.meta.benchmark_protocol.throughput.stream_usage_requested is True

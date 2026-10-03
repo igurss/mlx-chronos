@@ -323,6 +323,12 @@ class MarkdownReporter(BaseReporter):
             f"- **Peak system RAM:** {system_ram_peak_gb} GB "
             f"({system_ram_peak_percent}%)\n"
         )
+        for label, key in (
+            ("System RAM before run", "system_ram_baseline_gb"),
+            ("Whole-system RAM rise", "system_ram_delta_gb"),
+            ("System swap growth", "swap_growth_gb"),
+        ):
+            md += f"- **{label}:** {self._format_optional(metrics.get(key))} GB\n"
 
         thermal_monitor = meta.get("thermal_monitor")
         if thermal_monitor:
@@ -341,6 +347,8 @@ class MarkdownReporter(BaseReporter):
                 f"(worst: {thermal_monitor['worst_state']})\n"
             )
             md += f"- **Samples:** {thermal_monitor['samples']}\n"
+            md += f"- **Sampling errors:** {self._format_optional(thermal_monitor.get('sampling_errors'))}\n"
+            md += f"- **Largest sampling gap:** {self._format_optional(thermal_monitor.get('max_sample_gap_seconds'))} s\n"
             md += (
                 f"- **Changed during run:** "
                 f"{thermal_monitor['changed_during_run']}\n"

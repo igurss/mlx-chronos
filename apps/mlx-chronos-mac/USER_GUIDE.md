@@ -247,6 +247,10 @@ changing the default for later tests; **Show default folder** returns to it.
 The browser reads JSON, including diagnostic subfolders, and orders by recorded
 date with file-date fallback. It is not a recursive whole-disk result search.
 
+In the current app source, folders with more than 5,000 JSON files show the
+newest 5,000 and a notice with the total. Incomplete subfolder scans also show a
+notice. These changes will be included in the next app release.
+
 **Inspect all recorded data** opens the selected JSON. Browsing alone does not
 verify its integrity seal or public eligibility.
 

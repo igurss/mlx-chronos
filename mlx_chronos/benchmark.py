@@ -26,6 +26,7 @@ from mlx_chronos.measurements import (
     DECODE_TIMING_CLIENT_STREAM,
     DECODE_TIMING_UNAVAILABLE,
     ThroughputMeasurement,
+    validate_throughput_measurement,
 )
 from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.numeric import (
@@ -49,6 +50,7 @@ from mlx_chronos.schema import (
     ServingConfig,
     dump_benchmark_result,
     normalize_model_quantization,
+    normalize_submitted_by,
 )
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
@@ -156,12 +158,7 @@ def _validate_token_bounds(
 
 
 def _validate_throughput_measurement(value: object) -> ThroughputMeasurement:
-    if isinstance(value, ThroughputMeasurement):
-        return value
-    raise RuntimeError(
-        "engine returned an invalid throughput measurement; expected "
-        f"ThroughputMeasurement, got {type(value).__name__}"
-    )
+    return validate_throughput_measurement(value)
 
 
 @contextmanager
@@ -197,7 +194,8 @@ def _unavailable_thermal_summary() -> dict:
         "start_state": "unavailable_tracker_error",
         "end_state": "unavailable_tracker_error",
         "worst_state": "unavailable_tracker_error",
-        "samples": 1,
+        "samples": 0,
+        "sampling_errors": 1,
         "changed_during_run": False,
         "non_nominal_observed": False,
         "non_nominal_phases": [],
@@ -390,6 +388,8 @@ def run_benchmark(
         raise ValueError(
             f"connection_mode must be one of {sorted(VALID_CONNECTION_MODES)}"
         )
+    submitted_by = normalize_submitted_by(submitted_by)
+    model_quantization = normalize_model_quantization(model_quantization)
     model_name = model_name.strip()
     if not model_name:
         raise ValueError("model name must not be empty")

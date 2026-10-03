@@ -308,11 +308,12 @@ def test_leaderboard_compare_sorts_consistently_by_request_tps():
     assert 'metric-strong">${fmt(row.decode_tps, 2)}' not in html
 
 
-def test_leaderboard_hides_internal_protocol_and_condition_noise():
+def test_leaderboard_keeps_table_focused_and_method_in_details():
     html = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 
     assert "HTTP mode" not in html
-    assert "Protocol" not in html
+    assert 'key: "protocol_version"' not in html
+    assert '["Protocol", row.protocol_version' in html
     assert "Power source" not in html
     assert 'key: "low_power_mode"' not in html
     assert '["Low Power Mode"' not in html

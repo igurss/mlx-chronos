@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Drain and validate completion streams while preserving first-token and
+  completion timestamps, allowing actual HTTP keep-alive reuse. Reject stream
+  errors, malformed events and incomplete responses; retain bounded HTTP error
+  excerpts so context usage fallback works with real streamed responses.
+- Record these transport changes under internal protocol label `4`. New public
+  submissions require it; archived label `3` results remain readable and retain
+  their original seals. Keep protocol variants separate on the leaderboard.
+- Count unavailable thermal readings and partial process-RSS reads as sampling
+  errors, record thermal sample gaps, and require complete thermal monitoring
+  for new public results. Keep swap growth unknown after an unavailable reading.
+- Share throughput validation across standard, concurrency and energy runs;
+  reject inconsistent token counts, request/decode rates and impossible decode
+  intervals before aggregation. Validate static metadata before engine requests
+  and preserve leading-dash values in copied wizard commands.
+- Expose worst thermal conditions, monitoring quality and existing cached/
+  sustained warnings in the leaderboard and reports. Warn on model identity,
+  format and token-count provenance differences in local comparisons.
+- Avoid automatic submission POST retries after ambiguous read/write failures;
+  report an unknown outcome so users can check receipt before sending again.
+- Select the newest app results before applying the visible 5,000-file limit,
+  scan every immediate diagnostic subfolder, cache display summaries and cancel
+  superseded scans. These are source changes; the published app bundle is
+  unchanged pending its next release.
+- Count sustained progress words incrementally, and add full macOS Release,
+  current-source CLI compatibility and wheel/sdist checks to CI.
 - Add the native macOS app source, reusable tests and documentation under
   `apps/mlx-chronos-mac/`. Its independent 0.1.0 release bundles the existing
   CLI 0.5.0 without changing the CLI version. See the

@@ -24,6 +24,15 @@ def write_result(path, tps=None, decode_tps=None, ram_delta=None):
     tokens = data["trials"]["completion_tokens_raw"]
     data["trials"]["throughput_progress_samples_raw"] = None
 
+    if tps is not None and decode_tps is None:
+        # Preserve the prefill fraction when changing request speed, so decode
+        # remains an interval inside that same request.
+        fraction = [d / e for d, e in zip(data["trials"]["decode_elapsed_seconds_raw"], data["trials"]["throughput_elapsed_seconds_raw"])]
+        decode_elapsed = [round(n / tps * f, 6) for n, f in zip(tokens, fraction)]
+        decode_raw = [round((n - 1) / e, 2) for n, e in zip(tokens, decode_elapsed)]
+        data["trials"]["decode_elapsed_seconds_raw"] = decode_elapsed
+        data["trials"]["decode_tokens_per_second_raw"] = decode_raw
+        data["metrics"]["decode_tokens_per_second"] = compute_stats(decode_raw)
     if tps is not None:
         elapsed = [round(n / tps, 6) for n in tokens]
         raw = [round(n / e, 2) for n, e in zip(tokens, elapsed)]

@@ -111,6 +111,17 @@ def compare_results(paths: list[Path]) -> dict:
     ):
         warnings.append("model reference or quantization differs")
     if any(
+        (result.model.name, result.model.format)
+        != (baseline_result.model.name, baseline_result.model.format)
+        for result in results[1:]
+    ):
+        warnings.append("model identity or format differs")
+    if any(
+        result.metrics.token_count_source != baseline_result.metrics.token_count_source
+        for result in results[1:]
+    ):
+        warnings.append("completion token count provenance differs")
+    if any(
         result.meta.benchmark_protocol != baseline_result.meta.benchmark_protocol
         for result in results[1:]
     ):

@@ -26,6 +26,7 @@ from mlx_chronos.http_retry import request_with_retry
 from mlx_chronos.numeric import require_finite_positive
 from mlx_chronos.protocol import (
     BASELINE_PROTOCOL_VERSION,
+    ARCHIVED_PROTOCOL_VERSIONS,
     CONNECTION_MODE_PERSISTENT,
     build_benchmark_protocol,
 )
@@ -121,7 +122,7 @@ def _expected_public_profile_shape(profile: str) -> tuple[int, int]:
     return SUSTAINED_TRIALS, SUSTAINED_THROUGHPUT_MAX_TOKENS
 
 
-def _validate_public_protocol(result: BenchmarkResult) -> None:
+def _validate_public_protocol(result: BenchmarkResult, *, allow_archived_protocol: bool = False) -> None:
     expected_trials, expected_max_tokens = _expected_public_profile_shape(
         result.meta.benchmark_profile
     )
@@ -139,6 +140,8 @@ def _validate_public_protocol(result: BenchmarkResult) -> None:
                 warmup_stream_usage_requested=warmup_stream_usage_requested,
             )
         ).model_dump(mode="json")
+        if allow_archived_protocol:
+            expected_protocol["version"] = actual_protocol["version"]
         difference = _first_protocol_difference(expected_protocol, actual_protocol)
         if difference is None:
             return
@@ -206,6 +209,7 @@ def validate_publishable_result(
     allow_legacy_missing_model_reference: bool = False,
     allow_legacy_missing_ollama_model_format: bool = False,
     allow_legacy_missing_decode_elapsed: bool = False,
+    allow_archived_protocol: bool = False,
 ) -> None:
     """Check public leaderboard comparability constraints."""
     token_source = result.metrics.token_count_source
@@ -299,11 +303,21 @@ def validate_publishable_result(
     expected_trials, expected_max_tokens = _expected_public_profile_shape(profile)
 
     protocol = result.meta.benchmark_protocol
-    if protocol.version != BASELINE_PROTOCOL_VERSION:
+    if protocol.version != BASELINE_PROTOCOL_VERSION and not (
+        allow_archived_protocol and protocol.version in ARCHIVED_PROTOCOL_VERSIONS
+    ):
         raise SubmissionError(
             "leaderboard submissions must use the current internal protocol "
             f"label {BASELINE_PROTOCOL_VERSION!r}; got {protocol.version!r}"
         )
+    if protocol.version == BASELINE_PROTOCOL_VERSION:
+        monitor = result.meta.thermal_monitor
+        if (
+            monitor.samples < 2
+            or monitor.max_sample_gap_seconds is None
+            or monitor.max_sample_gap_seconds > max(1.0, 2.5 * monitor.sample_interval_seconds)
+        ):
+            raise SubmissionError("leaderboard submissions require complete thermal sampling without excessive gaps")
     _validate_public_generation_parameters(result)
 
     low_power_mode = result.hardware.low_power_mode
@@ -364,7 +378,7 @@ def validate_publishable_result(
         )
 
     _validate_public_completion_tokens(result, expected_max_tokens)
-    _validate_public_protocol(result)
+    _validate_public_protocol(result, allow_archived_protocol=allow_archived_protocol)
     _validate_public_ollama_model_format(
         result,
         allow_legacy_missing_ollama_model_format=(
@@ -380,6 +394,7 @@ def load_publishable_result(
     allow_legacy_missing_ollama_model_format: bool = False,
     allow_legacy_missing_decode_elapsed: bool = False,
     allow_legacy_missing_monitor_diagnostics: bool = False,
+    allow_archived_protocol: bool = False,
 ) -> tuple[bytes, BenchmarkResult]:
     """Load, validate, and check whether a result can be submitted publicly."""
     try:
@@ -427,6 +442,7 @@ def load_publishable_result(
             allow_legacy_missing_ollama_model_format
         ),
         allow_legacy_missing_decode_elapsed=allow_legacy_missing_decode_elapsed,
+        allow_archived_protocol=allow_archived_protocol,
     )
 
     return raw, result
@@ -493,7 +509,13 @@ def submit_result_file(
             ),
             action="submit result",
             logger=logger,
+            retry_exceptions=(httpx.ConnectError, httpx.ConnectTimeout),
         )
+    except (httpx.ReadTimeout, httpx.WriteTimeout, httpx.ReadError, httpx.WriteError, httpx.RemoteProtocolError) as exc:
+        raise SubmissionError(
+            "submission outcome is unknown: the endpoint may have received the result; "
+            "the POST was not retried. Check receipt before submitting again."
+        ) from exc
     except httpx.HTTPError as exc:
         raise SubmissionError(f"submission request failed: {exc}") from exc
 

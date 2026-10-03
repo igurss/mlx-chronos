@@ -506,7 +506,7 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     ]
     protocol = result["meta"]["benchmark_protocol"]
     assert protocol["name"] == "baseline"
-    assert protocol["version"] == "3"
+    assert protocol["version"] == "4"
     assert protocol["warmup"]["request_mode"] == "streaming"
     assert protocol["warmup"]["stream_usage_requested"] is False
     assert protocol["warmup"]["connection_mode"] == "persistent"
@@ -1404,7 +1404,7 @@ def test_run_benchmark_rejects_usage_tokens_below_requested_min(
     mock_engine.measure_ttft.return_value = 0.5
     mock_engine.measure_tokens_per_second.return_value = 20.0
     mock_engine.measure_throughput.return_value = throughput_measurement(
-        tps=20.0,
+        tps=4.0,
         tokens=20,
     )
     mock_engine.get_version.return_value = "1.0.0"

@@ -57,6 +57,7 @@ def request_with_retry(
     backoff_seconds: float = DEFAULT_HTTP_RETRY_BACKOFF_SECONDS,
     max_backoff_seconds: float = DEFAULT_HTTP_RETRY_MAX_BACKOFF_SECONDS,
     logger: logging.Logger | None = None,
+    retry_exceptions: tuple[type[httpx.HTTPError], ...] = TRANSIENT_HTTP_EXCEPTIONS,
 ) -> T:
     """Run a non-streaming HTTP call with retries for transient failures."""
     _validate_retry_settings(attempts, backoff_seconds, max_backoff_seconds)
@@ -64,7 +65,7 @@ def request_with_retry(
     for attempt in range(1, attempts + 1):
         try:
             return call()
-        except TRANSIENT_HTTP_EXCEPTIONS as exc:
+        except retry_exceptions as exc:
             if attempt == attempts:
                 raise
             if logger is not None:
