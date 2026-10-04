@@ -266,6 +266,14 @@ notice.
 **Inspect all recorded data** opens the selected JSON. Browsing alone does not
 verify its integrity seal or public eligibility.
 
+The standard benchmark field `meta.benchmark_protocol.version` identifies the
+revision of the measurement method and validation rules. It is separate from
+the CLI and app versions. Reports may show it as `baseline 4`, and the public
+leaderboard as `Protocol: 4`. See
+[what the protocol number means](../../docs/methodology.md#what-does-the-protocol-number-mean)
+for the history and comparison rules. Never edit this field to update an old
+result; a newer protocol requires a new run.
+
 | Action / CLI command | Use |
 | --- | --- |
 | Result history / `history` | Read benchmark history in `--output-dir`. `--limit` optionally caps the entries; blank shows all discovered benchmarks. |

@@ -24,6 +24,7 @@ they are included in a published release.
 - [Experimental Local Energy Diagnostic](#experimental-local-energy-diagnostic)
 - [Local Comparison and History](#local-comparison-and-history)
 - [Trial Protocol](#trial-protocol)
+- [What does the protocol number mean?](#what-does-the-protocol-number-mean)
 - [Public Leaderboard Policy](#public-leaderboard-policy)
 - [Trust Model](#trust-model)
 - [Leaderboard Export and Chart](#leaderboard-export-and-chart)
@@ -874,7 +875,7 @@ aid.
 
 Results include `meta.benchmark_protocol`, which records:
 
-- internal compatibility label;
+- protocol revision label (`version`), explained below;
 - selected benchmark profile: `baseline` or `sustained`;
 - exact prompt text for warmup, cold TTFT, cached TTFT, and throughput;
 - requested min/max token bounds per phase;
@@ -884,13 +885,53 @@ Results include `meta.benchmark_protocol`, which records:
 - requested generation parameters such as `temperature` and `top_p`;
 - input token count source, currently `unavailable`.
 
-The small numeric labels stored in result JSON, such as `1`, `2`, `3`, or `4`, are
-internal compatibility markers for validators. They are not public protocol
-release versions.
+### What does the protocol number mean?
 
-New public submissions use label `4`; the archived label `3` measurements remain
-readable with their original seals. A protocol change requires a new run,
-not an edit to the label in an existing result.
+**The number identifies a revision of the standard benchmark method and its
+validation rules.** In JSON it is `meta.benchmark_protocol.version`; reports
+may show `baseline 4`, and leaderboard details show `Protocol: 4`. Here,
+`baseline` is the test profile and `4` is the protocol revision. The `sustained`
+profile uses the same revision number.
+
+It is not a performance score, the mlx-Chronos package version, or the macOS
+app version. Several package releases can use the same protocol. The label
+helps identify measurements made under different rules; validators also
+check the full protocol metadata, raw measurements, and integrity seal.
+Matching numbers alone do not establish a fair comparison of different models,
+engines, hardware, or test conditions.
+
+| Label | What it records |
+| --- | --- |
+| `1` | Initial structured benchmark protocol metadata, including prompts and token bounds. |
+| `2` | Streaming throughput, with the streaming and token-usage request settings recorded explicitly. |
+| `3` | Persistent HTTP client behavior recorded in the protocol. Later refinements under this label added a separate warmup prompt, fixed throughput prompts, and deterministic generation settings. |
+| `4` | Complete, validated consumption of completion streams, plus thermal sampling coverage requirements for public submissions. |
+
+With `4`, the client captures the first-token or completion timestamp and then
+finishes reading and validating the response. The extra response-drain time is
+not added to TTFT or throughput timing. This permits HTTP connection reuse
+when the server supports it and detects incomplete or malformed streams.
+Public validation also requires at least two thermal samples and no excessive
+sampling gaps. Label `3` reused the client object but could leave response
+bodies unread, preventing connection reuse.
+
+**Current `main` uses `4`; release `0.5.0` uses `3`.** Revision `4` is currently
+an [Unreleased](../CHANGELOG.md#unreleased) change, so it requires the
+[development installation](../README.md#development-version-from-main) until
+included in a published package. Current-source validation requires `4` for
+new public submissions. Archived `3` results remain readable with their
+original data and seals; the leaderboard keeps protocol variants separate,
+and local comparison warns about differing protocol metadata.
+
+To produce a result under a newer protocol, install a CLI that implements it
+and run the benchmark again. **Never change the number in an existing JSON.**
+That would invalidate its seal, and resealing it would not turn the original
+measurement into a run under the newer method.
+
+Context, concurrency, and energy diagnostic reports have their own version
+fields. The integrity seal format, app-to-CLI API, and app runtime catalog also
+have independent versions. Those numbers do not refer to this standard
+benchmark protocol and do not need to match it.
 
 ### Contributor Attribution
 

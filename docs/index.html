@@ -719,7 +719,7 @@
           ${details.map(([label, value]) => `
             <div class="detail-item">
               <div class="detail-label">${escapeHtml(label)}</div>
-              <div class="detail-value">${escapeHtml(value)}</div>
+              <div class="detail-value">${escapeHtml(value)}${label === "Protocol" ? ' · <a href="https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md#what-does-the-protocol-number-mean">What does this mean?</a>' : ""}</div>
             </div>
           `).join("")}
         </div>

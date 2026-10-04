@@ -218,9 +218,10 @@ If your JSON says `"token_count_source": "word_fallback"` or `"mixed"`, keep it
 as a local result until the engine can return real completion-token usage. New
 fallback results also set `meta.word_fallback_warning`.
 
-The small protocol labels stored in JSON, such as `1`, `2`, `3`, or `4`, are
-internal compatibility markers used by validators. They are not public protocol
-release versions.
+`meta.benchmark_protocol.version` identifies the revision of the benchmark
+method and validation rules, independently of the CLI and app versions. See
+[what the protocol number means](docs/methodology.md#what-does-the-protocol-number-mean)
+for the history of labels `1`–`4` and their effect on comparisons.
 
 Current-source submissions require label `4`, which records fully drained and
 validated completion streams plus thermal sampling coverage. Archived label

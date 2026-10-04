@@ -452,6 +452,20 @@ be inspected, oMLX validation may fail even when `/v1/models` responds.
 result records exact prompt text, token bounds, benchmark profile, timing
 metadata, hardware metadata, and an integrity seal.
 
+### What does the protocol number mean?
+
+`Protocol: 4` on the leaderboard, `baseline 4` in a report, and
+`meta.benchmark_protocol.version` in JSON identify the **revision of the
+benchmark method and validation rules**. The number is separate from the CLI
+and app versions; it is not a performance score. `baseline` and `sustained`
+are test profiles and use the same protocol revision.
+
+Current `main` uses `4`, while release `0.5.0` uses `3`. Older measurements keep
+their original labels and seals. A newer protocol requires a new benchmark
+run, never a manual change to an existing JSON. See
+[what each protocol number means](docs/methodology.md#what-does-the-protocol-number-mean)
+for the history of labels `1`–`4`, comparison limits, and submission rules.
+
 ### Measurement Flow
 
 | Phase | What happens |
@@ -557,12 +571,14 @@ Public leaderboard submissions are stricter so rows remain comparable.
   counts, short-output runs, and Low Power Mode runs are valid local records but
   are not accepted into the public leaderboard.
 
-Result JSON also contains validator-only compatibility metadata used to detect
-incompatible result formats. Users do not need to set or manage that metadata.
+Result JSON records the
+[benchmark protocol revision](docs/methodology.md#what-does-the-protocol-number-mean)
+automatically, so validators can check which measurement rules apply.
 Model reference URLs point to the model page used for the run. Model pages can
 change over time when maintainers update files or tags.
-Leaderboard comparisons keep model name, quantization, format, and model
-reference URL separate so distinct variants are not grouped together.
+Leaderboard comparisons keep model name, quantization, format, model
+reference URL, and protocol revision separate so distinct variants are not
+grouped together.
 The full reference URL is retained, including revision or file paths; no
 repository-only `canonical_id` merges results. A server's model ID selects
 what to run, but does not independently prove artifact identity.
