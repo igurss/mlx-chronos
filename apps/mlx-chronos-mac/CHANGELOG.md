@@ -3,7 +3,13 @@
 The macOS app is versioned independently of the Python CLI. This history starts
 with the first public app baseline; private prototypes are not earlier releases.
 
-## Unreleased — 0.2.0, build 4
+## Unreleased
+
+## [0.2.0] — 2026-10-04
+
+**App 0.2.0, build 4** downloads Python and the CLI independently. The initial
+approved CLI is **0.5.1**; CLI updates do not require a new app DMG when their
+interface remains compatible.
 
 - Remove the embedded CLI wheel. At launch, download private Python and the
   newest published CLI explicitly approved by the compatibility catalog.
@@ -15,14 +21,14 @@ with the first public app baseline; private prototypes are not earlier releases.
 - Add independent app-release notifications linking to the official download.
   The app does not replace its own bundle automatically.
 - Add fresh standalone bootstrap, rollback and failed-update regressions in CI.
-
-
 - Select the newest results by recorded date before applying the visible
   5,000-file limit, and scan all immediate diagnostic subfolders.
 - Reuse unchanged display summaries during refresh and cooperatively cancel
   superseded scans. Report incomplete folder scans in the Results view.
-- Verify the full Release build and compatibility with both the bundled and
-  current-source CLI in CI. The published 0.1.0 bundle remains unchanged.
+- Verify the full Release build and compatibility with both the approved
+  published and current-source CLI in CI.
+- Document benchmark protocol revision numbers and link their explanation from
+  the app user guide and public leaderboard.
 
 ## [0.1.0] — 2026-10-02
 
@@ -109,4 +115,5 @@ than reimplementing them. For the CLI's full change history and the separate
 web leaderboard (including exports/charts), see the
 [CLI changelog](../../CHANGELOG.md). Web features are not bundled app controls.
 
+[0.2.0]: https://github.com/igurss/mlx-chronos/releases/tag/app-v0.2.0
 [0.1.0]: https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0

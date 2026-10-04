@@ -2,13 +2,19 @@
 
 ## Unreleased
 
+## [0.5.1] — 2026-10-04
+
+Patch release correcting measurement integrity, monitoring and submission
+reliability. Standard benchmarks now use protocol revision **4**. New public
+submissions require a new run with 0.5.1 or newer; archived revision **3** results
+retain their original data and seals. The app-to-CLI compatibility API is a
+separate version, introduced for the independently released macOS app 0.2.0.
+
 - Add an explicit app compatibility declaration independent of benchmark
-  protocol labels, and an approved artifact catalog for the upcoming app 0.2.0.
+  protocol labels, and an approved artifact catalog for app 0.2.0.
   The app downloads private Python/CLI at launch, checks compatibility before
-  activation, preserves failed updates and supports verified rollback. App
-  release notifications remain separate from CLI updates.
-
-
+  activation, preserves the active environment after failed updates and supports
+  verified rollback. App release notifications remain separate from CLI updates.
 - Drain and validate completion streams while preserving first-token and
   completion timestamps, allowing actual HTTP keep-alive reuse. Reject stream
   errors, malformed events and incomplete responses; retain bounded HTTP error
@@ -30,8 +36,7 @@
   report an unknown outcome so users can check receipt before sending again.
 - Select the newest app results before applying the visible 5,000-file limit,
   scan every immediate diagnostic subfolder, cache display summaries and cancel
-  superseded scans. These are source changes; the published app bundle is
-  unchanged pending its next release.
+  superseded scans. These app changes are included in app 0.2.0.
 - Count sustained progress words incrementally, and add full macOS Release,
   current-source CLI compatibility and wheel/sdist checks to CI.
 - Add the native macOS app source, reusable tests and documentation under
@@ -40,6 +45,9 @@
   [app changelog](apps/mlx-chronos-mac/CHANGELOG.md).
 - Add the selected Chronos logo to the leaderboard header and replace the
   lightning favicon with the same artwork.
+- Explain benchmark protocol labels `1`–`4`, their comparison limits and their
+  independence from CLI/app versions; link the explanation from the guides and
+  leaderboard result details.
 
 ## [0.5.0] — 2026-09-27
 

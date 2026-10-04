@@ -58,6 +58,37 @@ on PyPI, then test installation of that version into a fresh environment.
 Record the workflow result and publish the corresponding GitHub release notes.
 Do not move an already published version tag to a different commit.
 
+## Publishing the independent macOS app
+
+App releases use `app-vX.Y.Z`; they do not trigger CLI publication. Update the
+app's `MARKETING_VERSION`, increasing `CURRENT_PROJECT_VERSION`, separate
+changelog, user guide and README download link. App 0.2.0, build 4 downloads
+private Python and an approved compatible CLI instead of embedding a wheel.
+
+1. Publish and verify any accompanying CLI release first. Register its exact
+   published wheel with
+   `python3 apps/mlx-chronos-mac/scripts/register_runtime_release.py X.Y.Z`.
+   Review the artifact checksum and interface contract; keep existing approved
+   entries unchanged. CLI 0.5.1 includes the app compatibility declaration and
+   benchmark protocol revision 4.
+2. Run the app's bridge/Swift checks against that published CLI and the
+   standalone bootstrap checks with the updated catalog. Commit and push the
+   catalog, then verify Pages serves the approved entry and the macOS App
+   workflow passes on the app release commit.
+3. Build the arm64 Release app and package it with `build_release.sh` and
+   `package_dmg.sh`, following the
+   [app build instructions](../CONTRIBUTING.md#local-release-build). Verify the
+   signature, app version/build, DMG checksum and the mounted image contents.
+   The app must contain no CLI wheel or Python interpreter.
+4. Tag the validated source commit and create the GitHub app release with its
+   DMG and matching `.sha256` file. Include first-launch instructions and the
+   local/ad-hoc signing and Apple notarization status in the release notes.
+   Verify the public download against its checksum after publication.
+
+Future compatible CLI fixes need a reviewed catalog update, not a new app
+binary. Changes to the app itself require a new app release. Neither release
+may include private acceptance reports, credentials or personal results.
+
 ## Interpreting the checks
 
 Passing tests, installed-package checks and a vulnerability scan provide

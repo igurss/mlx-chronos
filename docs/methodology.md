@@ -915,11 +915,10 @@ Public validation also requires at least two thermal samples and no excessive
 sampling gaps. Label `3` reused the client object but could leave response
 bodies unread, preventing connection reuse.
 
-**Current `main` uses `4`; release `0.5.0` uses `3`.** Revision `4` is currently
-an [Unreleased](../CHANGELOG.md#unreleased) change, so it requires the
-[development installation](../README.md#development-version-from-main) until
-included in a published package. Current-source validation requires `4` for
-new public submissions. Archived `3` results remain readable with their
+**CLI `0.5.1` uses `4`; release `0.5.0` uses `3`.** Revision `4` is included in
+[release 0.5.1](../CHANGELOG.md#051--2026-10-04), available through the normal
+PyPI installation. Current validation requires `4` for new public submissions.
+Archived `3` results remain readable with their
 original data and seals; the leaderboard keeps protocol variants separate,
 and local comparison warns about differing protocol metadata.
 

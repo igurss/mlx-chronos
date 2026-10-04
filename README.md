@@ -21,8 +21,9 @@
 Choose your interface:
 
 - **macOS app:** configure tests, inspect your environment and work with results
-  without assembling terminal commands. [Download app **0.1.0**](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0),
-  bundling CLI **0.5.0**. See the
+  without assembling terminal commands. [Download app **0.2.0**](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.2.0).
+  It downloads private Python and the newest approved compatible CLI, starting
+  with **0.5.1**. See the
   [app user guide](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/USER_GUIDE.md) and
   [build instructions](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md#macos-app-development).
   The free DMG is **not Apple-notarized**; follow the guide's first-launch
@@ -108,11 +109,13 @@ The public leaderboard is available at
 
 ### Current Release
 
-`0.5.0` adds local `concurrency`, `matrix`, `context` and experimental `energy`
-diagnostics, plus experimental MLX-only LM Studio support. It also adds
-`run --repeat`, local `compare` and `history`, opt-in contributor attribution,
-RAM/swap and server-setting context, and leaderboard exports and a comparison
-chart. Measurement, validation and CI fixes are detailed in the
+`0.5.1` fixes completion-stream handling, measurement validation, thermal/RSS
+monitoring, and ambiguous submission retries. Standard benchmarks now use
+protocol revision **4**; new public submissions require a new run, while
+archived revision **3** results retain their original data and seals.
+The package also declares its interface compatibility with app **0.2.0**.
+The existing local diagnostics and experimental MLX-only LM Studio support
+remain available. Full changes are detailed in the
 [changelog](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md).
 
 ### macOS App
@@ -123,19 +126,20 @@ commands; the forms replace the terminal wizard. Measurements, integrity
 checks and public eligibility still come from the selected Python CLI, not a
 second benchmark implementation.
 
-It requires Apple Silicon, macOS 14+ and an existing compatible Python 3.10+.
-The default app-managed environment installs the included CLI with mandatory
-thermal support. You can explicitly choose another detected installation or
-source checkout. The app does not install Python, inference engines or models,
-and running a test does not automatically share its result.
+It requires Apple Silicon and macOS 14+. On first launch it downloads private
+Python and an approved compatible CLI with mandatory thermal support; existing
+Python installations are preserved. You can explicitly choose another detected
+installation or source checkout. Inference engines and models are installed
+separately, and running a test does not automatically share its result.
 
-App and CLI releases are independent. The published **app 0.1.0** initially
-bundles CLI **0.5.0**. The upcoming **app 0.2.0** downloads private Python and
-approved compatible CLI releases at launch, retaining the prior copy until
-verification passes. CLI bug fixes can then be delivered without rebuilding
-its DMG; incompatible interfaces require an app update. See the
+App and CLI releases are independent. **App 0.2.0, build 4** contains no CLI
+wheel or Python interpreter. It checks compatible CLI updates at launch,
+retaining the prior copy until verification passes and supporting rollback.
+CLI bug fixes can be delivered without rebuilding its DMG; incompatible
+interfaces require an app update. App updates are checked separately and link
+to the official download for manual replacement. See the
 [user guide](apps/mlx-chronos-mac/USER_GUIDE.md) for setup and options.
-[Download the published app](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0).
+[Download app 0.2.0](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.2.0).
 The DMG has a local/ad-hoc signature, not Developer ID signing or Apple
 notarization; macOS may require explicit first-launch authorization.
 
@@ -460,7 +464,7 @@ benchmark method and validation rules**. The number is separate from the CLI
 and app versions; it is not a performance score. `baseline` and `sustained`
 are test profiles and use the same protocol revision.
 
-Current `main` uses `4`, while release `0.5.0` uses `3`. Older measurements keep
+CLI `0.5.1` uses `4`, while release `0.5.0` uses `3`. Older measurements keep
 their original labels and seals. A newer protocol requires a new benchmark
 run, never a manual change to an existing JSON. See
 [what each protocol number means](docs/methodology.md#what-does-the-protocol-number-mean)

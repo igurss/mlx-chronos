@@ -223,9 +223,9 @@ method and validation rules, independently of the CLI and app versions. See
 [what the protocol number means](docs/methodology.md#what-does-the-protocol-number-mean)
 for the history of labels `1`–`4` and their effect on comparisons.
 
-Current-source submissions require label `4`, which records fully drained and
-validated completion streams plus thermal sampling coverage. Archived label
-`3` results retain their original data and seals; they do not satisfy the
+CLI `0.5.1` and current-source submissions require label `4`, which records
+fully drained and validated completion streams plus thermal sampling coverage.
+Archived label `3` results retain their original data and seals; they do not satisfy the
 current rules for a new submission. Never relabel an existing measurement.
 
 ### 6. Open a Result PR
@@ -363,7 +363,7 @@ CLI, not a duplicate implementation in the app. Use the
 | `Tests/` | Reusable bridge and Swift core regressions with mocks/temporary fixtures. |
 | `scripts/` | Local build, regression checks, disposable standalone bootstrap and published release registration. |
 
-Requires an Apple Silicon Mac, Xcode 26+ with its command-line tools, and an
+Requires an Apple Silicon Mac, Xcode 26+ with its command-line tools, and
 Python 3.10+ for developer checks. End users get a private Python download. The deployment target remains macOS 14.
 Open `MLXChronos.xcodeproj` and choose the `MLXChronos` scheme to run/debug.
 
@@ -373,7 +373,7 @@ Create a separate Python environment with the approved published CLI:
 
 ```bash
 python3 -m venv .venv-app
-.venv-app/bin/python -m pip install "mlx-chronos[thermal]==0.5.0"
+.venv-app/bin/python -m pip install "mlx-chronos[thermal]==0.5.1"
 bash apps/mlx-chronos-mac/scripts/check.sh "$PWD/.venv-app/bin/python"
 ```
 
@@ -467,7 +467,8 @@ upstream notices when changing redistributed resources.
 App `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` are manual, independent
 of the CLI version. Assign a unique increasing build number to each distributed
 candidate; compiling or committing does not increment it automatically.
-The initial app version is 0.1.0. Reserve **`app-vX.Y.Z`** for app release tags:
+The current app release is **0.2.0, build 4**. Reserve **`app-vX.Y.Z`** for app
+release tags:
 CLI tags are `vX.Y.Z` and trigger the separate PyPI publication workflow.
 Do not create either tag merely to record a local build.
 
