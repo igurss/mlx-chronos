@@ -8,7 +8,7 @@ At preparation time it downloads verified artifacts described by the official
 
 - [python-build-standalone](https://github.com/astral-sh/python-build-standalone),
   a CPython distribution with its upstream license files. See its
-  [licensing documentation](https://gregoryszorc.com/docs/python-build-standalone/main/licensing.html).
+  [licensing documentation](https://gregoryszorc.com/docs/python-build-standalone/main/running.html#licensing).
 - [mlx-chronos on PyPI](https://pypi.org/project/mlx-chronos/), Apache-2.0.
   The installed wheel retains its license and distribution metadata.
 - CLI dependencies including mandatory Foundation thermal support
