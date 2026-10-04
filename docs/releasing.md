@@ -10,6 +10,29 @@ The [Release workflow](../.github/workflows/release.yml) supports two paths:
 Documentation updates and a successful manual run do not publish a release.
 Do not bump the version or create a tag as a side effect of routine maintenance.
 
+## Stable release conventions
+
+Before preparing a release, inspect the previous published release of the same
+component and preserve its naming, language, documentation structure and
+publication method. Change the version and release-specific content; do not
+invent a new style for each update.
+
+| Component | Git tag | GitHub release title | Public artifacts |
+| --- | --- | --- | --- |
+| Python CLI | `vX.Y.Z` | `vX.Y.Z` | PyPI wheel `mlx_chronos-X.Y.Z-py3-none-any.whl` and source archive `mlx_chronos-X.Y.Z.tar.gz` |
+| macOS app | `app-vX.Y.Z` | `MLX Chronos for macOS X.Y.Z` | `MLXChronos-X.Y.Z-arm64.dmg` and `MLXChronos-X.Y.Z-arm64.dmg.sha256` |
+
+Keep these component-specific conventions across releases. In particular, the
+CLI release title is the exact tag, without a product-name prefix. Preserve the
+app's existing descriptive title and the capitalization of public filenames.
+The app build number stays in bundle metadata and internal candidate ZIP names;
+it is not part of the public DMG filename or app release tag.
+
+Use the existing English documentation and changelog format, including dated
+version sections and an `Unreleased` section for pending work. Keep app and CLI
+histories independent. Follow the verification and publication steps below;
+formatting changes do not justify rebuilding binaries or moving published tags.
+
 ## Before creating a release tag
 
 1. Prepare the version in `pyproject.toml`, the Current Release paragraph in
