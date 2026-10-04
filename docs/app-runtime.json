@@ -38,6 +38,39 @@
         ]
       },
       "allow_legacy_bridge": true
+    },
+    {
+      "version": "0.5.1",
+      "url": "https://files.pythonhosted.org/packages/9a/aa/4dd371463b9f144ec7ded65e04c174bf776bca69c7f446b0d135d9bd5e99/mlx_chronos-0.5.1-py3-none-any.whl",
+      "sha256": "6c863d9a8ee2c6eaf5a9b6d0f7147b106e17cb34f08fafa97e9098986484683d",
+      "contract": {
+        "api_version": 1,
+        "minimum_app_version": "0.2.0",
+        "required_capabilities": [
+          "cli-options-v1",
+          "snapshot-v1",
+          "benchmark-json-v1",
+          "thermal-foundation-v1",
+          "command-safety-v1"
+        ],
+        "supported_commands": [
+          "run",
+          "matrix",
+          "context",
+          "concurrency",
+          "energy",
+          "doctor",
+          "validate",
+          "models",
+          "engines",
+          "history",
+          "compare",
+          "submit",
+          "upgrade",
+          "wizard"
+        ]
+      },
+      "allow_legacy_bridge": false
     }
   ]
 }
