@@ -5,6 +5,9 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+- Explain pairwise, metric-specific comparison cautions, incomplete metadata
+  and estimated/unavailable percentages. Use the selected CLI's comparison
+  logic; the refined behavior requires a CLI containing the Unreleased changes.
 - Support `ddalcu/mlx-serve` through a CLI containing the new adapter. Keep
   engine choices and all test commands driven by the selected CLI; read local
   loaded-model inventory without inference and show the separate desktop app

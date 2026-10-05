@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Refine local `compare` with reference/result-pair and metric-specific cautions,
+  phase dependencies, concrete differing values and incomplete metadata.
+  Mark percentages from two word-count estimates; omit throughput percentages
+  for exact-versus-estimated or mixed completion counts with an explicit reason.
+  Preserve exploratory deltas, saved results, protocol 4 and leaderboard rules.
 - Add `ddalcu/mlx-serve` support for local MLX safetensors chat models.
   Verify exact model IDs and loaded backends; reject all GGUF paths,
   including native MLX GGUF, llama.cpp/ds4 and remote providers before

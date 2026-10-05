@@ -119,6 +119,31 @@ class BridgeTests(unittest.TestCase):
             self.assertNotEqual(response.returncode, 0)
             self.assertIn("invalid integrity seal", response.stdout + response.stderr)
 
+    def test_compare_preserves_pair_metric_and_token_unit_cautions(self):
+        from mlx_chronos.compare import compare_results
+        from mlx_chronos.examples import EXAMPLE_RESULT
+        from mlx_chronos.integrity import seal_result
+        with tempfile.TemporaryDirectory(prefix="chronos-compare-units-") as root:
+            paths = [Path(root) / f"{index}.json" for index in range(3)]
+            for index, path in enumerate(paths):
+                data = copy.deepcopy(EXAMPLE_RESULT)
+                if index == 2:
+                    data["metrics"]["token_count_source"] = "word_fallback"
+                path.write_text(json.dumps(seal_result(data)), encoding="utf-8")
+            warnings = compare_results(paths)["warnings"]
+            if warnings and isinstance(warnings[0], str):
+                self.skipTest("Published CLI 0.5.1 predates metric-specific comparisons")
+            response = subprocess.run([sys.executable, "-I", "-B", str(BRIDGE), "cli", "compare", "--",
+                                       *map(str, paths)], capture_output=True, text=True, timeout=20)
+            self.assertEqual(response.returncode, 0, response.stderr)
+            output = response.stdout + response.stderr
+            lines = [line for line in output.splitlines() if "completion token count provenance differs" in line]
+            self.assertEqual(len(lines), 1)
+            self.assertIn("[1] vs [3] (Request tok/s, Decode tok/s)", lines[0])
+            self.assertIn("exact and estimated completion counts use different units", output)
+            self.assertIn("18.44 (n/a)", output)
+            self.assertIn("not certify equivalence", output)
+
     def test_snapshot_never_generates_or_loads_models_and_keeps_partial_errors(self):
         class Engine:
             port = 1234

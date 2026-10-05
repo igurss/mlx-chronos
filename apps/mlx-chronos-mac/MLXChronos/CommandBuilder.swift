@@ -135,7 +135,7 @@ enum CommandBuilder {
 }
 
 enum OptionPresentation {
-    static let compareGuidance = "Compare two or more sealed benchmark results against the first file. Invalid schemas or seals are rejected. Differences in profile, hardware, model reference, quantization or protocol trigger warnings, not a block; inspect them before interpreting deltas."
+    static let compareGuidance = "Compare sealed benchmark results against the first file. Invalid schemas or seals are rejected. Other differences produce warnings, not a block. Updated CLIs identify the affected pair and metric, flag incomplete information and mark estimated percentages with ~. Incompatible token counts have no throughput percentage (n/a). Output follows the selected CLI."
 
     static func title(_ name: String) -> String {
         ["engine": "Engine", "model": "Exact model ID", "model_url": "Model reference URL",

@@ -291,13 +291,23 @@ result; a newer protocol requires a new run.
 | Action / CLI command | Use |
 | --- | --- |
 | Result history / `history` | Read benchmark history in `--output-dir`. `--limit` optionally caps the entries; blank shows all discovered benchmarks. |
-| Compare results / `compare` | Select at least two benchmark JSON files and choose a reference, then use **Compare selected**. In the manual file list, the first path is the reference. Schema/seal errors are rejected; differences in hardware, model/reference URL, quantization or protocol produce warnings, not proof of a fair comparison. Diagnostic reports/manifests are not standard benchmark inputs. |
+| Compare results / `compare` | Select at least two benchmark JSON files and choose a reference, then use **Compare selected**. In the manual file list, the first path is the reference. Schema/seal errors are rejected; other differences produce cautions. With an updated CLI, each caution identifies the affected pair and metrics, `*` marks the corresponding cells, and missing evidence is reported as incomplete. Diagnostic reports/manifests are not standard benchmark inputs. |
 | Share a result / `submit` | **Use selected for sharing** fills `--file` and enables validation without sending. **Validate result** runs eligibility checks locally. Disable validation-only and choose **Review and send…** for an explicit confirmation before sending the full JSON. |
 
 Sharing options: `--file` (required), `--dry-run` (validation-only), optional
 `--email` for replies, `--endpoint` for a deliberate inbox override, and
 `--timeout` for the request (default 30 seconds). Inherited submission email
 and endpoint variables are cleared so the app uses the explicit form choices.
+
+Comparison output comes directly from the selected CLI. The refined comparison
+in the CLI's **Unreleased** changes marks percentages based on two word-count
+estimates with `~`; exact-versus-estimated or mixed counts have no throughput
+percentage (`n/a`, with a reason). Missing values and a zero reference also have
+no percentage. TTFT and RAM percentages are independent of completion-count
+provenance. RAM peak/rise are whole-system diagnostics, and even a comparison
+without cautions does not certify equivalent conditions. The published CLI
+0.5.1 retains its earlier output until a newer compatible CLI is released and
+selected; the app shares CLI logic rather than implementing separate rules.
 Email and contributor attribution are separate; omitting email does not remove
 a handle already in the sealed result. Sending is not automatic leaderboard
 publication. Do not edit sealed benchmark JSON manually.

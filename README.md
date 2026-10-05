@@ -397,7 +397,7 @@ mlx-chronos run --engine omlx \
 | `mlx-chronos matrix --engine-model <engine>=<model> ...` | Preflight and rotate local full runs across engines; not a comparability verdict |
 | `mlx-chronos energy --engine <name> --model <model>` | Experimental local macmon system-power diagnostic with a separate no-request phase; never a leaderboard result |
 | `mlx-chronos context --engine <name> --model <model>` | Local TTFT versus approximate input-length diagnostic; not a prefill-speed or leaderboard metric |
-| `mlx-chronos compare <file1> <file2>` | Compare sealed local results against the first file |
+| `mlx-chronos compare <file1> <file2>` | Compare sealed local results against the first file, with pairwise metric cautions |
 | `mlx-chronos history [--limit N]` | List local results newest first |
 | `mlx-chronos submit --file <result.json> --dry-run` | Validate whether a result is publishable |
 | `mlx-chronos submit --file <result.json>` | Send a validated result to the maintainer inbox |
@@ -405,6 +405,14 @@ mlx-chronos run --engine omlx \
 Use `mlx-chronos <command> --help` for that command's complete option list.
 The wizard builds standard `run` commands; use the dedicated commands below
 for the new local diagnostics.
+
+In `compare`, `*` links a result/metric to the cautions below the table.
+Missing metadata is reported as incomplete, even when absent from both files.
+Throughput percentages use exact completion counts on both sides, or are marked
+`~` when both use word estimates. Exact-versus-estimated or mixed counts have
+no throughput percentage (`n/a`); TTFT and RAM deltas remain independent of that
+restriction. Differences in hardware or model still allow descriptive deltas.
+See [local comparison rules](docs/methodology.md#local-comparison-and-history).
 
 ## Local Diagnostics
 

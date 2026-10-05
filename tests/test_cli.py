@@ -343,6 +343,72 @@ def test_cmd_compare_reports_integrity_failure(tmp_path, capsys):
     assert exc.value.code == 1
     assert "invalid integrity seal" in capsys.readouterr().err
 
+
+def test_cmd_compare_reports_pair_and_metric_specific_cautions(tmp_path, caplog):
+    from tests.test_compare import write_result
+
+    paths = [write_result(tmp_path / f"{i}.json") for i in range(3)]
+    changed = json.loads(paths[2].read_text())
+    changed["meta"]["cached_ttft_warning"] = True
+    changed["meta"]["benchmark_protocol"]["throughput"]["prompts"][3] = (
+        "The changed fourth prompt"
+    )
+    paths[2].write_text(json.dumps(seal_result(changed)))
+    with caplog.at_level(logging.INFO, logger="mlx_chronos"):
+        cmd_compare(Namespace(files=[str(p) for p in paths]))
+    cautions = [
+        record.message
+        for record in caplog.records
+        if "Comparison caution" in record.message
+    ]
+    cache_warning = next(line for line in cautions if "cached TTFT is close" in line)
+    assert "[1] vs [3] (TTFT cached (s))" in cache_warning
+    prompt_warning = next(
+        line for line in cautions if "changed prompt positions" in line
+    )
+    assert "[1] vs [3]" in prompt_warning
+    assert "TTFT" not in prompt_warning
+    assert "The changed fourth prompt" in prompt_warning
+    assert "not certify equivalence" in caplog.text
+    assert "whole-system diagnostics" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "left,right,marker,explanation",
+    [
+        ("word_fallback", "word_fallback", "(~+20.0%)", "word-count estimate"),
+        ("usage.completion_tokens", "word_fallback", "(n/a)", "different units"),
+        ("mixed", "mixed", "(n/a)", "mixed completion token counts"),
+    ],
+)
+def test_cmd_compare_explains_estimated_and_unavailable_percentages(
+    tmp_path, caplog, left, right, marker, explanation
+):
+    from tests.test_compare import write_result
+
+    first = write_result(
+        tmp_path / "first.json",
+        tps=20,
+        mutate=lambda d: d["metrics"].update(token_count_source=left),
+    )
+    second = write_result(
+        tmp_path / "second.json",
+        tps=24,
+        mutate=lambda d: d["metrics"].update(token_count_source=right),
+    )
+    with caplog.at_level(logging.INFO, logger="mlx_chronos"):
+        cmd_compare(Namespace(files=[str(first), str(second)]))
+    metric_line = next(
+        r.message for r in caplog.records if r.message.startswith("Request tok/s")
+    )
+    assert f"24.00 {marker}" in metric_line
+    assert explanation in caplog.text
+    ttft_line = next(
+        r.message for r in caplog.records if r.message.startswith("TTFT cold (s)")
+    )
+    assert "(+0.0%)" in ttft_line
+
+
 def test_main_submit_command():
     with patch.object(sys, "argv", ["mlx-chronos", "submit", "--file", "result.json"]):
         with patch("mlx_chronos.cli.cmd_submit") as mock_submit:

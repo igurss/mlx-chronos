@@ -849,17 +849,55 @@ an engine, and neither is a benchmark profile.
 without requiring the additional public-submission conditions. Comparing
 exploratory local runs that are not publishable is still useful. It prints a
 metric-by-metric table with each file's value and its percentage delta against the *first*
-file, which is always the baseline. A metric missing from one file (for
+file, which is always the baseline. `*` marks cells with cautions; each caution
+identifies the reference/result pair, affected metrics, field and values.
+With files A, B and C, a hardware difference between A and C does not flag A–B.
+A metric missing from one file (for
 example, an older result with no `decode_tokens_per_second`, or one taken
 before `system_ram_delta_gb` existed) shows as `-` rather than a fabricated
 number, and its delta shows as unavailable rather than 0%. A zero baseline
-also has no percentage delta. Warnings flag differences in chip/RAM, model
-reference URL/quantization, benchmark profile or protocol; the
-percentage is descriptive and does not establish a causal performance gain.
-These warnings are not an exhaustive equivalence check: inspect model names,
-formats, engine versions and serving settings as well, even with no warning.
-System RAM rise is a whole-device diagnostic, not memory attributable to the
-engine.
+also has no percentage delta. `n/a` and a reason identify unavailable deltas.
+
+Completion-count provenance affects **request and decode tok/s**, not TTFT or
+RAM. Exact `usage.completion_tokens` counts on both sides permit descriptive
+percentages. Two `word_fallback` results permit percentages marked `~` as
+word-count estimates. Exact-versus-estimated counts, or `mixed` counts on
+either side, retain the measured values but have no throughput percentage:
+their numerators do not represent the same unit consistently.
+
+Warnings distinguish **known differences**, **incomplete information**, and
+existing **run warnings**. Chip/RAM, model name/reference/quantization/format,
+profile, protocol revision and trial-count differences apply across metrics.
+Engine versions remain visible; an upgrade may be the intended variable under
+study, so known version differences alone do not trigger a warning.
+
+Protocol settings are compared by phase and field: prompts and their changed
+positions, token limits, streaming/usage requests, connection mode, sampling
+parameters, and available input-token counts/provenance. Cautions include the
+phase's own measurements and later measurements that may inherit cache or
+thermal state. Warmup and cold-phase changes can affect all subsequent metrics;
+cached-phase changes affect cached TTFT and subsequent throughput, and include
+the priming request using those same settings. Throughput changes affect
+request/decode tok/s and RAM, never earlier TTFT measurements. System RAM
+sampling spans all phases; sampling-interval differences apply only to RAM.
+These are possible dependencies, not a claim that every setting caused a change.
+
+The existing cached-TTFT warning and unverified prefix-hit evidence are scoped
+to cached TTFT. Cache-control evidence identifies the relevant cold/cached
+measurements. Failed warmup calls caution subsequent metrics, while the existing
+sustained-throttling warning concerns throughput. Missing or unknown optional
+metadata remains incomplete even on both sides; it never establishes equality.
+An explicitly recorded `requested_min_tokens: null` means no minimum was
+requested, while an omitted field is unknown. Optional parser defaults do not
+turn omitted cache evidence or phase settings into observations.
+
+Hardware, model or protocol differences do not block exploratory percentages.
+Each percentage is descriptive and does not establish a causal performance gain.
+Even without cautions, these checks **do not certify equivalent conditions**:
+inspect serving settings, runtime conditions and the underlying results as well.
+RAM peak and rise are whole-device diagnostics, not memory attributable to the
+engine. These interpretation changes do not alter saved results, protocol
+revision **4**, integrity seals or public-submission rules.
 
 `history` lists valid JSON results directly under `results/local/`, newest
 first, without recursing into `context/`, `concurrency/`, `energy/` or `matrix/`.

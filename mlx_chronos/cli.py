@@ -1216,12 +1216,38 @@ def cmd_models(args):
     logger.info("")
 
 
-def _format_compare_cell(value: float | None, delta_percent: float | None) -> str:
+def _format_compare_cell(
+    value: float | None, delta_percent: float | None, status: str
+) -> str:
     if value is None:
         return "-"
     if delta_percent is None:
-        return f"{value:.2f}"
-    return f"{value:.2f} ({delta_percent:+.1f}%)"
+        return f"{value:.2f} (n/a)"
+    marker = "~" if status == "estimated" else ""
+    return f"{value:.2f} ({marker}{delta_percent:+.1f}%)"
+
+
+def _format_compare_evidence(
+    value: object, *, other: object = None, prompts: bool = False
+) -> str:
+    """Keep long prompts bounded and escape control characters in local data."""
+    if prompts and isinstance(value, list) and isinstance(other, list):
+        first_change = next(
+            (
+                i
+                for i in range(max(len(value), len(other)))
+                if i >= len(value) or i >= len(other) or value[i] != other[i]
+            ),
+            None,
+        )
+        if first_change is not None:
+            value = {
+                "prompt_count": len(value),
+                "position": first_change + 1,
+                "prompt": value[first_change] if first_change < len(value) else None,
+            }
+    text = json.dumps(value, ensure_ascii=False)
+    return text if len(text) <= 160 else text[:157] + "..."
 
 
 def cmd_compare(args):
@@ -1237,31 +1263,68 @@ def cmd_compare(args):
     for index, column in enumerate(columns, start=1):
         logger.info(
             "  [%d] %s %s — %s (%s) — %s — %s — %s",
-            index, column["engine"], column["engine_version"],
-            column["model"], column["quantization"], column["chip"],
-            column["benchmark_profile"], column["timestamp"],
+            index,
+            column["engine"],
+            column["engine_version"],
+            column["model"],
+            column["quantization"],
+            column["chip"],
+            column["benchmark_profile"],
+            column["timestamp"],
         )
         logger.info("      %s", column["path"])
 
-    for warning in report["warnings"]:
-        logger.warning("Comparison caution: %s", warning)
-
     label_width = max(len(row["label"]) for row in report["rows"])
-    cell_width = 20
+    cell_width = 24
     header = f"{'Metric':<{label_width}}  " + "  ".join(
         f"[{index + 1}]".rjust(cell_width) for index in range(len(columns))
     )
     logger.info("\n%s", header)
     for row in report["rows"]:
-        cells = [
-            _format_compare_cell(value, delta).rjust(cell_width)
-            for value, delta in zip(row["values"], row["deltas_percent"])
-        ]
+        warned_indices = {
+            warning["result_index"]
+            for warning in report["warnings"]
+            if row["label"] in warning["metrics"]
+        }
+        cells = []
+        for index, (value, delta, status) in enumerate(
+            zip(row["values"], row["deltas_percent"], row["delta_status"])
+        ):
+            cell = _format_compare_cell(value, delta, status)
+            cells.append(
+                (cell + (" *" if index in warned_indices else "")).rjust(cell_width)
+            )
         logger.info("%s  %s", f"{row['label']:<{label_width}}", "  ".join(cells))
 
+    if report["warnings"]:
+        logger.info("\n* Metric-specific cautions for the indicated result versus [1]:")
+    for warning in report["warnings"]:
+        left, right = warning["baseline_value"], warning["value"]
+        prompts = warning["field"].endswith(".prompts")
+        logger.warning(
+            "Comparison caution [1] vs [%d] (%s): %s; [1]=%s; [%d]=%s",
+            warning["result_index"] + 1,
+            ", ".join(warning["metrics"]),
+            warning["message"],
+            _format_compare_evidence(left, other=right, prompts=prompts),
+            warning["result_index"] + 1,
+            _format_compare_evidence(right, other=left, prompts=prompts),
+        )
+    for row in report["rows"]:
+        for index, reason in enumerate(row["delta_reasons"][1:], start=2):
+            if reason is not None:
+                logger.info(
+                    "  [1] vs [%d] — %s: no percentage (%s).",
+                    index,
+                    row["label"],
+                    reason,
+                )
+
     logger.info(
-        "\n(percentages are relative to [1]; direction and conditions matter — "
-        "see docs/methodology.md)\n"
+        "\nPercentages describe changes relative to [1]; ~ marks a word-count estimate. "
+        "n/a means no percentage is available. RAM peak and rise are whole-system diagnostics. "
+        "These checks do not certify equivalence or a causal improvement; "
+        "see docs/methodology.md.\n"
     )
 
 
