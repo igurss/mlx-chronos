@@ -144,6 +144,90 @@ class BridgeTests(unittest.TestCase):
             self.assertIn("18.44 (n/a)", output)
             self.assertIn("not certify equivalence", output)
 
+    def test_series_mode_uses_an_optional_integer_with_unchanged_positional_files(self):
+        command = next(c for c in bridge.cli_schema() if c["name"] == "compare")
+        split = next(
+            (o for o in command["options"] if o["name"] == "series_a_size"), None
+        )
+        if split is None:
+            self.skipTest("Selected CLI predates series comparisons")
+        self.assertEqual(
+            (split["flag"], split["kind"], split["required"], split["default"]),
+            ("--series-a-size", "integer", False, None),
+        )
+        files = next(o for o in command["options"] if o["name"] == "files")
+        self.assertTrue(files["required"] and files["multiple"])
+        from mlx_chronos.examples import EXAMPLE_RESULT
+        from mlx_chronos.integrity import seal_result
+
+        with tempfile.TemporaryDirectory(prefix="chronos-series-") as root:
+            a, b = Path(root) / "a.json", Path(root) / "b.json"
+            a.write_text(json.dumps(seal_result(EXAMPLE_RESULT)), encoding="utf-8")
+            changed = copy.deepcopy(EXAMPLE_RESULT)
+            changed["engine"]["version"] = "0.4.0"
+            b.write_text(json.dumps(seal_result(changed)), encoding="utf-8")
+            response = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    str(BRIDGE),
+                    "cli",
+                    "compare",
+                    "--series-a-size",
+                    "1",
+                    "--",
+                    str(a),
+                    str(b),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            self.assertEqual(response.returncode, 0, response.stderr)
+            output = response.stdout + response.stderr
+            self.assertIn("Series A", output)
+            self.assertIn("Series B", output)
+            self.assertIn(
+                "Request tok/s: n=1/1; mean 18.44; median 18.44; Q1–Q3 -–-; MAD -; SD -",
+                output,
+            )
+            self.assertIn("not confidence intervals or a superiority test", output)
+
+    def test_series_mode_rejects_shared_evidence_through_the_bridge(self):
+        command = next(c for c in bridge.cli_schema() if c["name"] == "compare")
+        if not any(o["name"] == "series_a_size" for o in command["options"]):
+            self.skipTest("Selected CLI predates series comparisons")
+        from mlx_chronos.examples import EXAMPLE_RESULT
+        from mlx_chronos.integrity import seal_result
+
+        with tempfile.TemporaryDirectory(prefix="chronos-series-overlap-") as root:
+            path = Path(root) / "a.json"
+            path.write_text(json.dumps(seal_result(EXAMPLE_RESULT)), encoding="utf-8")
+            response = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    "-B",
+                    str(BRIDGE),
+                    "cli",
+                    "compare",
+                    "--series-a-size",
+                    "1",
+                    "--",
+                    str(path),
+                    str(path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            self.assertNotEqual(response.returncode, 0)
+            self.assertIn(
+                "same benchmark result appears in both series",
+                response.stdout + response.stderr,
+            )
+
     def test_snapshot_never_generates_or_loads_models_and_keeps_partial_errors(self):
         class Engine:
             port = 1234

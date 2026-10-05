@@ -107,6 +107,10 @@ enum CommandBuilder {
             }
         }
         if command.name == "compare" && lines(values["files"]).count < 2 { throw CommandError.invalid("Choose at least two benchmark JSON files. The first is the reference.") }
+        if command.name == "compare", let size = numeric("series_a_size"),
+           size < 1 || size >= Double(lines(values["files"]).count) {
+            throw CommandError.invalid("Series A must contain at least one file and leave at least one file for B.")
+        }
         if command.name == "matrix" {
             let rows = lines(values["engine_model"])
             let pairs = rows.map { $0.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) } }
@@ -135,7 +139,7 @@ enum CommandBuilder {
 }
 
 enum OptionPresentation {
-    static let compareGuidance = "Compare sealed benchmark results against the first file. Invalid schemas or seals are rejected. Other differences produce warnings, not a block. Updated CLIs identify the affected pair and metric, flag incomplete information and mark estimated percentages with ~. Incompatible token counts have no throughput percentage (n/a). Output follows the selected CLI."
+    static let compareGuidance = "Compare sealed benchmark results against the first file. To compare series with an updated CLI, list A files first, then B files, and enter the number of files in A. Series mode shows medians and observed dispersion; it does not test superiority. Invalid schemas or seals are rejected. Other differences produce warnings, not a block. ~ marks estimated percentages and n/a an unavailable percentage. Output follows the selected CLI."
 
     static func title(_ name: String) -> String {
         ["engine": "Engine", "model": "Exact model ID", "model_url": "Model reference URL",
@@ -143,6 +147,7 @@ enum OptionPresentation {
          "publishable": "Public-ready settings", "output_dir": "Result folder", "format": "Report format",
          "engine_model": "Engine → model mapping", "engine_opt": "Declared server settings",
          "files": "Benchmark JSON files", "file": "Benchmark JSON file", "dry_run": "Validate without sending",
+         "series_a_size": "Files in series A (optional)",
          "submitted_by": "Contributor handle (optional)", "trials": "Trials", "repeat": "Complete repetitions",
          "max_tokens": "Maximum output tokens", "min_tokens": "Minimum output tokens",
          "ram_sample_interval": "RAM sampling interval (seconds)", "cooldown_seconds": "Cooldown (seconds)",

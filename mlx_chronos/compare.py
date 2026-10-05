@@ -7,6 +7,7 @@ and missing evidence are reported without certifying equivalence or causality.
 from __future__ import annotations
 
 import json
+import statistics
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, TypedDict
@@ -15,6 +16,7 @@ from pydantic import ValidationError
 
 from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.schema import BenchmarkResult
+from mlx_chronos.stats import compute_series_stats
 
 
 class CompareError(RuntimeError):
@@ -57,9 +59,7 @@ def _decode_tps_or_none(result: BenchmarkResult) -> float | None:
     return stats.mean if stats is not None else None
 
 
-# (label, extractor, higher_is_better). higher_is_better only affects how a
-# delta is annotated for the person reading it (better/worse), never how it's
-# computed.
+# Metric direction is metadata; it never changes a descriptive delta's sign.
 CompareExtractor = Callable[[BenchmarkResult], "float | None"]
 REQUEST_TPS = "Request tok/s"
 DECODE_TPS = "Decode tok/s"
@@ -118,7 +118,11 @@ def _unknown(value: object) -> bool:
 
 
 def _pair_warnings(
-    baseline: BenchmarkResult, result: BenchmarkResult, index: int
+    baseline: BenchmarkResult,
+    result: BenchmarkResult,
+    index: int,
+    *,
+    within_series: bool = False,
 ) -> list[ComparisonWarning]:
     warnings: list[ComparisonWarning] = []
 
@@ -203,9 +207,17 @@ def _pair_warnings(
             getattr(result.model, field),
             category="model",
         )
-    # Engine upgrades are often the variable under study. Only unknown versions
-    # need a caution; known versions remain visible in the identifying columns.
-    if _unknown(baseline.engine.version) or _unknown(result.engine.version):
+    # Across series, engine upgrades may be the variable under study. Within
+    # one series, report differing names/versions as well as unknown versions.
+    if within_series:
+        for field in ("name", "version"):
+            check(
+                f"engine.{field}",
+                getattr(baseline.engine, field),
+                getattr(result.engine, field),
+                category="engine",
+            )
+    elif _unknown(baseline.engine.version) or _unknown(result.engine.version):
         check(
             "engine.version",
             baseline.engine.version,
@@ -383,6 +395,153 @@ def _delta(
     return round(100.0 * (value - baseline) / baseline, 1), status, None
 
 
+def summarize_results(results: list[BenchmarkResult]) -> dict:
+    """One observation per complete session, never a pool of unlike prompts."""
+    if not results:
+        raise ValueError("at least one session is required")
+    raw_fields = {
+        REQUEST_TPS: "tokens_per_second_raw",
+        DECODE_TPS: "decode_tokens_per_second_raw",
+        TTFT_COLD: "ttft_cold_raw",
+        TTFT_CACHED: "ttft_cached_raw",
+    }
+    sources = {result.metrics.token_count_source for result in results}
+    token_source = next(iter(sources)) if len(sources) == 1 else "mixed"
+    rows = []
+    for label, extractor, higher_is_better in COMPARE_METRICS:
+        values = []
+        for result in results:
+            if label in raw_fields:
+                raw = getattr(result.trials, raw_fields[label])
+                values.append(statistics.mean(raw) if raw is not None else None)
+            else:
+                values.append(extractor(result))
+        incompatible_units = label in THROUGHPUT_METRICS and token_source == "mixed"
+        rows.append(
+            {
+                "label": label,
+                "values": values,
+                "stats": None if incompatible_units else compute_series_stats(values),
+                "unavailable_reason": "incompatible completion count units within series"
+                if incompatible_units
+                else None,
+                "higher_is_better": higher_is_better,
+            }
+        )
+    return {"count": len(results), "token_count_source": token_source, "rows": rows}
+
+
+def _load_series(
+    paths: list[Path],
+) -> tuple[list[BenchmarkResult], list[Path], list[Path]]:
+    if not paths:
+        raise ValueError("each series requires at least one result file")
+    results: list[BenchmarkResult] = []
+    unique_paths: list[Path] = []
+    duplicates: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        result = load_result_for_compare(path)
+        if result.integrity.digest in seen:
+            duplicates.append(path)
+        else:
+            seen.add(result.integrity.digest)
+            results.append(result)
+            unique_paths.append(path)
+    return results, unique_paths, duplicates
+
+
+def series_warnings(
+    results: list[BenchmarkResult], *, offset: int = 0
+) -> list[ComparisonWarning]:
+    """Assess each member against its series reference, preserving pair indices."""
+    warnings = []
+    for index, result in enumerate(results[1:], start=1):
+        for warning in _pair_warnings(results[0], result, index, within_series=True):
+            warning["baseline_index"] += offset
+            warning["result_index"] += offset
+            warnings.append(warning)
+    return warnings
+
+
+def compare_series(paths_a: list[Path], paths_b: list[Path]) -> dict:
+    """Describe two explicitly selected series; do not infer campaign identity."""
+    results_a, unique_a, duplicates_a = _load_series(paths_a)
+    results_b, unique_b, duplicates_b = _load_series(paths_b)
+    digests_a = {result.integrity.digest for result in results_a}
+    for path, result in zip(unique_b, results_b):
+        if result.integrity.digest in digests_a:
+            raise CompareError(
+                f"{path}: the same benchmark result appears in both series; choose disjoint series"
+            )
+    summary_a, summary_b = summarize_results(results_a), summarize_results(results_b)
+    warnings = series_warnings(results_a) + series_warnings(
+        results_b, offset=len(results_a)
+    )
+    warnings += [
+        warning
+        for index, result in enumerate(results_b, start=len(results_a))
+        for warning in _pair_warnings(results_a[0], result, index)
+    ]
+    rows = []
+    for left, right in zip(summary_a["rows"], summary_b["rows"]):
+        values = [
+            row["stats"]["median"] if row["stats"] is not None else None
+            for row in (left, right)
+        ]
+        reason = left["unavailable_reason"] or right["unavailable_reason"]
+        delta = (
+            (None, "unavailable", reason)
+            if reason
+            else _delta(
+                values[1],
+                values[0],
+                token_sources=(
+                    summary_a["token_count_source"],
+                    summary_b["token_count_source"],
+                )
+                if left["label"] in THROUGHPUT_METRICS
+                else None,
+            )
+        )
+        rows.append(
+            {
+                "label": left["label"],
+                "values": values,
+                "delta_percent": delta[0],
+                "delta_status": delta[1],
+                "delta_reason": delta[2],
+            }
+        )
+    return {
+        "summaries": [summary_a, summary_b],
+        "rows": rows,
+        "warnings": warnings,
+        "columns": _comparison_columns(unique_a + unique_b, results_a + results_b),
+        "labels": [f"A[{i + 1}]" for i in range(len(results_a))]
+        + [f"B[{i + 1}]" for i in range(len(results_b))],
+        "ignored_duplicates": duplicates_a + duplicates_b,
+    }
+
+
+def _comparison_columns(
+    paths: list[Path], results: list[BenchmarkResult]
+) -> list[dict]:
+    return [
+        {
+            "path": str(path),
+            "engine": result.engine.name,
+            "engine_version": result.engine.version,
+            "model": result.model.name,
+            "quantization": result.model.quantization,
+            "chip": result.hardware.chip,
+            "benchmark_profile": result.meta.benchmark_profile,
+            "timestamp": result.meta.timestamp.isoformat(),
+        }
+        for path, result in zip(paths, results)
+    ]
+
+
 def compare_results(paths: list[Path]) -> dict:
     """Load each path and build a metric-by-metric comparison against the first.
 
@@ -409,19 +568,7 @@ def compare_results(paths: list[Path]) -> dict:
         for warning in _pair_warnings(baseline_result, result, index)
     ]
 
-    columns = [
-        {
-            "path": str(path),
-            "engine": result.engine.name,
-            "engine_version": result.engine.version,
-            "model": result.model.name,
-            "quantization": result.model.quantization,
-            "chip": result.hardware.chip,
-            "benchmark_profile": result.meta.benchmark_profile,
-            "timestamp": result.meta.timestamp.isoformat(),
-        }
-        for path, result in zip(paths, results)
-    ]
+    columns = _comparison_columns(paths, results)
 
     rows = []
     for label, extractor, higher_is_better in COMPARE_METRICS:

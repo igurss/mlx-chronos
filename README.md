@@ -353,11 +353,14 @@ mlx-chronos context --engine ollama --model 'model-alias:tag'
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --cooldown-seconds 300
 
 # Run the whole benchmark 5 times to see run-to-run variance; each repeat is
-# saved as its own independent result file
+# saved as its own sealed result file
 mlx-chronos run --engine omlx --model "Qwen3.5-4B-OptiQ-4bit" --repeat 5
 
 # Compare sealed local results; percentages are relative to the first file
 mlx-chronos compare results/local/first.json results/local/second.json
+
+# Compare two series: first 2 files form A, remaining files form B
+mlx-chronos compare --series-a-size 2 a1.json a2.json b1.json b2.json
 
 # List local results newest first, skipping invalid files with a reason
 mlx-chronos history --limit 10
@@ -413,6 +416,14 @@ Throughput percentages use exact completion counts on both sides, or are marked
 no throughput percentage (`n/a`); TTFT and RAM deltas remain independent of that
 restriction. Differences in hardware or model still allow descriptive deltas.
 See [local comparison rules](docs/methodology.md#local-comparison-and-history).
+
+With the Unreleased CLI changes, `--repeat` also reports median, quartiles,
+MAD and available session counts for throughput, TTFT and system RAM.
+`compare --series-a-size N` uses the first N files as series A and the rest
+as B, comparing their medians. Each complete session counts once; copied
+results do not increase the sample. These are descriptive summaries, without
+confidence intervals or automatic claims that one configuration is better.
+See [repeated-session statistics](docs/methodology.md#repeating-a-run).
 
 ## Local Diagnostics
 

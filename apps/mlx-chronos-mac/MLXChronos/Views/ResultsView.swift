@@ -110,6 +110,9 @@ struct ResultsView: View {
             return lhs.timestamp > rhs.timestamp
         }
         store.setValue(ordered.map(\.url.path).joined(separator: "\n"), option: "files", command: command)
+        if command.options.contains(where: { $0.name == "series_a_size" }) {
+            store.setValue("", option: "series_a_size", command: command)
+        }
         action = "compare"
     }
     private func useForSharing() {

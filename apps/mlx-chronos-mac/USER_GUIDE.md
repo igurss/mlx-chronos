@@ -187,7 +187,7 @@ to observe late-run degradation. Cold TTFT is not model download/load time.
 | Option | Purpose |
 | --- | --- |
 | Public-ready settings / `--publishable` | Apply public-profile preflight and configuration requirements. Requires model URL, standard profile settings, JSON, persistent connections and Low Power Mode off. Does not send anything or guarantee final eligibility. |
-| Complete repetitions / `--repeat` | Run 1–20 independent complete sessions; default 1. Each has its own sealed result. The cross-run summary does not replace those results. |
+| Complete repetitions / `--repeat` | Run 1–20 complete sessions; default 1. Each has its own sealed result. The cross-session summary does not replace those results or guarantee statistical independence. |
 | Cooldown / `--cooldown-seconds` | Minimum elapsed time since the previous JSON in the output folder; default 0. Not a temperature target or a pause after every request. |
 | Extra model access check / `--preflight` | Additional unmeasured access check before measurements; may load/warm the model. |
 | Declared server settings / `--engine-opt` | One unique `KEY=VALUE` per line, recorded as an unverified operator declaration. Does not configure the server. |
@@ -308,6 +308,23 @@ provenance. RAM peak/rise are whole-system diagnostics, and even a comparison
 without cautions does not certify equivalent conditions. The published CLI
 0.5.1 retains its earlier output until a newer compatible CLI is released and
 selected; the app shares CLI logic rather than implementing separate rules.
+
+With a CLI containing the Unreleased series changes, repeat output also shows
+available session counts, median, quartiles, MAD and sample SD for throughput,
+TTFT and system RAM. Each complete session counts once; the summary retains
+extreme values. Dispersion is unavailable with fewer than two measurements.
+
+For a two-series comparison, enter all A paths first and all B paths after them
+in the manual benchmark file list, then enter **Files in series A (optional)**
+(`--series-a-size`). For example, four paths with a value of 2 compare two
+sessions against two sessions. The CLI compares medians, skips copies within
+a series and rejects the same result on both sides. Leave this field blank for
+ordinary per-file comparison; **Compare selected** clears it automatically.
+No confidence intervals or automatic superiority verdicts are generated.
+App 0.2.0 can pass the optional integer through its existing dynamic form; the
+source app adds the friendlier label and validation. See
+[the statistical interpretation](../../docs/methodology.md#repeating-a-run).
+
 Email and contributor attribution are separate; omitting email does not remove
 a handle already in the sealed result. Sending is not automatic leaderboard
 publication. Do not edit sealed benchmark JSON manually.

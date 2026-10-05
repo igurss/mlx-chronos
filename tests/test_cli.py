@@ -315,6 +315,19 @@ def test_main_compare_command():
             assert mock_compare.call_args.args[0].files == ["a.json", "b.json"]
 
 
+def test_main_compare_series_option_keeps_the_existing_positional_interface():
+    with patch.object(
+        sys,
+        "argv",
+        ["mlx-chronos", "compare", "--series-a-size", "1", "a.json", "b.json"],
+    ):
+        with patch("mlx_chronos.cli.cmd_compare") as mock_compare:
+            main()
+            args = mock_compare.call_args.args[0]
+            assert args.files == ["a.json", "b.json"]
+            assert args.series_a_size == 1
+
+
 def test_main_history_command():
     with patch.object(sys, "argv", ["mlx-chronos", "history", "--limit", "2"]):
         with patch("mlx_chronos.cli.cmd_history") as mock_history:
@@ -342,6 +355,63 @@ def test_cmd_compare_reports_integrity_failure(tmp_path, capsys):
         cmd_compare(Namespace(files=[str(good), str(changed)]))
     assert exc.value.code == 1
     assert "invalid integrity seal" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("size", [0, -1, 2, 3])
+def test_cmd_compare_rejects_a_split_that_leaves_an_empty_series(size, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cmd_compare(Namespace(files=["a.json", "b.json"], series_a_size=size))
+    assert exc.value.code == 2
+    assert "leave at least one file in each series" in capsys.readouterr().err
+
+
+def test_cmd_compare_series_prints_available_counts_and_descriptive_median_change(
+    tmp_path, caplog
+):
+    from tests.test_compare import write_result
+
+    a = [
+        write_result(tmp_path / f"a{i}.json", tps=tps) for i, tps in enumerate([20, 22])
+    ]
+    b = [
+        write_result(tmp_path / f"b{i}.json", tps=tps) for i, tps in enumerate([24, 26])
+    ]
+    before = {path: path.read_bytes() for path in a + b}
+    with caplog.at_level(logging.INFO, logger="mlx_chronos"):
+        cmd_compare(Namespace(files=[str(path) for path in a + b], series_a_size=2))
+    assert "Series A" in caplog.text and "Series B" in caplog.text
+    assert "Request tok/s: n=2/2; mean 21.00; median 21.00" in caplog.text
+    assert "Request tok/s: +19.0%" in caplog.text
+    assert "not confidence intervals or a superiority test" in caplog.text
+    assert all(path.read_bytes() == content for path, content in before.items())
+    incomplete = [
+        r.message
+        for r in caplog.records
+        if r.message.startswith("Incomplete comparison information")
+        and r.message.endswith("model.format")
+    ]
+    assert len(incomplete) == 1  # Consolidate repetitive absence, not real differences.
+    assert all(label in incomplete[0] for label in ("A[1]", "A[2]", "B[1]", "B[2]"))
+
+
+def test_cmd_compare_series_reports_an_invalid_seal_without_a_summary(
+    tmp_path, capsys, caplog
+):
+    from tests.test_compare import write_result
+
+    a = write_result(tmp_path / "a.json", tps=20)
+    b = write_result(tmp_path / "b.json", tps=24)
+    data = json.loads(b.read_text())
+    data["meta"]["notes"] = "Changed after capture"
+    b.write_text(json.dumps(data))
+    with (
+        caplog.at_level(logging.INFO, logger="mlx_chronos"),
+        pytest.raises(SystemExit) as exc,
+    ):
+        cmd_compare(Namespace(files=[str(a), str(b)], series_a_size=1))
+    assert exc.value.code == 1
+    assert "invalid integrity seal" in capsys.readouterr().err
+    assert "Series A" not in caplog.text
 
 
 def test_cmd_compare_reports_pair_and_metric_specific_cautions(tmp_path, caplog):
@@ -2053,7 +2123,11 @@ def test_cmd_submit_reports_http_error(mock_post, tmp_path, capsys):
     assert "HTTP 500" in capsys.readouterr().err
 
 
-def test_cmd_run_repeat_saves_one_result_file_per_run_and_logs_a_summary(caplog):
+def test_cmd_run_repeat_saves_one_result_file_per_run_and_logs_a_summary(
+    caplog, tmp_path
+):
+    from tests.test_compare import write_result
+
     args = Namespace(
         engine="omlx",
         model="Qwen3.5-4B-OptiQ-4bit",
@@ -2071,20 +2145,17 @@ def test_cmd_run_repeat_saves_one_result_file_per_run_and_logs_a_summary(caplog)
     )
     throughputs = [20.0, 22.0, 24.0]
 
-    def fake_result(*_args, **_kwargs):
-        result = copy.deepcopy(EXAMPLE_RESULT)
-        result["metrics"]["tokens_per_second"]["mean"] = throughputs[
-            fake_result.call_count
-        ]
-        fake_result.call_count += 1
-        return result
-
-    fake_result.call_count = 0
+    fixtures = [
+        json.loads(write_result(tmp_path / f"run{i}.json", tps=tps).read_text())
+        for i, tps in enumerate(throughputs)
+    ]
 
     caplog.set_level(logging.INFO, logger="mlx_chronos")
-    with patch("mlx_chronos.cli.run_benchmark", side_effect=fake_result) as mock_run, \
-         patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None), \
-         patch("mlx_chronos.cli.JSONReporter") as mock_json:
+    with (
+        patch("mlx_chronos.cli.run_benchmark", side_effect=fixtures) as mock_run,
+        patch("mlx_chronos.cli._elapsed_since_last_result", return_value=None),
+        patch("mlx_chronos.cli.JSONReporter") as mock_json,
+    ):
         mock_json.return_value.save.side_effect = [
             Path(f"results/local/run{i}.json") for i in range(3)
         ]
@@ -2092,11 +2163,13 @@ def test_cmd_run_repeat_saves_one_result_file_per_run_and_logs_a_summary(caplog)
 
     assert mock_run.call_count == 3
     assert mock_json.return_value.save.call_count == 3
-    # Cross-run summary: mean of [20, 22, 24] = 22, computed with the same
-    # compute_stats() used for in-run trial statistics.
+    # Session means [20, 22, 24], not a pool of the fifteen prompt trials.
     assert "Repeat Summary (3 runs)" in caplog.text
-    assert "mean 22.00 tok/s" in caplog.text
+    assert "Request tok/s: n=3/3; mean 22.00; median 22.00" in caplog.text
+    assert "Q1–Q3 21.00–23.00; MAD 2.00; SD 2.00" in caplog.text
     assert "min 20.00, max 24.00" in caplog.text
+    assert "TTFT cold (s): n=3/3" in caplog.text
+    assert "not necessarily statistically independent" in caplog.text
 
 
 def test_cmd_run_repeat_defaults_to_a_single_run(caplog):

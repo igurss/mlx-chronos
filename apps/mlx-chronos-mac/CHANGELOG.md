@@ -5,6 +5,12 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+- Show the selected CLI's expanded repeat summaries and optional two-series
+  comparison through the existing command form. Label and validate the number
+  of A files; keep **Compare selected** in ordinary per-file mode. The optional
+  integer flag and positional files also fit app 0.2.0's existing dynamic form.
+  Statistics remain in the CLI; no duplicated calculation or interface-version
+  bump. Requires a CLI containing these Unreleased changes.
 - Explain pairwise, metric-specific comparison cautions, incomplete metadata
   and estimated/unavailable percentages. Use the selected CLI's comparison
   logic; the refined behavior requires a CLI containing the Unreleased changes.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Expand the console-only `--repeat` summary to request/decode throughput,
+  cold/cached TTFT and system RAM diagnostics, with available session counts,
+  mean, median, inclusive quartiles, unscaled MAD, sample SD and min/max.
+  Add `compare --series-a-size N` for two explicitly selected series, using
+  one observation per complete session and median-based descriptive deltas.
+  Preserve outliers, report missing values, skip duplicate sealed evidence
+  within a series and reject overlap between series. Do not aggregate
+  incompatible completion-count units. No confidence intervals, automatic
+  superiority verdicts, extra dependencies or changes to protocol 4.
 - Refine local `compare` with reference/result-pair and metric-specific cautions,
   phase dependencies, concrete differing values and incomplete metadata.
   Mark percentages from two word-count estimates; omit throughput percentages

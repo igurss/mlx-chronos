@@ -62,7 +62,7 @@ The protocol is built around four principles:
 | Thermal monitor | `meta.thermal_monitor` | Start/end/worst thermal state and affected phases | Context metric |
 | Phase timings | `meta.phase_timings_seconds` | Wall time spent in benchmark phases | Context metric |
 
-All repeated metrics report mean, stddev, min, and max. p95 is included only
+Within a session, trial metrics report mean, stddev, min, and max. p95 is included only
 when at least 20 trials are available; for small samples it collapses toward
 the observed maximum and adds little information.
 
@@ -445,7 +445,7 @@ throttling from the measured results.
 ### Repeating a Run
 
 `--repeat N` runs the entire benchmark N times (default 1, max 20). Each
-repeat is a full, independent run through the same protocol and is saved as
+repeat is a complete session through the same protocol and is saved as
 its own self-contained result file — nothing is written back into any of
 them, and each is independently eligible for the public leaderboard exactly as
 a single run would be.
@@ -453,12 +453,29 @@ a single run would be.
 Result filenames preserve fractional seconds when available, so two quick
 repeats in the same second do not overwrite one another.
 
-After the last repeat, mlx-Chronos prints a console-only cross-run summary:
-the mean of each repeat's throughput mean, the cross-run standard deviation,
-and the min/max spread. This is a local diagnostic for judging how much a
-single run's numbers can be trusted; it is computed with the same statistics
-function used for in-run trial statistics, and it is never stored in a result
-file.
+After the last repeat, mlx-Chronos prints a console-only cross-session summary
+for request/decode throughput, cold/cached TTFT and system RAM peak/rise. Each
+session contributes one suite mean per timing/rate metric, recomputed from its
+raw trials without intermediate rounding, or one RAM diagnostic. Prompt trials
+from separate sessions are not pooled into a larger sample.
+
+Each metric shows its available session count (`n=available/total`), mean,
+median, Q1–Q3, MAD, sample standard deviation and min/max. Quartiles use Python's
+inclusive interpolation convention. MAD is the median absolute deviation from
+the median, without a scaling factor; it describes the central spread and may
+be zero despite differences in the tails. All observations, including extreme
+values, remain in the summary. Missing values are counted, never replaced with
+zero. With fewer than two available observations, SD, MAD and quartiles are
+unavailable (`-`); a single observation cannot measure between-session spread.
+
+Sequential sessions are not necessarily statistically independent: cache,
+temperature and run order may persist. These statistics describe observed
+variation, without confidence intervals, a superiority test or an automatic
+stability verdict. Zero observed dispersion does not prove stable future runs.
+They are never written into sealed result files and do not change leaderboard
+eligibility. Throughput with inconsistent completion-count units has no series
+aggregate; the per-session values remain visible. The same calculation is used
+by the explicit two-series comparison below.
 
 ### Cross-Run Cooldown
 
@@ -898,6 +915,42 @@ inspect serving settings, runtime conditions and the underlying results as well.
 RAM peak and rise are whole-device diagnostics, not memory attributable to the
 engine. These interpretation changes do not alter saved results, protocol
 revision **4**, integrity seals or public-submission rules.
+
+### Comparing Two Series
+
+Select the two series explicitly, putting all A files before all B files:
+
+```bash
+mlx-chronos compare --series-a-size 2 a1.json a2.json b1.json b2.json
+```
+
+The first N entries form reference series A; the rest form B. Both must contain
+at least one file. This mode uses the session summaries described under
+[Repeating a Run](#repeating-a-run), with percentages comparing **B's median to
+A's median**. With the option omitted, the existing per-file comparison is
+unchanged. There is no inferred campaign grouping or automatic result export.
+
+Every file must pass schema and seal validation before any summary is printed.
+Repeated paths or copies with the same sealed payload count once within a
+series, with a message identifying each duplicate. The same sealed result on
+both sides is rejected: use disjoint selections. Counts describe distinct
+recorded sessions, not a guarantee of statistical independence.
+
+Cautions check members against their own series' first session and B members
+against A's first session. Within a series, engine name/version changes are
+also reported; between series, a known engine upgrade may be the intended
+variable. Repeated incomplete fields are condensed into one message naming the
+affected comparisons. This does not certify that either series is homogeneous.
+
+Mixed completion-count units within a series prevent its throughput aggregate.
+Two uniformly word-estimated series have percentages marked `~`; exact versus
+estimated counts have no throughput percentage. TTFT and RAM remain available
+independently of that restriction. Missing metrics can leave different available
+counts in A and B; inspect those counts before interpreting a median difference.
+RAM remains a whole-device diagnostic. No confidence interval or superiority
+claim is produced, even when all metadata agrees.
+
+### History
 
 `history` lists valid JSON results directly under `results/local/`, newest
 first, without recursing into `context/`, `concurrency/`, `energy/` or `matrix/`.

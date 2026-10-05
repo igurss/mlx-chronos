@@ -70,10 +70,19 @@ from mlx_chronos.reporters import (
     JSONReporter,
     MarkdownReporter,
 )
-from mlx_chronos.compare import CompareError, compare_results
+from mlx_chronos.compare import (
+    CompareError,
+    compare_results,
+    compare_series,
+    summarize_results,
+    series_warnings,
+)
 from mlx_chronos.history import list_history
-from mlx_chronos.stats import compute_stats
-from mlx_chronos.schema import BenchmarkResult, ServingConfig, normalize_model_quantization
+from mlx_chronos.schema import (
+    BenchmarkResult,
+    ServingConfig,
+    normalize_model_quantization,
+)
 from mlx_chronos.submit import (
     DEFAULT_SUBMIT_ENDPOINT,
     ANONYMOUS_SUBMITTER_EMAIL,
@@ -642,30 +651,68 @@ def _run_once(
 
 
 def _log_repeat_summary(results: list[dict]) -> None:
-    """Print cross-run throughput variance for `--repeat` > 1.
-
-    Each repeat is already a full, independent, self-contained result file
-    (nothing here is written back into any of them), so this is a console-only
-    aid for judging how much a single run's numbers can be trusted.
-    """
-    throughput_means = [
-        result["metrics"]["tokens_per_second"]["mean"] for result in results
-    ]
-    stats = compute_stats(throughput_means)
-    logger.info("\n%s", "=" * 50)
-    logger.info("  Repeat Summary (%d runs)", len(results))
-    logger.info(
-        "  Throughput : mean %.2f tok/s across runs (cross-run stddev %.2f; "
-        "min %.2f, max %.2f)",
-        stats["mean"],
-        stats["stddev"],
-        stats["min"],
-        stats["max"],
+    """Console-only descriptions of complete sessions; keep saved files intact."""
+    parsed = [BenchmarkResult(**result) for result in results]
+    _log_series_summary(
+        summarize_results(parsed), f"Repeat Summary ({len(results)} runs)"
     )
-    if stats["mean"] > 0:
-        spread_percent = 100.0 * (stats["max"] - stats["min"]) / stats["mean"]
-        logger.info("  Spread     : %.1f%% (max-min relative to mean)", spread_percent)
-    logger.info("%s\n", "=" * 50)
+    _log_series_cautions(
+        series_warnings(parsed), [f"R[{i + 1}]" for i in range(len(parsed))]
+    )
+    _log_series_limits()
+
+
+def _log_series_summary(summary: dict, title: str) -> None:
+    logger.info("\n%s", title)
+    logger.info(
+        "  %d complete sessions; completion counts: %s",
+        summary["count"],
+        summary["token_count_source"],
+    )
+    for row in summary["rows"]:
+        stats = row["stats"]
+        if stats is None:
+            logger.info(
+                "  %s: n/a (%s); per-session values=%s",
+                row["label"],
+                row["unavailable_reason"],
+                row["values"],
+            )
+            continue
+
+        def fmt(value):
+            return (
+                "-"
+                if value is None
+                else f"{value:.4f}"
+                if row["label"].startswith("TTFT")
+                else f"{value:.2f}"
+            )
+
+        logger.info(
+            "  %s: n=%d/%d; mean %s; median %s; Q1–Q3 %s–%s; MAD %s; SD %s; min %s, max %s",
+            row["label"],
+            stats["count"],
+            summary["count"],
+            fmt(stats["mean"]),
+            fmt(stats["median"]),
+            fmt(stats["q1"]),
+            fmt(stats["q3"]),
+            fmt(stats["mad"]),
+            fmt(stats["stddev"]),
+            fmt(stats["min"]),
+            fmt(stats["max"]),
+        )
+
+
+def _log_series_limits() -> None:
+    logger.info(
+        "\nEach observation is one complete session's suite mean (RAM: one diagnostic per session). "
+        "n counts available observations. SD/MAD/quartiles are unavailable with fewer than two. "
+        "Sequential sessions are not necessarily statistically independent; these are descriptive statistics, "
+        "not confidence intervals or a superiority test. Zero observed dispersion does not prove stability. "
+        "RAM remains a whole-system diagnostic.\n"
+    )
 
 
 def cmd_run(args):
@@ -1252,6 +1299,22 @@ def _format_compare_evidence(
 
 def cmd_compare(args):
     """Compare local result files, with deltas against the first."""
+    series_a_size = getattr(args, "series_a_size", None)
+    if series_a_size is not None:
+        if series_a_size < 1 or series_a_size >= len(args.files):
+            print(
+                "Error: --series-a-size must leave at least one file in each series.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        try:
+            paths = [Path(path) for path in args.files]
+            report = compare_series(paths[:series_a_size], paths[series_a_size:])
+        except (CompareError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
+        _log_series_comparison(report)
+        return
     try:
         report = compare_results([Path(raw_path) for raw_path in args.files])
     except (CompareError, ValueError) as exc:
@@ -1298,18 +1361,9 @@ def cmd_compare(args):
 
     if report["warnings"]:
         logger.info("\n* Metric-specific cautions for the indicated result versus [1]:")
-    for warning in report["warnings"]:
-        left, right = warning["baseline_value"], warning["value"]
-        prompts = warning["field"].endswith(".prompts")
-        logger.warning(
-            "Comparison caution [1] vs [%d] (%s): %s; [1]=%s; [%d]=%s",
-            warning["result_index"] + 1,
-            ", ".join(warning["metrics"]),
-            warning["message"],
-            _format_compare_evidence(left, other=right, prompts=prompts),
-            warning["result_index"] + 1,
-            _format_compare_evidence(right, other=left, prompts=prompts),
-        )
+    _log_compare_warnings(
+        report["warnings"], [f"[{i + 1}]" for i in range(len(columns))]
+    )
     for row in report["rows"]:
         for index, reason in enumerate(row["delta_reasons"][1:], start=2):
             if reason is not None:
@@ -1326,6 +1380,79 @@ def cmd_compare(args):
         "These checks do not certify equivalence or a causal improvement; "
         "see docs/methodology.md.\n"
     )
+
+
+def _log_compare_warnings(warnings: list, labels: list[str]) -> None:
+    for warning in warnings:
+        left, right = warning["baseline_value"], warning["value"]
+        prompts = warning["field"].endswith(".prompts")
+        logger.warning(
+            "Comparison caution %s vs %s (%s): %s; %s=%s; %s=%s",
+            labels[warning["baseline_index"]],
+            labels[warning["result_index"]],
+            ", ".join(warning["metrics"]),
+            warning["message"],
+            labels[warning["baseline_index"]],
+            _format_compare_evidence(left, other=right, prompts=prompts),
+            labels[warning["result_index"]],
+            _format_compare_evidence(right, other=left, prompts=prompts),
+        )
+
+
+def _log_series_comparison(report: dict) -> None:
+    for label, column in zip(report["labels"], report["columns"]):
+        logger.info(
+            "  %s: %s %s — %s (%s) — %s — %s — %s\n      %s",
+            label,
+            column["engine"],
+            column["engine_version"],
+            column["model"],
+            column["quantization"],
+            column["chip"],
+            column["benchmark_profile"],
+            column["timestamp"],
+            column["path"],
+        )
+    for path in report["ignored_duplicates"]:
+        logger.info("Duplicate sealed result ignored: %s", path)
+    for label, summary in zip(("A", "B"), report["summaries"]):
+        _log_series_summary(summary, f"Series {label}")
+    logger.info("\nMedian changes: B relative to A (~ = word-count estimate)")
+    for row in report["rows"]:
+        marker = "~" if row["delta_status"] == "estimated" else ""
+        change = (
+            "n/a"
+            if row["delta_percent"] is None
+            else f"{marker}{row['delta_percent']:+.1f}%"
+        )
+        logger.info(
+            "  %s: %s%s",
+            row["label"],
+            change,
+            f" ({row['delta_reason']})" if row["delta_reason"] else "",
+        )
+    _log_series_cautions(report["warnings"], report["labels"])
+    _log_series_limits()
+
+
+def _log_series_cautions(warnings: list, labels: list[str]) -> None:
+    _log_compare_warnings([w for w in warnings if w["kind"] != "incomplete"], labels)
+    # Common missing fields should not produce the same message for every
+    # pair in a long series. Keep concrete differences pair-specific.
+    incomplete: dict[tuple, set[int]] = {}
+    for warning in warnings:
+        if warning["kind"] == "incomplete":
+            key = (warning["field"], warning["metrics"])
+            incomplete.setdefault(key, set()).update(
+                (warning["baseline_index"], warning["result_index"])
+            )
+    for (field, metrics), indices in incomplete.items():
+        logger.warning(
+            "Incomplete comparison information among %s (%s): %s",
+            ", ".join(labels[i] for i in sorted(indices)),
+            ", ".join(metrics),
+            field,
+        )
 
 
 def _parse_concurrency_levels(raw: str | None) -> list[int] | None:
@@ -2018,7 +2145,18 @@ def main():
         "compare",
         help="Compare two or more local result files against the first",
     )
-    compare_parser.add_argument("files", nargs="+", help="Result JSON files to compare")
+    compare_parser.add_argument(
+        "files",
+        nargs="+",
+        help="Result JSON files to compare; first is the reference. In series mode, list all A files followed by all B files.",
+    )
+    compare_parser.add_argument(
+        "--series-a-size",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Compare two series: first N files form reference A, the remaining files form B. Percentages compare series medians; no confidence intervals.",
+    )
     compare_parser.set_defaults(func=cmd_compare)
 
     # --- history ---

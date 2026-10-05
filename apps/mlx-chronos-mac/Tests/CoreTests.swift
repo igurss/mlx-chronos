@@ -79,7 +79,15 @@ struct CoreTests {
                 try expect(leadingDash.contains("--model=--literal-id") && leadingDash.contains("--notes=-not-an-option"), "literal leading dashes became options")
                 try expect(CommandBuilder.timeout(command, values: values) == nil, "benchmark has an arbitrary duration cap")
             }
-            if command.name == "compare" { try expect(args.contains("--"), "positional option terminator missing") }
+            if command.name == "compare" {
+                try expect(args.contains("--"), "positional option terminator missing")
+                if command.options.contains(where: { $0.name == "series_a_size" }) {
+                    let series = try CommandBuilder.arguments(command, values: values.merging(["series_a_size": "1"]) { _, rhs in rhs })
+                    try expect(series.contains("--series-a-size") && series.contains("--"), "series option or positional protection missing")
+                    try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["series_a_size": "0"]) { _, rhs in rhs }) }
+                    try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["series_a_size": "2"]) { _, rhs in rhs }) }
+                }
+            }
             if command.name == "submit" {
                 try expect(CommandBuilder.resultDirectory(command, values: values, workingDirectory: root) == nil,
                     "sharing changed the result browser's folder")
