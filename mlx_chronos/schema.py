@@ -94,6 +94,7 @@ EngineName = Literal[
     "rapid-mlx",
     "vllm-mlx",
     "mlx-lm",
+    "mlx-serve",
     "ollama",
 ]
 

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add `ddalcu/mlx-serve` support for local MLX safetensors chat models.
+  Verify exact model IDs and loaded backends; reject all GGUF paths,
+  including native MLX GGUF, llama.cpp/ds4 and remote providers before
+  loading or inference, and record available context,
+  KV-cache and draft-model metadata. Public results require API-observed
+  backend evidence and a matching model format. Benchmark protocol remains 4.
+
 ## [0.5.1] — 2026-10-04
 
 Patch release correcting measurement integrity, monitoring and submission

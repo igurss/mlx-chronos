@@ -15,6 +15,8 @@ from mlx_chronos.constants import (
     PUBLIC_BASELINE_TRIALS,
     PUBLIC_MIN_COMPLETION_TOKEN_RATIO,
     ENGINE_NAME_OLLAMA,
+    ENGINE_NAME_MLX_SERVE,
+    MLX_SERVE_BACKEND_FORMATS,
     OLLAMA_MLX_MODEL_FORMATS,
     OLLAMA_REJECTED_MODEL_FORMATS,
     SUSTAINED_THROUGHPUT_MAX_TOKENS,
@@ -385,6 +387,21 @@ def validate_publishable_result(
             allow_legacy_missing_ollama_model_format
         ),
     )
+    _validate_public_mlx_serve_backend(result)
+
+
+def _validate_public_mlx_serve_backend(result: BenchmarkResult) -> None:
+    if result.engine.name != ENGINE_NAME_MLX_SERVE:
+        return
+    config = result.engine.serving_config
+    backend = config.observed.get("backend") if config is not None else None
+    expected_format = MLX_SERVE_BACKEND_FORMATS.get(backend) if isinstance(backend, str) else None
+    if expected_format is None or result.model.format != expected_format:
+        raise SubmissionError(
+            "mlx-serve leaderboard submissions require an API-observed native "
+            "MLX safetensors backend (backend=mlx, model.format=safetensors); "
+            "all GGUF paths and llama.cpp/ds4 are excluded"
+        )
 
 
 def load_publishable_result(

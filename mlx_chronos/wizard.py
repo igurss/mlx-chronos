@@ -46,6 +46,7 @@ ENGINE_DESCRIPTIONS = {
     "rapid-mlx": "Rapid-MLX OpenAI-compatible server",
     "vllm-mlx": "vllm-mlx OpenAI-compatible server",
     "mlx-lm": "mlx-lm OpenAI-compatible server",
+    "mlx-serve": "mlx-serve (ddalcu), local MLX backend only",
     "ollama": "Ollama local server",
     "lmstudio": "LM Studio, MLX runtime only",
 }

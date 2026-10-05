@@ -497,6 +497,7 @@ still record `unknown` when detection is unavailable.
 | Rapid-MLX | `rapid-mlx version` |
 | vllm-mlx | installed package metadata, package `__version__`, then `/v1/models` metadata fallback |
 | mlx-lm | installed package metadata for `mlx-lm` |
+| mlx-serve | serving binary's `/api/version`; named `mlx-serve --version` component only when no identified server is available |
 | Ollama | server `/api/version`, then `ollama --version` fallback |
 | LM Studio | version of the runtime that answered the MLX backend probe below |
 
@@ -541,7 +542,13 @@ inaccessible APIs yield no observed value, not a guessed setting.
 The current observed keys are `allocated_context_length` for Ollama and, when
 provided for one unambiguous MLX instance, `context_length`, `eval_batch_size`,
 `parallel`, `flash_attention` and `offload_kv_cache_to_gpu` for LM Studio.
-Other engines currently contribute no API-observed serving settings.
+mlx-serve records `backend` and, when exposed by the verified loaded instance,
+`context_length`, `model_max_tokens`, `batched_decode`, `kv_quant`,
+`drafter_loaded`, `mtp_loaded`, `mtp_available` and `spec_exact`. These are
+captured before measured calls. A loaded draft/MTP component is not proof
+that every request used it; `spec_exact` is the server's reported row-exact
+decoding setting. Missing settings stay unknown. Other engines currently
+contribute no API-observed serving settings.
 
 The field is bounded and part of the integrity-sealed result. Historical results
 without it remain valid. The leaderboard displays it in row details, but does
@@ -572,6 +579,40 @@ leaderboard entries.
 The response's quantization is treated as authoritative and must match the
 quantization requested on the mlx-Chronos command line. Family and parameter
 size are not stored in the result.
+
+### mlx-serve: Local MLX Gate
+
+This integration targets [ddalcu/mlx-serve](https://github.com/ddalcu/mlx-serve),
+not other projects with the same name. Requests use its OpenAI-compatible
+`/v1/chat/completions` endpoint and the common client-side timing protocol.
+Its internal timing extensions are not substituted for Chronos measurements.
+
+Chronos requires one exact, unambiguous ID from `/v1/models`; serving aliases,
+suffix matches and the server's default-model fallback are not used. A row
+must advertise chat capability and belong to the local server. LAN peers and
+configured providers are rejected, because local hardware/RAM/thermal samples
+would not describe the machine performing their inference.
+
+The row must first report `meta.engine: mlx`. Only then, if the instance is
+unloaded, `POST /v1/load-model` loads that exact ID before measured work.
+Chronos does not send `default: true`; automatic default
+selection, such as the first chat model on a headless server, remains the
+server's policy. Chronos then reads the
+ready, loaded row and requires `meta.engine: mlx`, identifying the MLX
+safetensors path. All GGUF paths are outside this integration's scope,
+including the native MLX GGUF reader (`mlx-gguf`) and unresolved `gguf` stubs.
+`llama`, `ds4` and missing backend evidence are also rejected. These checks
+run before loading and again after loading, before any inference. New public
+mlx-serve results require API-observed
+`engine.serving_config.observed.backend: mlx` and `model.format: safetensors`.
+
+Safetensors quantization metadata is authoritative for supported integer bit
+widths. Ambiguous `0-bit`/`16-bit` metadata does not identify fp16 versus bf16,
+so Chronos retains the operator's declaration in those cases. `engine.version` is the
+mlx-serve server release, not the version of an unrelated local MLX package.
+An inaccessible version API on an identified server remains `unknown`.
+Cache clearing/hit-counter verification is not exposed by this integration;
+cached TTFT retains the common priming procedure and its existing warnings.
 
 ### LM Studio: MLX-Only Gate
 

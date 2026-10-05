@@ -154,6 +154,7 @@ notarization; macOS may require explicit first-launch authorization.
 | Rapid-MLX | [raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX) | OpenAI-compatible server |
 | vllm-mlx | [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx) | OpenAI-compatible server |
 | mlx-lm | [ml-explore/mlx-lm](https://github.com/ml-explore/mlx-lm) | Apple MLX |
+| mlx-serve | [ddalcu/mlx-serve](https://github.com/ddalcu/mlx-serve) | Local MLX safetensors only; available from `main` |
 | LM Studio | [lmstudio.ai](https://lmstudio.ai) | Experimental; MLX runtime only — see note below |
 
 > **Note**
@@ -171,6 +172,13 @@ notarization; macOS may require explicit first-launch authorization.
 > `supported_formats` may report `safetensors`; that is accepted only alongside
 > an MLX runtime name. See the [two-stage gate](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md#lm-studio-mlx-only-gate)
 > for API details and the distinction between application and runtime version.
+
+mlx-serve support currently requires the
+[development installation](#development-version-from-main). Use an exact ID
+from `mlx-chronos models --engine mlx-serve`. Chronos confirms the loaded
+`mlx` safetensors backend before measurement. All GGUF paths, including
+upstream's native MLX GGUF reader, llama.cpp/ds4 and remote models are rejected.
+See the [mlx-serve gate](docs/methodology.md#mlx-serve-local-mlx-gate).
 
 ---
 

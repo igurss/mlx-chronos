@@ -407,6 +407,7 @@ def test_wizard_engine_choices_rank_ready_engines_first(monkeypatch):
         "rapid-mlx": FakeEngine(True, False, "http://localhost:10241/v1"),
         "vllm-mlx": FakeEngine(True, True, "http://localhost:8000/v1"),
         "mlx-lm": FakeEngine(False, False, "http://localhost:8080/v1"),
+        "mlx-serve": FakeEngine(False, False, "http://localhost:11234/v1"),
         "ollama": FakeEngine(False, False, "http://localhost:11434/v1"),
         "lmstudio": FakeEngine(False, False, "http://localhost:1234/v1"),
     }
@@ -419,7 +420,7 @@ def test_wizard_engine_choices_rank_ready_engines_first(monkeypatch):
     assert "running at http://localhost:8000/v1" in choices[0][0]
     assert choices[1][1] == "rapid-mlx"
     assert "installed, server not running" in choices[1][0]
-    assert {choice[1] for choice in choices[2:]} == {"omlx", "mlx-lm", "ollama", "lmstudio"}
+    assert {choice[1] for choice in choices[2:]} == {"omlx", "mlx-lm", "mlx-serve", "ollama", "lmstudio"}
 
 
 def test_wizard_ask_model_can_return_from_model_menu():

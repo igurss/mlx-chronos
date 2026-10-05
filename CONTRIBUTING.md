@@ -55,6 +55,8 @@ Supported engines:
 - [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX)
 - [vllm-mlx](https://github.com/waybarrios/vllm-mlx)
 - [mlx-lm](https://github.com/ml-explore/mlx-lm)
+- [mlx-serve](https://github.com/ddalcu/mlx-serve), local MLX safetensors only
+  (currently available from `main`)
 - [LM Studio](https://lmstudio.ai), experimental MLX-runtime-only support
   (see the note below)
 
@@ -91,6 +93,9 @@ vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 8000
 # mlx-lm
 mlx_lm.server --model /path/to/model --port 8080
 
+# mlx-serve (ddalcu) — the app can also start this server
+mlx-serve --model /path/to/model --serve --host 127.0.0.1 --port 11234
+
 # Ollama
 ollama serve
 
@@ -120,6 +125,7 @@ Default OpenAI-compatible endpoints:
 | Rapid-MLX | `http://localhost:8001/v1` |
 | vllm-mlx | `http://localhost:8000/v1` |
 | mlx-lm | `http://localhost:8080/v1` |
+| mlx-serve | `http://localhost:11234/v1` |
 | Ollama | `http://localhost:11434/v1` |
 | LM Studio | `http://localhost:1234/v1` (native checks use `/api/v0`) |
 
@@ -128,6 +134,7 @@ Override ports with environment variables:
 ```bash
 export MLX_CHRONOS_VLLM_MLX_PORT=8003
 export MLX_CHRONOS_MLX_LM_PORT=8002
+export MLX_CHRONOS_MLX_SERVE_PORT=11235
 export MLX_CHRONOS_LMSTUDIO_PORT=1235
 ```
 
@@ -145,6 +152,19 @@ different OpenAI-compatible server on port `8000` is not mislabeled as oMLX. If
 running even when `/v1/models` responds.
 
 ### 3. Validate the Setup
+
+For mlx-serve, select an exact advertised model ID. Only local `mlx`
+safetensors instances are accepted. All GGUF paths (`gguf`, `mlx-gguf`),
+llama.cpp/ds4 and LAN/provider models are rejected before loading or inference.
+An unloaded safetensors model is loaded through the strict API before its
+backend is verified. Chronos does not request a default-model override; any
+automatic selection of a default remains the server's policy:
+
+```bash
+mlx-chronos models --engine mlx-serve
+mlx-chronos validate --engine mlx-serve --model '<exact-id>'
+mlx-chronos run --engine mlx-serve --model '<exact-id>' --quantization 4bit
+```
 
 ```bash
 mlx-chronos engines

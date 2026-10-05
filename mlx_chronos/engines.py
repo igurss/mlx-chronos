@@ -19,6 +19,7 @@ from mlx_chronos.constants import (
     BENCHMARK_REQUEST_TOP_P,
     ENGINE_NAME_LM_STUDIO,
     ENGINE_NAME_MLX_LM,
+    ENGINE_NAME_MLX_SERVE,
     ENGINE_NAME_OLLAMA,
     ENGINE_NAME_OMLX,
     ENGINE_NAME_RAPID_MLX,
@@ -26,6 +27,7 @@ from mlx_chronos.constants import (
     ERROR_RESPONSE_BODY_LIMIT,
     LM_STUDIO_MLX_COMPATIBILITY_TYPE,
     LM_STUDIO_REJECTED_COMPATIBILITY_TYPES,
+    MLX_SERVE_BACKEND_FORMATS,
     OLLAMA_MLX_MODEL_FORMATS,
     OLLAMA_REJECTED_MODEL_FORMATS,
     TOKEN_COUNT_SOURCE_USAGE,
@@ -1438,6 +1440,238 @@ class MLXLMEngine(BaseEngine):
             return "unknown"
 
 
+# ─── mlx-serve (ddalcu) ────────────────────────────────────────────────────────
+
+class MLXServeEngine(BaseEngine):
+    """ddalcu/mlx-serve, restricted to local MLX safetensors chat models.
+
+    The models API identifies the actual loaded backend. All GGUF paths,
+    remote/provider rows and embedded llama/ds4 engines are outside the
+    benchmark scope. Use exact advertised IDs: the chat
+    endpoint can otherwise silently route an unknown name to the default.
+    """
+
+    name = ENGINE_NAME_MLX_SERVE
+    default_port = 11234
+    expected_process_names = ("mlx-serve",)
+    requires_model_backend_validation = True
+
+    def __init__(self, port: int | None = None):
+        super().__init__(port=port)
+        self._validated_entry: dict | None = None
+
+    def _binary_path(self) -> str | None:
+        binary = shutil.which("mlx-serve")
+        if binary:
+            return binary
+        for app_name in ("MLX-Serve", "MLX Core"):
+            for directory in ("/Applications", os.path.expanduser("~/Applications")):
+                path = f"{directory}/{app_name}.app/Contents/MacOS/mlx-serve"
+                if os.path.isfile(path) and os.access(path, os.X_OK):
+                    return path
+        return None
+
+    def _server_json(
+        self, path: str, *, action: str, model: str | None = None,
+        payload: dict | None = None,
+    ) -> dict:
+        url = f"{self.root_url()}{path}"
+        try:
+            if payload is None:
+                response = self._http_get(
+                    url, timeout=5.0, action=action, log_retries=False,
+                )
+            else:
+                response = self._http_post(
+                    url, json_payload=payload, timeout=120.0, action=action,
+                )
+            response.raise_for_status()
+            data = response.json()
+        except httpx.HTTPError as exc:
+            raise RuntimeError(self._request_error_message(
+                action, url, exc, model=model, request_model=model,
+            )) from exc
+        except ValueError as exc:
+            raise RuntimeError(self._invalid_json_message(
+                action, url, model=model, request_model=model,
+            )) from exc
+        if not isinstance(data, dict):
+            raise RuntimeError(self._invalid_response_message(
+                action, url, "response must be a JSON object", model=model,
+            ))
+        return data
+
+    def _model_entries(self) -> list[dict]:
+        payload = self._server_json("/v1/models", action="list models")
+        entries = payload.get("data")
+        if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
+            raise RuntimeError(self._invalid_response_message(
+                "list models", f"{self.base_url()}/models",
+                "response field 'data' must be a list of model objects",
+            ))
+        return entries
+
+    def _server_identity_matches(self) -> bool:
+        try:
+            entries = self._model_entries()
+        except RuntimeError:
+            return False
+        if not entries:
+            return self.get_server_pid() is not None
+        return any(entry.get("owned_by") == "mlx-serve" for entry in entries)
+
+    def is_installed(self) -> bool:
+        return self._binary_path() is not None or self._server_identity_matches()
+
+    def is_server_running(self) -> bool:
+        # Identity already reads and validates /v1/models; avoid fetching the
+        # entire model registry a second time through the base health check.
+        return self._server_identity_matches()
+
+    def list_loaded_model_ids(self) -> list[str] | None:
+        """Read local loaded inventory without loading or probing a model.
+
+        This is inventory evidence, not certification of the compute backend.
+        Missing/malformed loaded state must remain unknown, rather than zero.
+        """
+        entries = [
+            entry for entry in self._model_entries()
+            if entry.get("owned_by") == "mlx-serve"
+            and "lan_peer" not in entry and "provider" not in entry
+            and entry.get("state") != "remote"
+        ]
+        if any(
+            not isinstance(entry.get("id"), str) or not entry["id"].strip()
+            or type(entry.get("loaded")) is not bool
+            or not isinstance(entry.get("state"), str)
+            or (entry["loaded"] and entry["state"] != "ready")
+            for entry in entries
+        ):
+            return None
+        return [entry["id"] for entry in entries if entry["loaded"]]
+
+    def get_version(self) -> str:
+        # The serving binary can differ from the one on PATH. Prefer its API;
+        # an unavailable API on a live server must not acquire a local version.
+        if self._server_identity_matches():
+            try:
+                data = self._server_json("/api/version", action="version lookup")
+            except RuntimeError:
+                return "unknown"
+            version = data.get("version")
+            return version.strip() if isinstance(version, str) and version.strip() else "unknown"
+        binary = self._binary_path()
+        if binary:
+            try:
+                result = subprocess.run(
+                    [binary, "--version"], capture_output=True, text=True, timeout=3,
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        parts = line.split(maxsplit=1)
+                        if len(parts) == 2 and parts[0] == "mlx-serve":
+                            return self._parse_version_output(parts[1]) or "unknown"
+            except (OSError, subprocess.SubprocessError):
+                pass
+        return "unknown"
+
+    def resolve_listed_model_id(
+        self, model: str, model_ids: list[str] | None = None,
+    ) -> str | None:
+        requested = model.strip()
+        model_ids = self.list_model_ids() if model_ids is None else model_ids
+        return requested if requested and model_ids.count(requested) == 1 else None
+
+    def _local_model_entry(self, model: str) -> dict:
+        entries = [entry for entry in self._model_entries() if entry.get("id") == model]
+        reason = None
+        if len(entries) != 1:
+            reason = "choose one exact, unambiguous ID from /v1/models; aliases and default fallback are not accepted"
+        else:
+            entry = entries[0]
+            if (
+                entry.get("owned_by") != "mlx-serve"
+                or "lan_peer" in entry or "provider" in entry
+                or entry.get("state") == "remote"
+            ):
+                reason = "remote/proxied models are outside the local MLX benchmark scope"
+            elif not isinstance(entry.get("capabilities"), list) or "chat" not in entry["capabilities"]:
+                reason = "the selected model does not advertise text chat capability"
+            else:
+                return entry
+        raise RuntimeError(self._invalid_response_message(
+            "verify model backend", f"{self.base_url()}/models", reason, model=model,
+        ))
+
+    def validate_model_backend(self, model: str) -> dict[str, str]:
+        self._validated_entry = None
+        requested = self._request_model_name(model)
+        entry = self._local_model_entry(requested)
+        meta = entry.get("meta")
+        backend = meta.get("engine") if isinstance(meta, dict) else None
+        # Reject every GGUF/embedded path before even requesting a load,
+        # including unresolved GGUF stubs and the native MLX GGUF reader.
+        if not isinstance(backend, str) or backend not in MLX_SERVE_BACKEND_FORMATS:
+            raise RuntimeError(self._invalid_response_message(
+                "verify model backend", f"{self.base_url()}/models",
+                f"unsupported or unverified backend {backend!r}; only MLX safetensors is accepted; GGUF and llama.cpp/ds4 are excluded",
+                model=requested,
+            ))
+        if entry.get("loaded") is not True or entry.get("state") != "ready":
+            loaded = self._server_json(
+                "/v1/load-model", action="load exact model", model=requested,
+                payload={"model": requested},
+            ).get("model")
+            if not isinstance(loaded, dict) or loaded.get("id") != requested:
+                raise RuntimeError(self._invalid_response_message(
+                    "load exact model", f"{self.base_url()}/load-model",
+                    "load response did not confirm the exact requested model", model=requested,
+                ))
+            entry = self._local_model_entry(requested)
+            meta = entry.get("meta")
+            backend = meta.get("engine") if isinstance(meta, dict) else None
+        if (
+            entry.get("loaded") is not True or entry.get("state") != "ready"
+            or not isinstance(backend, str) or backend not in MLX_SERVE_BACKEND_FORMATS
+        ):
+            raise RuntimeError(self._invalid_response_message(
+                "verify model backend", f"{self.base_url()}/models",
+                f"no ready local MLX safetensors instance was confirmed (backend={backend!r}); GGUF and llama.cpp/ds4 are excluded",
+                model=requested,
+            ))
+        self._validated_entry = entry
+        metadata = {"format": MLX_SERVE_BACKEND_FORMATS[backend]}
+        quantization = meta.get("quantization") if isinstance(meta, dict) else None
+        # Zero/16-bit metadata does not distinguish fp16 from bf16. Preserve
+        # the operator's declaration instead of inventing a floating format.
+        if isinstance(quantization, str) and re.fullmatch(r"[234568]-bit", quantization):
+            metadata["quantization"] = quantization
+        return metadata
+
+    def observed_serving_configuration(self, model: str) -> dict[str, object]:
+        # Capture the instance verified before measured requests, even if an
+        # idle eviction or a failed metadata request happens after the run.
+        entry = self._validated_entry
+        if entry is None or entry.get("id") != self._request_model_name(model):
+            return {}
+        meta = entry["meta"]
+        observed: dict[str, object] = {"backend": meta["engine"]}
+        for key in ("context_length", "model_max_tokens"):
+            value = meta.get(key)
+            if type(value) is int and value > 0:
+                observed[key] = value
+        for key in ("drafter_loaded", "mtp_loaded", "mtp_available", "spec_exact"):
+            value = meta.get(key)
+            if type(value) is bool:
+                observed[key] = value
+        if type(entry.get("batched_decode")) is bool:
+            observed["batched_decode"] = entry["batched_decode"]
+        kv_quant = meta.get("kv_quant")
+        if isinstance(kv_quant, str) and kv_quant in {"off", "4", "8"}:
+            observed["kv_quant"] = kv_quant
+        return observed
+
+
 # ─── Ollama ───────────────────────────────────────────────────────────────────
 
 class OllamaEngine(BaseEngine):
@@ -1964,6 +2198,7 @@ ENGINES = {
     ENGINE_NAME_RAPID_MLX: RapidMLXEngine,
     ENGINE_NAME_VLLM_MLX: VLLMMLXEngine,
     ENGINE_NAME_MLX_LM: MLXLMEngine,
+    ENGINE_NAME_MLX_SERVE: MLXServeEngine,
     ENGINE_NAME_OLLAMA: OllamaEngine,
     ENGINE_NAME_LM_STUDIO: LMStudioEngine,
 }
