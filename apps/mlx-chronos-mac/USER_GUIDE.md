@@ -109,6 +109,18 @@ and the runtime answering a probe must confirm MLX. GGUF/llama.cpp is rejected;
 `safetensors` alone does not prove the runtime. See the
 [LM Studio gate](../../docs/methodology.md#lm-studio-mlx-only-gate).
 
+Development builds also support [ddalcu/mlx-serve](https://github.com/ddalcu/mlx-serve)
+when the selected CLI contains its adapter. Engine choices come from that CLI;
+the approved published CLI 0.5.1 does not yet include mlx-serve. Use an explicit
+source checkout or development installation until a compatible CLI release is
+approved. The default port is **11234**. Refresh reports server version, available
+IDs and local loaded-model IDs; it can also read the separate MLX-Serve/MLX Core
+application version when installed. Refresh never loads a model. Loaded inventory
+alone does not certify MLX: validation/tests require an exact ID and confirm
+the ready local `mlx` safetensors backend. All GGUF paths, including native
+MLX GGUF, llama.cpp/ds4 and remote models are rejected before loading or
+inference. See the [mlx-serve gate](../../docs/methodology.md#mlx-serve-local-mlx-gate).
+
 ### Checks and maintenance
 
 | Action / CLI command | Purpose and options |

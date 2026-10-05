@@ -183,16 +183,28 @@ def snapshot():
             running = False
             error = str(exc)
         application_version = None
-        if name in ("lmstudio", "ollama"):
-            app_name = "LM Studio.app" if name == "lmstudio" else "Ollama.app"
+        app_names = {
+            "lmstudio": ("LM Studio.app",), "ollama": ("Ollama.app",),
+            "mlx-serve": ("MLX-Serve.app", "MLX Core.app"),
+        }.get(name, ())
+        if app_names:
+            application_detected = False
             for directory in (Path("/Applications"), Path.home() / "Applications"):
-                try:
-                    with (directory / app_name / "Contents/Info.plist").open("rb") as handle:
-                        application_version = plistlib.load(handle).get("CFBundleShortVersionString")
-                    installed = True
+                for app_name in app_names:
+                    try:
+                        with (directory / app_name / "Contents/Info.plist").open("rb") as handle:
+                            info = plistlib.load(handle)
+                        if not isinstance(info, dict):
+                            continue
+                        value = info.get("CFBundleShortVersionString")
+                        application_version = value if isinstance(value, str) and value.strip() else None
+                        installed = True
+                        application_detected = True
+                        break
+                    except (OSError, ValueError, plistlib.InvalidFileException):
+                        pass
+                if application_detected:
                     break
-                except (OSError, ValueError, plistlib.InvalidFileException):
-                    pass
         try:
             version = engine.get_version() if installed or running else "unknown"
         except Exception as exc:
@@ -222,6 +234,8 @@ def snapshot():
                                     and all(isinstance(i, dict) and isinstance(i.get("id"), str)
                                             for i in e["loaded_instances"]) for e in entries)):
                             loaded = [i["id"] for e in entries for i in e["loaded_instances"]]
+                elif name == "mlx-serve":
+                    loaded = engine.list_loaded_model_ids()
             except Exception:
                 pass
         return {"name": name, "installed": installed, "running": running,

@@ -127,7 +127,7 @@ struct EngineStatus: Decodable, Identifiable, Equatable {
     var id: String { name }
     var displayName: String {
         ["omlx": "oMLX", "rapid-mlx": "Rapid-MLX", "vllm-mlx": "vLLM-MLX",
-         "mlx-lm": "mlx-lm", "ollama": "Ollama", "lmstudio": "LM Studio"][name] ?? name
+         "mlx-lm": "mlx-lm", "mlx-serve": "mlx-serve", "ollama": "Ollama", "lmstudio": "LM Studio"][name] ?? name
     }
     enum CodingKeys: String, CodingKey {
         case name, installed, running, version, endpoint, port, models, error

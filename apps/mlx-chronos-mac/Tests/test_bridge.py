@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import io
 import json
+import plistlib
 from pathlib import Path
 import subprocess
 import sys
@@ -32,6 +33,8 @@ class BridgeTests(unittest.TestCase):
             "--preflight", "--publishable", "--output-dir"})
         self.assertEqual(len(run["options"]), 19)
         self.assertTrue(next(o for o in run["options"] if o["name"] == "model")["required"])
+        from mlx_chronos.engines import ENGINES
+        self.assertEqual(set(next(o for o in run["options"] if o["name"] == "engine")["choices"]), set(ENGINES))
 
     def test_probe_does_not_load_engine_libraries(self):
         with patch("mlx_chronos.engines.get_engine", side_effect=AssertionError("must not instantiate an engine")):
@@ -165,6 +168,40 @@ class BridgeTests(unittest.TestCase):
                 get.return_value.payload = payload
                 result = bridge.snapshot()
                 self.assertIsNone(result["engines"][0]["loaded_models"])
+
+    def test_mlx_serve_snapshot_keeps_app_server_and_loaded_evidence_separate(self):
+        from unittest.mock import Mock
+        engine = Mock()
+        engine.port = 11234
+        engine.is_installed.return_value = False
+        engine.is_server_running.return_value = True
+        engine.get_version.return_value = "26.10.1"
+        engine.base_url.return_value = "http://localhost:11234/v1"
+        engine.list_model_ids.return_value = ["local-model", "unloaded-model"]
+        engine.list_loaded_model_ids.return_value = ["local-model"]
+        engine.validate_model_backend.side_effect = AssertionError("must not load or infer")
+        engine.validate_completion_request.side_effect = AssertionError("must not infer")
+        engine.measure_throughput.side_effect = AssertionError("must not infer")
+        def app_info(path, *args, **kwargs):
+            if str(path) == "/Applications/MLX-Serve.app/Contents/Info.plist":
+                return io.BytesIO(plistlib.dumps({"CFBundleShortVersionString": "26.9.9"}))
+            raise FileNotFoundError(str(path))
+        with patch("mlx_chronos.engines.ENGINES", {"mlx-serve": None}), \
+             patch("mlx_chronos.engines.get_engine", return_value=engine), \
+             patch("mlx_chronos.detect.detect_hardware", return_value={}), \
+             patch.object(Path, "open", app_info), \
+             patch("httpx.post", side_effect=AssertionError("must not load or infer")):
+            result = bridge.snapshot()["engines"][0]
+            self.assertTrue(result["installed"])
+            self.assertEqual(result["application_version"], "26.9.9")
+            self.assertEqual(result["version"], "26.10.1")
+            self.assertEqual(result["loaded_models"], ["local-model"])
+            self.assertEqual(result["models"], ["local-model", "unloaded-model"])
+            engine.list_loaded_model_ids.return_value = None
+            self.assertIsNone(bridge.snapshot()["engines"][0]["loaded_models"])
+        engine.validate_model_backend.assert_not_called()
+        engine.validate_completion_request.assert_not_called()
+        engine.measure_throughput.assert_not_called()
 
     def test_cleanup_only_uses_children_of_this_process(self):
         from unittest.mock import Mock

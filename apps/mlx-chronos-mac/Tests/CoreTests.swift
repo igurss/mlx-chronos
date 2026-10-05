@@ -38,6 +38,8 @@ struct CoreTests {
         let probe = try JSONDecoder().decode(RuntimeProbe.self, from: Data(probeResult.stdout.utf8))
         try checkRuntimePolicy(probe)
         try expect(probe.commands.count == 14, "all commands must decode")
+        try expect(RuntimeDiscovery.environment(ports: ["mlx-serve": "11235"])["MLX_CHRONOS_MLX_SERVE_PORT"] == "11235",
+            "mlx-serve port override was lost")
         try expect(OptionPresentation.compareGuidance.contains("Invalid schemas or seals are rejected")
             && OptionPresentation.compareGuidance.contains("warnings, not a block"),
             "Compare guidance no longer distinguishes invalid files from comparability warnings")
@@ -54,6 +56,13 @@ struct CoreTests {
             }
             let args = try CommandBuilder.arguments(command, values: values)
             try expect(args.first == command.name, "wrong command")
+            if command.options.first(where: { $0.name == "engine" })?.choices.contains("mlx-serve") == true {
+                let serveArgs = try CommandBuilder.arguments(command, values: values.merging(["engine": "mlx-serve"]) { _, rhs in rhs })
+                guard let index = serveArgs.firstIndex(of: "--engine") else {
+                    throw TestFailure.failed("mlx-serve engine argument missing")
+                }
+                try expect(serveArgs[index + 1] == "mlx-serve", "mlx-serve engine argument changed")
+            }
             if command.name == "run" {
                 try expect(CommandBuilder.resultDirectory(command, values: values, workingDirectory: root)?.path == root.standardizedFileURL.path,
                     "default output folder was not resolved")

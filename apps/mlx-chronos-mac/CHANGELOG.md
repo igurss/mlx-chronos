@@ -5,6 +5,14 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+- Support `ddalcu/mlx-serve` through a CLI containing the new adapter. Keep
+  engine choices and all test commands driven by the selected CLI; read local
+  loaded-model inventory without inference and show the separate desktop app
+  version when available. Tests accept only local MLX safetensors; all GGUF
+  paths and llama.cpp/ds4 are rejected through the shared CLI validation.
+  The approved CLI 0.5.1 remains unchanged until a new
+  compatible release is published and approved.
+
 ## [0.2.0] — 2026-10-04
 
 **App 0.2.0, build 4** downloads Python and the CLI independently. The initial
