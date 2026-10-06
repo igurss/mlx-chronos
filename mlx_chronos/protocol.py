@@ -219,12 +219,16 @@ def build_benchmark_protocol(
     name: str = "baseline",
     connection_mode: str = CONNECTION_MODE_PERSISTENT,
     warmup_stream_usage_requested: bool = True,
+    *,
+    throughput_input_tokens: list[int | None] | None = None,
 ) -> dict:
     if connection_mode not in VALID_CONNECTION_MODES:
         raise ValueError(
             f"connection_mode must be one of {sorted(VALID_CONNECTION_MODES)}"
         )
-    return {
+    if throughput_input_tokens is not None and len(throughput_input_tokens) != trials:
+        raise ValueError("throughput_input_tokens must match trials length")
+    protocol: dict = {
         "name": name,
         "version": BASELINE_PROTOCOL_VERSION,
         "warmup": _protocol_phase(
@@ -257,3 +261,9 @@ def build_benchmark_protocol(
             connection_mode=connection_mode,
         ),
     }
+    if throughput_input_tokens is not None and any(
+        count is not None for count in throughput_input_tokens
+    ):
+        protocol["throughput"]["input_tokens"] = list(throughput_input_tokens)
+        protocol["throughput"]["input_token_count_source"] = "engine"
+    return protocol

@@ -262,7 +262,6 @@ def _pair_warnings(
             "request_mode",
             "stream_usage_requested",
             "connection_mode",
-            "input_tokens",
         ):
             # An explicit None means no minimum requested. An omitted optional
             # field remains unknown, even if schema parsing supplies None.
@@ -278,6 +277,32 @@ def _pair_warnings(
                     and field in right_phase.model_fields_set
                 ),
             )
+        left_tokens, right_tokens = left_phase.input_tokens, right_phase.input_tokens
+        if (
+            left_tokens is None or right_tokens is None
+            or (None not in left_tokens and None not in right_tokens)
+        ):
+            check(
+                f"{prefix}.input_tokens", left_tokens, right_tokens, metrics,
+                category="input token count metadata",
+            )
+        else:
+            add(
+                f"{prefix}.input_tokens", left_tokens, right_tokens, metrics,
+                "incomplete", "incomplete information: "
+                f"{prefix}.input_tokens (some prompt counts are unavailable)",
+            )
+            changed_positions = [
+                str(i + 1)
+                for i, (a, b) in enumerate(zip(left_tokens, right_tokens))
+                if a is not None and b is not None and a != b
+            ]
+            if changed_positions:
+                add(
+                    f"{prefix}.input_tokens", left_tokens, right_tokens, metrics,
+                    "difference", "input token counts differ: "
+                    f"{prefix}.input_tokens (prompt positions: {', '.join(changed_positions)})",
+                )
         if left["input_tokens"] is not None and right["input_tokens"] is not None:
             check(
                 f"{prefix}.input_token_count_source",

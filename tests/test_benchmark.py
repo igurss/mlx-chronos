@@ -31,7 +31,7 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.detect import BenchmarkConditionWarning
 from mlx_chronos.integrity import validate_integrity_seal
-from mlx_chronos.measurements import ThroughputMeasurement
+from mlx_chronos.measurements import ThroughputMeasurement, validate_throughput_measurement
 from mlx_chronos.stats import compute_stats
 from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
 
@@ -45,6 +45,7 @@ def throughput_measurement(
     decode_elapsed: float | None = None,
     progress_samples: tuple[dict, ...] = (),
     finish_reason: str | None = None,
+    input_tokens: int | None = None,
 ) -> ThroughputMeasurement:
     return ThroughputMeasurement(
         request_tokens_per_second=tps,
@@ -60,7 +61,14 @@ def throughput_measurement(
         decode_timing_source="client_stream" if decode_tps is not None else "unavailable",
         progress_samples=progress_samples,
         finish_reason=finish_reason,
+        input_tokens=input_tokens,
     )
+
+
+@pytest.mark.parametrize("input_tokens", [0, -1, True, 24.0, "24"])
+def test_invalid_input_counts_cannot_enter_throughput_results(input_tokens):
+    with pytest.raises(RuntimeError, match="invalid input token count"):
+        validate_throughput_measurement(throughput_measurement(input_tokens=input_tokens))
 
 
 def test_benchmark_profile_constants_are_schema_values():
@@ -390,9 +398,10 @@ def test_thermal_state_tracker_summarizes_non_nominal_phases():
     assert summary["non_nominal_observed"] is True
     assert "throughput" in summary["non_nominal_phases"]
 
+@pytest.mark.parametrize("input_counts", [[32, 41], [32, None], [None, None]])
 @patch("mlx_chronos.benchmark.get_engine")
 @patch("mlx_chronos.benchmark.detect_hardware")
-def test_run_benchmark(mock_detect, mock_get_engine):
+def test_run_benchmark(mock_detect, mock_get_engine, input_counts):
     FakeThermalStateTracker.instances = []
     mock_detect.return_value = {
         "chip": "Apple M2",
@@ -408,12 +417,13 @@ def test_run_benchmark(mock_detect, mock_get_engine):
     mock_engine.name = "omlx"
     mock_engine.measure_ttft.side_effect = [0.5, 0.5, 0.2, 0.2, 0.2]
     mock_engine.measure_tokens_per_second.return_value = 20.0
-    mock_engine.measure_throughput.return_value = throughput_measurement(
-        tps=20.0,
-        tokens=100,
-        elapsed=5.0,
-        finish_reason="length",
-    )
+    mock_engine.measure_throughput.side_effect = [
+        throughput_measurement(
+            tps=20.0, tokens=100, elapsed=5.0,
+            finish_reason="length", input_tokens=count,
+        )
+        for count in input_counts
+    ]
     mock_engine.get_version.return_value = "1.0.0"
     mock_engine.observed_serving_configuration.return_value = {
         "allocated_context_length": 8192,
@@ -525,7 +535,17 @@ def test_run_benchmark(mock_detect, mock_get_engine):
         "temperature": BENCHMARK_REQUEST_TEMPERATURE,
         "top_p": BENCHMARK_REQUEST_TOP_P,
     }
-    assert protocol["throughput"]["input_token_count_source"] == "unavailable"
+    available_input = any(count is not None for count in input_counts)
+    assert protocol["throughput"]["input_token_count_source"] == (
+        "engine" if available_input else "unavailable"
+    )
+    assert protocol["throughput"]["input_tokens"] == (
+        input_counts if available_input else None
+    )
+    assert mock_engine.measure_throughput.call_count == 2
+    for phase in ("warmup", "ttft_cold", "ttft_cached"):
+        assert protocol[phase]["input_tokens"] is None
+        assert protocol[phase]["input_token_count_source"] == "unavailable"
 
     ttft_prompts = [call.args[0] for call in mock_engine.measure_ttft.call_args_list]
     assert ttft_prompts == [

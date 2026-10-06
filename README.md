@@ -532,6 +532,9 @@ for the history of labels `1`–`4`, comparison limits, and submission rules.
   value can be reconstructed from raw completion-token counts.
 - Throughput raw trials also retain the server `finish_reason` when supplied,
   so natural EOS can be distinguished from a `max_tokens` limit.
+- All seven adapters retain available `usage.prompt_tokens` from the same
+  throughput requests in `meta.benchmark_protocol.throughput.input_tokens`,
+  aligned with trial order. Missing counts stay unknown; input is never estimated.
 - Throughput prompts intentionally vary to reduce cache artifacts, so run
   standard deviation includes workload variation plus system and engine noise.
 - If an engine cannot provide reliable `usage.completion_tokens`, the run falls

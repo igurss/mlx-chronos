@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Retain server-reported input token counts from existing throughput requests
+  through the common path for all seven engines. Store counts in trial order
+  in protocol metadata, preserve unknown positions without estimates, and show
+  them in Markdown results. Validate integer counts strictly; local comparisons
+  flag incomplete evidence and compare mutually known positions. Older results
+  remain readable; no extra requests, protocol 4 or leaderboard-rule changes.
 - Expand the console-only `--repeat` summary to request/decode throughput,
   cold/cached TTFT and system RAM diagnostics, with available session counts,
   mean, median, inclusive quartiles, unscaled MAD, sample SD and min/max.

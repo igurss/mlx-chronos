@@ -22,6 +22,7 @@ class ThroughputMeasurement:
     decode_timing_source: str = DECODE_TIMING_UNAVAILABLE
     progress_samples: tuple[dict, ...] = ()
     finish_reason: str | None = None
+    input_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,10 @@ def validate_throughput_measurement(
         TOKEN_COUNT_SOURCE_USAGE, TOKEN_COUNT_SOURCE_WORD_FALLBACK,
     }:
         raise RuntimeError("engine returned an invalid throughput measurement: no valid token count source")
+    if value.input_tokens is not None and (
+        type(value.input_tokens) is not int or value.input_tokens <= 0
+    ):
+        raise RuntimeError("engine returned an invalid input token count")
     try:
         expected = round(value.completion_tokens / value.elapsed_seconds, 2)
     except OverflowError as exc:

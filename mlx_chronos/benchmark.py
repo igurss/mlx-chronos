@@ -502,6 +502,7 @@ def run_benchmark(
     decode_timing_sources = []
     token_count_sources = []
     completion_tokens_trials = []
+    input_tokens_trials = []
     finish_reasons_trials = []
     throughput_progress_samples_trials = []
     throughput_prefill_offsets_trials: list[float | None] = []
@@ -689,6 +690,7 @@ def run_benchmark(
                     )
                     token_count_sources.append(token_source)
                     completion_tokens_trials.append(completion_tokens)
+                    input_tokens_trials.append(measurement.input_tokens)
                     finish_reasons_trials.append(measurement.finish_reason)
                     throughput_progress_samples_trials.append(
                         list(measurement.progress_samples)
@@ -977,6 +979,7 @@ def run_benchmark(
                 name=benchmark_profile,
                 connection_mode=connection_mode,
                 warmup_stream_usage_requested=False,
+                throughput_input_tokens=input_tokens_trials,
             ),
             "submitted_by": submitted_by,
             "notes": notes,

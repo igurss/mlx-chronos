@@ -15,6 +15,7 @@ from mlx_chronos.schema import (
     Meta,
     Metrics,
     TrialStats,
+    dump_benchmark_result,
     normalize_model_quantization,
 )
 
@@ -502,6 +503,38 @@ def test_benchmark_protocol_rejects_unlabeled_input_tokens():
 
     with pytest.raises(ValidationError, match="input_token_count_source"):
         BenchmarkResult(**invalid_data)
+
+
+@pytest.mark.parametrize("count", [True, -1, 20.0, "20"])
+def test_benchmark_protocol_rejects_invalid_input_counts(count):
+    data = copy.deepcopy(EXAMPLE_RESULT)
+    phase = data["meta"]["benchmark_protocol"]["throughput"]
+    phase["input_tokens"] = [count] * len(phase["prompts"])
+    phase["input_token_count_source"] = "engine"
+
+    with pytest.raises(ValidationError, match="input_tokens"):
+        BenchmarkResult(**data)
+
+
+def test_benchmark_protocol_preserves_partial_input_counts():
+    data = copy.deepcopy(EXAMPLE_RESULT)
+    phase = data["meta"]["benchmark_protocol"]["throughput"]
+    counts = [20, None, 22, None, 24]
+    phase.update(input_tokens=counts, input_token_count_source="engine")
+
+    result = BenchmarkResult(**data)
+    assert result.meta.benchmark_protocol.throughput.input_tokens == counts
+    assert dump_benchmark_result(result)["meta"]["benchmark_protocol"]["throughput"]["input_tokens"] == counts
+
+
+@pytest.mark.parametrize("counts", [[20], [None] * 5])
+def test_benchmark_protocol_rejects_misaligned_or_all_missing_counts(counts):
+    data = copy.deepcopy(EXAMPLE_RESULT)
+    phase = data["meta"]["benchmark_protocol"]["throughput"]
+    phase.update(input_tokens=counts, input_token_count_source="engine")
+
+    with pytest.raises(ValidationError, match="input_tokens"):
+        BenchmarkResult(**data)
 
 def test_benchmark_protocol_rejects_stream_usage_for_non_streaming_phase():
     invalid_data = EXAMPLE_RESULT.copy()

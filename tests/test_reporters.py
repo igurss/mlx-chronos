@@ -108,6 +108,7 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Protocol label:** baseline 4" in content
     assert "**Throughput token bounds:** max 100, min none" in content
     assert "**HTTP connection mode:** persistent" in content
+    assert "**Throughput input tokens:** unknown (source: unavailable)" in content
     assert "**Total runtime:** 38.1 s" in content
     assert content.count("**Total runtime:**") == 1
     assert "**Request throughput:** 18.44 tokens/s" in content
@@ -131,6 +132,15 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Decode throughput:** 18.7, 18.49, 18.73, 18.69, 18.66" in content
     assert "**Completion tokens:** 100, 100, 100, 100, 100" in content
     assert "**Finish reasons:** length, length, length, length, length" in content
+
+
+def test_markdown_reporter_shows_partial_input_counts_in_trial_order(tmp_path):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["meta"]["benchmark_protocol"]["throughput"].update(
+        input_tokens=[20, None, 22, None, 24], input_token_count_source="engine",
+    )
+    content = MarkdownReporter().save(result, tmp_path).read_text()
+    assert "**Throughput input tokens:** 20, unknown, 22, unknown, 24 (source: engine)" in content
 
 def test_markdown_reporter_handles_missing_ram_fields(tmp_path):
     result = copy.deepcopy(EXAMPLE_RESULT)

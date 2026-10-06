@@ -583,6 +583,15 @@ class BaseEngine(ABC):
             return tokens
         return None
 
+    def _extract_stream_input_tokens(self, chunk: dict) -> int | None:
+        usage = chunk.get("usage")
+        if not isinstance(usage, dict):
+            return None
+        tokens = usage.get("prompt_tokens")
+        # Non-empty benchmark prompts need a positive JSON integer. Ignore
+        # zero placeholders and invalid counts rather than estimating input.
+        return tokens if type(tokens) is int and tokens > 0 else None
+
     def _completion_events(
         self, response, *, timeout: float, context: str,
     ) -> Iterator[dict | None]:
@@ -916,6 +925,7 @@ class BaseEngine(ABC):
             in_word = False
             terminal_at = None
             completion_tokens = None
+            input_tokens = None
             finish_reason = None
             progress_samples: list[dict] = []
             next_progress_sample_at = progress_sample_interval_tokens
@@ -939,6 +949,9 @@ class BaseEngine(ABC):
                         usage_tokens = self._extract_stream_usage_tokens(chunk)
                         if usage_tokens is not None:
                             completion_tokens = usage_tokens
+                        usage_input_tokens = self._extract_stream_input_tokens(chunk)
+                        if usage_input_tokens is not None:
+                            input_tokens = usage_input_tokens
 
                         chunk_finish_reason = self._extract_stream_finish_reason(chunk)
                         if chunk_finish_reason is not None:
@@ -1061,6 +1074,7 @@ class BaseEngine(ABC):
             decode_timing_source=decode_source,
             progress_samples=tuple(finalized_progress_samples),
             finish_reason=finish_reason,
+            input_tokens=input_tokens,
         )
 
     def measure_tokens_per_second(

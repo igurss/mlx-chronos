@@ -68,7 +68,10 @@ def keepalive_server():
 def test_persistent_measurements_reuse_the_tcp_connection(method):
     with keepalive_server() as (server, engine), engine.http_client() as client:
         for _ in range(3):
-            getattr(engine, method)("normal", model="fake", client=client)
+            value = getattr(engine, method)("normal", model="fake", client=client)
+            if method == "measure_throughput":
+                assert value.input_tokens == 50
+                assert value.completion_tokens == 100
         assert server.requests == 3
         assert server.connections == 1
 

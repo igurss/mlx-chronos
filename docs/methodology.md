@@ -94,9 +94,10 @@ Implementation details:
 - Prompt text is recorded in `meta.benchmark_protocol`.
 
 Cold prompts are fixed protocol text, not tokenizer-normalized strings. Input
-length can vary slightly by tokenizer and engine. In the standard `run`
-protocol, input token counts remain `unavailable`. The separate local
-[`context` diagnostic](#local-context-diagnostic) can retain optional
+length can vary by tokenizer and engine. Cold and cached TTFT input token
+counts remain `unavailable`: these requests do not request streamed usage.
+Throughput trials retain available input counts from their own responses.
+The separate local [`context` diagnostic](#local-context-diagnostic) can retain optional
 engine-reported input counts; it does not change the standard protocol.
 
 ### Cached TTFT
@@ -1015,7 +1016,23 @@ Results include `meta.benchmark_protocol`, which records:
 - whether `stream_options.include_usage` was requested;
 - HTTP connection behavior: `persistent` or `per_request`;
 - requested generation parameters such as `temperature` and `top_p`;
-- input token count source, currently `unavailable`.
+- input token counts aligned with phase prompts, and their source.
+
+All seven adapters use the same input-count rule for baseline and sustained
+throughput: retain the last positive JSON integer supplied in
+`usage.prompt_tokens` by the measured request, with source `engine`. No extra
+tokenization call, input estimate or change to request timing is introduced.
+Zero placeholders, booleans, floats, strings and negative counts are ignored.
+Counts describe the server's reported input; they do not establish tokenizer
+identity or equivalent model artifacts.
+
+`meta.benchmark_protocol.throughput.input_tokens` follows trial/prompt order.
+If only some requests supply counts, missing positions are `null`; source
+`engine` describes the known entries. If no counts are available, the whole
+field is `null` and the source is `unavailable`, as in older results. Warmup
+and TTFT counts remain unavailable. Local comparisons flag partial counts as
+incomplete and compare only positions known in both results. This adds
+observational metadata without changing protocol 4 or leaderboard eligibility.
 
 ### What does the protocol number mean?
 

@@ -40,6 +40,7 @@ def normalize_submitted_by(value: str | None) -> str | None:
 
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+StrictNonNegativeInt = Annotated[StrictInt, Field(ge=0)]
 PositiveFloat = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 PositiveInt = Annotated[int, Field(gt=0)]
 PercentFloat = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
@@ -576,9 +577,9 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
         ...,
         description="Generation sampling parameters requested for this phase",
     )
-    input_tokens: Optional[list[NonNegativeInt]] = Field(
+    input_tokens: Optional[list[StrictNonNegativeInt | None]] = Field(
         None,
-        description="Input token counts aligned with prompts when available",
+        description="Input token counts aligned with prompts; null entries are unavailable",
     )
     input_token_count_source: InputTokenCountSource = Field(
         "unavailable",
@@ -606,6 +607,8 @@ class BenchmarkProtocolPhase(ChronosBaseModel):
         else:
             if len(self.input_tokens) != len(self.prompts):
                 raise ValueError("input_tokens must match prompts length")
+            if all(count is None for count in self.input_tokens):
+                raise ValueError("input_tokens must contain at least one available count")
             if self.input_token_count_source == "unavailable":
                 raise ValueError(
                     "input_token_count_source must describe provided input_tokens"

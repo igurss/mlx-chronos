@@ -226,6 +226,15 @@ class MarkdownReporter(BaseReporter):
                     "- **HTTP connection mode:** "
                     f"{self._format_optional(throughput_protocol.get('connection_mode'))}\n"
                 )
+                input_tokens = throughput_protocol.get("input_tokens")
+                input_counts = (
+                    ", ".join(str(self._format_optional(count)) for count in input_tokens)
+                    if input_tokens is not None else "unknown"
+                )
+                md += (
+                    f"- **Throughput input tokens:** {input_counts} "
+                    f"(source: {throughput_protocol.get('input_token_count_source', 'unavailable')})\n"
+                )
         if meta.get("word_fallback_warning"):
             md += (
                 "- **Warning:** throughput token counts used word_fallback; "

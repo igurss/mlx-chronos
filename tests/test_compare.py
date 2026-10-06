@@ -635,6 +635,34 @@ def test_input_token_provenance_is_compared_only_with_available_counts(tmp_path)
 
 
 @pytest.mark.parametrize(
+    "left,right,kinds",
+    [
+        ([20, None, 22, 23, 24], [20, None, 22, 23, 24], {"incomplete"}),
+        ([20, None, 22, 23, 24], [20, 21, 22, 23, 24], {"incomplete"}),
+        ([20, None, 22, 23, 24], [21, None, 22, 23, 24], {"incomplete", "difference"}),
+        ([20, 21, 22, 23, 24], [21, 21, 22, 23, 24], {"difference"}),
+    ],
+)
+def test_input_token_comparison_uses_only_mutually_known_counts(tmp_path, left, right, kinds):
+    def mutate(data, counts):
+        data["meta"]["benchmark_protocol"]["throughput"].update(
+            input_tokens=counts, input_token_count_source="engine",
+        )
+
+    first = write_result(tmp_path / "first.json", mutate=lambda d: mutate(d, left))
+    second = write_result(tmp_path / "second.json", mutate=lambda d: mutate(d, right))
+    warnings = [
+        w for w in compare_results([first, second])["warnings"]
+        if w["field"].endswith("throughput.input_tokens")
+    ]
+    assert {w["kind"] for w in warnings} == kinds
+    assert all(w["baseline_value"] == left and w["value"] == right for w in warnings)
+    assert all("TTFT cold (s)" not in w["metrics"] for w in warnings)
+    if "difference" in kinds and "incomplete" in kinds:
+        assert "prompt positions: 1" in next(w["message"] for w in warnings if w["kind"] == "difference")
+
+
+@pytest.mark.parametrize(
     "field,metrics",
     [
         (

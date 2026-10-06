@@ -227,6 +227,73 @@ def test_measure_throughput_returns_structured_measurement(mock_stream):
     assert measurement.token_count_source == "usage.completion_tokens"
     assert measurement.elapsed_seconds == 1.5
     assert measurement.decode_tokens_per_second == 149.0
+    assert measurement.input_tokens is None
+
+
+@pytest.mark.parametrize("engine_name", VALID_ENGINE_NAMES)
+@pytest.mark.parametrize("prompt_tokens", [24, None, 0, -1, True, 24.0, "24"])
+def test_throughput_input_usage_contract_for_every_engine(engine_name, prompt_tokens):
+    requests = []
+
+    def serve(request):
+        requests.append(request)
+        lines = completion_stream(completion_tokens=100)
+        lines[-2] = "data: " + json.dumps({
+            "choices": [],
+            "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 100},
+        })
+        return httpx.Response(
+            200, text="\n\n".join(lines) + "\n\n",
+            headers={"content-type": "text/event-stream"},
+        )
+
+    engine = ENGINES[engine_name]()
+    with httpx.Client(transport=httpx.MockTransport(serve)) as client, \
+         patch.object(engine, "_request_model_name", return_value="org/test-model"), \
+         patch("mlx_chronos.engines.time") as engine_time:
+        engine_time.monotonic.return_value = 0.0
+        engine_time.perf_counter.side_effect = [0.0, 0.5, 1.5]
+        measurement = engine.measure_throughput("test prompt", client=client)
+
+    assert measurement.input_tokens == (24 if type(prompt_tokens) is int and prompt_tokens > 0 else None)
+    assert measurement.completion_tokens == 100
+    assert measurement.elapsed_seconds == 1.5
+    assert measurement.request_tokens_per_second == 66.67
+    assert measurement.decode_tokens_per_second == 99.0
+    assert len(requests) == 1
+    assert requests[0].url.path == "/v1/chat/completions"
+    payload = json.loads(requests[0].content)
+    assert payload["messages"] == [{"role": "user", "content": "test prompt"}]
+    assert payload["stream_options"] == {"include_usage": True}
+
+
+@patch("httpx.stream")
+def test_throughput_input_usage_keeps_final_valid_count(mock_stream):
+    lines = completion_stream()
+    lines.insert(0, 'data: {"choices": [], "usage": {"prompt_tokens": 0}}')
+    lines.insert(-1, 'data: {"choices": [], "usage": {"prompt_tokens": 12}}')
+    lines.insert(-1, 'data: {"choices": [], "usage": {"prompt_tokens": 24}}')
+    mock_stream.return_value = stream_response(lines)
+
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
+        measurement = OMLXEngine().measure_throughput("test prompt")
+
+    assert measurement.input_tokens == 24
+    mock_stream.assert_called_once()
+
+
+@patch("httpx.stream")
+def test_throughput_input_usage_survives_output_count_fallback(mock_stream):
+    lines = completion_stream(content="one two", completion_tokens=None)
+    lines.insert(-1, 'data: {"choices": [], "usage": {"prompt_tokens": 24}}')
+    mock_stream.return_value = stream_response(lines)
+
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.5]):
+        measurement = OMLXEngine().measure_throughput("test prompt")
+
+    assert measurement.input_tokens == 24
+    assert measurement.token_count_source == "word_fallback"
+    assert measurement.completion_tokens == 2
 
 
 @patch("httpx.stream")
@@ -535,6 +602,7 @@ def test_measure_throughput_retries_without_stream_usage_when_unsupported(mock_s
     assert measurement.token_count_source == "word_fallback"
     assert measurement.decode_tokens_per_second is None
     assert measurement.decode_timing_source == "unavailable"
+    assert measurement.input_tokens is None
 
 
 @patch("httpx.stream")
