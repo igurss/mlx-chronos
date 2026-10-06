@@ -452,6 +452,29 @@ exports are index data, not sealed result files.
 
 ## Configuration
 
+### Reusable run configurations
+
+Available from `main` with the Unreleased CLI changes:
+
+```bash
+# Save resolved settings only; no engine or benchmark is started.
+mlx-chronos run --engine omlx --model ORG/MODEL --repeat 5 --save-config experiment.json
+
+# Start a new experiment with those settings.
+mlx-chronos run --config experiment.json --output-dir results/local/after-update
+
+# Explicit options override saved values.
+mlx-chronos run --config experiment.json --repeat 3
+```
+
+The file stores explicit defaults and a benchmark-protocol reference. Unknown
+settings, invalid types and incompatible formats/protocols are rejected. Result
+folders and contributor attribution stay local to each invocation. Saved
+settings do not certify equal model files or runtime conditions. See
+[configuration details](docs/methodology.md#reusable-run-configurations).
+
+### Server settings
+
 | Setting | Example | What it changes |
 | --- | --- | --- |
 | `MLX_CHRONOS_<ENGINE>_PORT` | `MLX_CHRONOS_OMLX_PORT=8002` | Overrides an engine server port |

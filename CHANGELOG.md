@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add `run --save-config PATH` to save validated, resolved settings without
+  hardware checks, inference or update requests, and `run --config PATH` to
+  reuse them with explicit CLI overrides. Keep defaults fixed in saved files,
+  reject unsupported formats/protocols and invalid or unknown settings, and
+  use the existing run/public-readiness checks for fresh measurements.
+  Configuration format v1 is separate from benchmark protocol 4; no changes
+  to measurement, result seals or leaderboard eligibility.
 - Retain server-reported input token counts from existing throughput requests
   through the common path for all seven engines. Store counts in trial order
   in protocol metadata, preserve unknown positions without estimates, and show

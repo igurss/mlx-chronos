@@ -78,6 +78,9 @@ from mlx_chronos.compare import (
     series_warnings,
 )
 from mlx_chronos.history import list_history
+from mlx_chronos.run_config import (
+    RunSettings, load_run_configuration, save_run_configuration,
+)
 from mlx_chronos.schema import (
     BenchmarkResult,
     ServingConfig,
@@ -715,8 +718,8 @@ def _log_series_limits() -> None:
     )
 
 
-def cmd_run(args):
-    """Run a benchmark session, optionally repeated with --repeat."""
+def resolve_run_settings(args) -> RunSettings:
+    """Validate and resolve settings without hardware checks or inference."""
     profile, trials, max_tokens = _resolve_profile_defaults(args)
     cooldown_seconds = getattr(args, "cooldown_seconds", 0.0)
     min_tokens = getattr(args, "min_tokens", None)
@@ -754,11 +757,14 @@ def cmd_run(args):
         option="--cooldown-seconds",
         positive=False,
     )
+    if args.model is None:
+        print("Error: --model is required unless --config supplies it.", file=sys.stderr)
+        raise SystemExit(2)
     if not args.model.strip():
         print("Error: --model must not be empty.", file=sys.stderr)
         raise SystemExit(2)
     try:
-        declared_serving_config = _parse_engine_options(getattr(args, "engine_opt", None))
+        _parse_engine_options(getattr(args, "engine_opt", None))
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
@@ -771,6 +777,41 @@ def cmd_run(args):
         min_tokens=min_tokens,
         connection_mode=connection_mode,
     )
+    try:
+        normalize_model_reference_url(getattr(args, "model_url", None))
+        settings = RunSettings.model_validate(dict(
+            engine=args.engine, model=args.model, quantization=args.quantization,
+            model_url=getattr(args, "model_url", None),
+            profile=profile, trials=trials, repeat=repeat, max_tokens=max_tokens,
+            min_tokens=min_tokens, cooldown_seconds=cooldown_seconds,
+            ram_sample_interval=args.ram_sample_interval, connection_mode=connection_mode,
+            preflight=getattr(args, "preflight", False),
+            publishable=getattr(args, "publishable", False), format=args.format,
+            engine_opt=getattr(args, "engine_opt", None) or [], notes=args.notes,
+        ))
+    except (ValueError, ValidationError) as exc:
+        print(f"Error: invalid run configuration: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    return settings
+
+
+def cmd_run(args):
+    """Run sessions, or explicitly save their resolved configuration only."""
+    settings = resolve_run_settings(args)
+    if getattr(args, "save_config", None) is not None:
+        try:
+            save_run_configuration(args.save_config, settings)
+        except (OSError, ValueError) as exc:
+            print(f"Error: could not save run configuration: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        logger.info("Run configuration saved to: %s (no benchmark started).", args.save_config)
+        return
+    for key, value in settings.model_dump().items():
+        setattr(args, key, value)
+    profile, trials, max_tokens = settings.profile, settings.trials, settings.max_tokens
+    min_tokens, connection_mode = settings.min_tokens, settings.connection_mode
+    repeat, cooldown_seconds = settings.repeat, settings.cooldown_seconds
+    declared_serving_config = _parse_engine_options(settings.engine_opt)
     if getattr(args, "publishable", False):
         _ensure_publishable_environment()
 
@@ -1777,8 +1818,7 @@ def cmd_wizard(args):
     run_wizard(args, callbacks)
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mlx-chronos",
         description="Benchmark suite for MLX inference engines on Apple Silicon.",
@@ -1791,7 +1831,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # --- run ---
-    run_parser = subparsers.add_parser("run", help="Run a benchmark session")
+    run_parser = subparsers.add_parser("run", help="Run a benchmark session", allow_abbrev=False)
     run_parser.add_argument(
         "--engine",
         choices=list(ENGINES.keys()),
@@ -1800,8 +1840,8 @@ def main():
     )
     run_parser.add_argument(
         "--model",
-        required=True,
-        help="Model name exactly as shown in the engine (e.g. 'Qwen3.5-4B-OptiQ-4bit')",
+        default=None,
+        help="Exact server model ID; required unless --config supplies it",
     )
     run_parser.add_argument(
         "--quantization",
@@ -1944,6 +1984,14 @@ def main():
         type=Path,
         default=None,
         help="Directory for result files (default: ./results/local)",
+    )
+    run_parser.add_argument(
+        "--config", type=Path, default=None,
+        help="Load a saved run configuration; explicit CLI options override its values",
+    )
+    run_parser.add_argument(
+        "--save-config", type=Path, default=None,
+        help="Save resolved run settings as JSON without starting a benchmark",
     )
     run_parser.set_defaults(func=cmd_run)
 
@@ -2256,9 +2304,40 @@ def main():
     )
     wizard_parser.set_defaults(func=cmd_wizard)
 
-    # Parse and dispatch
-    args = parser.parse_args()
-    _maybe_start_update_check(args.command)
+    return parser
+
+
+def parse_cli_args(arguments: list[str] | None = None):
+    parser = build_parser()
+    arguments = sys.argv[1:] if arguments is None else arguments
+    if arguments and arguments[0] == "run" and not any(
+        arg in ("--help", "-h") for arg in arguments[1:]
+    ):
+        config_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+        config_parser.add_argument("--config", type=Path)
+        config_args, _ = config_parser.parse_known_args(arguments[1:])
+        if config_args.config is not None:
+            try:
+                config = load_run_configuration(config_args.config)
+            except (OSError, ValueError) as exc:
+                parser.error(f"could not load run configuration: {exc}")
+            subparsers = next(
+                action for action in parser._actions
+                if isinstance(action, argparse._SubParsersAction)
+            )
+            defaults = config.run.model_dump()
+            # argparse append otherwise adds declarations to the saved list.
+            if any(arg.split("=", 1)[0] == "--engine-opt" for arg in arguments[1:]):
+                defaults["engine_opt"] = None
+            subparsers.choices["run"].set_defaults(**defaults)
+    return parser.parse_args(arguments)
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    args = parse_cli_args()
+    if not getattr(args, "save_config", None):
+        _maybe_start_update_check(args.command)
     args.func(args)
 
 

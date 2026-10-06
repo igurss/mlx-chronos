@@ -17,6 +17,7 @@ they are included in a published release.
 - [Throughput Metrics](#throughput-metrics)
 - [Memory Metrics](#memory-metrics)
 - [Thermal and Power Context](#thermal-and-power-context)
+- [Reusable Run Configurations](#reusable-run-configurations)
 - [Engine Metadata](#engine-metadata)
 - [Concurrency: Local Throughput-Under-Load Diagnostic](#concurrency-local-throughput-under-load-diagnostic)
 - [Local Multi-Engine Matrix](#local-multi-engine-matrix)
@@ -477,6 +478,43 @@ They are never written into sealed result files and do not change leaderboard
 eligibility. Throughput with inconsistent completion-count units has no series
 aggregate; the per-session values remain visible. The same calculation is used
 by the explicit two-series comparison below.
+
+### Reusable Run Configurations
+
+`run --save-config PATH` validates and saves a JSON configuration without
+starting a benchmark, probing hardware/servers or checking for updates.
+`run --config PATH` starts fresh sessions using its settings and the existing
+run/preflight/measurement logic. This feature currently covers `run` only.
+
+Files record the exact engine/model IDs, quantization and model reference,
+profile, resolved trials/repetitions/token bounds, connection mode, cooldown,
+RAM sampling interval, preflight/public-ready flags, output format, notes and
+operator-declared server settings. Default values are resolved when saving;
+later changes to CLI defaults do not silently replace them. Output directory,
+contributor attribution, server ports, installed versions and measured system
+conditions are not configuration settings. Set local paths/ports at execution;
+new results retain actual runtime metadata and integrity seals.
+
+Explicit CLI options override saved values. `--engine-opt` replaces the saved
+declaration list when supplied; declarations still do not configure the server.
+The existing `--preflight` and `--publishable` flags enable those checks. To
+disable a saved true flag, edit the JSON boolean or load it into the app and
+turn off the corresponding checkbox before running. Save an edited copy using
+`--config OLD --save-config NEW`; this also does not start a benchmark.
+
+`schema_version: mlx-chronos-run-config-v1` identifies the **configuration file
+format**, separately from `benchmark_protocol_version: 4`, which identifies
+the measurement method. `chronos_version` records the saving CLI, without
+requiring that same software version on replay. Unknown/missing fields,
+duplicate JSON keys, invalid types/bounds and files over 1 MB are rejected.
+A different protocol or unsupported format blocks loading; review the settings
+and prepare a new configuration for the current method instead of silently
+claiming to repeat the old method. Prompt text comes from the protocol.
+
+Configurations are editable settings, not sealed results and not leaderboard
+submissions. They do not establish matching weights/tokenizers, cache state or
+thermal conditions. Save files only when explicitly requested; no automatic
+configuration archive is created.
 
 ### Cross-Run Cooldown
 
