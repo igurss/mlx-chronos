@@ -15,6 +15,7 @@ BRIDGE = Path(__file__).resolve().parents[1] / "MLXChronos/Resources/chronos_bri
 spec = importlib.util.spec_from_file_location("chronos_bridge", BRIDGE)
 bridge = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bridge)
+HAS_RUN_CONFIG = importlib.util.find_spec("mlx_chronos.run_config") is not None
 
 
 class BridgeTests(unittest.TestCase):
@@ -26,15 +27,59 @@ class BridgeTests(unittest.TestCase):
             "run", "matrix", "energy", "context", "doctor", "engines", "models",
             "concurrency", "compare", "history", "validate", "submit", "upgrade", "wizard"})
         run = next(c for c in commands if c["name"] == "run")
-        self.assertEqual({o["flag"] for o in run["options"]}, {
+        expected_flags = {
             "--engine", "--model", "--quantization", "--model-url", "--trials", "--profile",
             "--notes", "--engine-opt", "--repeat", "--submitted-by", "--ram-sample-interval",
             "--max-tokens", "--min-tokens", "--format", "--cooldown-seconds", "--connection-mode",
-            "--preflight", "--publishable", "--output-dir"})
-        self.assertEqual(len(run["options"]), 19)
-        self.assertTrue(next(o for o in run["options"] if o["name"] == "model")["required"])
+            "--preflight", "--publishable", "--output-dir"}
+        if HAS_RUN_CONFIG:
+            expected_flags |= {"--config", "--save-config"}
+        self.assertEqual({o["flag"] for o in run["options"]}, expected_flags)
+        self.assertEqual(len(run["options"]), len(expected_flags))
+        self.assertEqual(next(o for o in run["options"] if o["name"] == "model")["required"], not HAS_RUN_CONFIG)
         from mlx_chronos.engines import ENGINES
         self.assertEqual(set(next(o for o in run["options"] if o["name"] == "engine")["choices"]), set(ENGINES))
+
+    @unittest.skipUnless(HAS_RUN_CONFIG, "Requires CLI run configuration support")
+    def test_config_save_and_load_use_cli_defaults_without_running_or_probing(self):
+        with tempfile.TemporaryDirectory(prefix="chronos-config-") as root, \
+             patch("mlx_chronos.cli._run_once", side_effect=AssertionError("must not run")), \
+             patch("mlx_chronos.cli.detect_hardware", side_effect=AssertionError("must not probe")):
+            path = str(Path(root) / "settings.json")
+            saved = bridge.run_configuration("config-save", [path, "run", "--model", "org/model", "--profile", "sustained"])
+            loaded = bridge.run_configuration("config-read", [path])
+            self.assertEqual(saved, loaded)
+            self.assertEqual(loaded["values"]["trials"], "1")
+            self.assertEqual(loaded["values"]["max_tokens"], "1000")
+            self.assertEqual(loaded["values"]["preflight"], "false")
+            self.assertNotIn("output_dir", loaded["values"])
+
+    @unittest.skipUnless(HAS_RUN_CONFIG, "Requires CLI run configuration support")
+    def test_config_bridge_subprocesses_return_only_json_and_preserve_literals(self):
+        with tempfile.TemporaryDirectory(prefix="chronos-config-argv-") as root:
+            path = str(Path(root) / "settings with spaces.json")
+            notes = "$(never execute)\n-literal note, precisione è ⚙️"
+            argv = [sys.executable, "-I", "-B", str(BRIDGE)]
+            saved = subprocess.run(argv + ["config-save", path, "run", "--model", "org/model with spaces", "--notes", notes],
+                                   capture_output=True, text=True, timeout=20)
+            self.assertEqual(saved.returncode, 0, saved.stderr)
+            loaded = subprocess.run(argv + ["config-read", path], capture_output=True, text=True, timeout=20)
+            self.assertEqual(loaded.returncode, 0, loaded.stderr)
+            self.assertEqual(json.loads(saved.stdout), json.loads(loaded.stdout))
+            self.assertEqual(json.loads(loaded.stdout)["values"]["notes"], notes)
+
+    @unittest.skipUnless(HAS_RUN_CONFIG, "Requires CLI run configuration support")
+    def test_config_bridge_does_not_accept_unknown_settings_or_other_commands(self):
+        with tempfile.TemporaryDirectory(prefix="chronos-config-invalid-") as root:
+            path = Path(root) / "settings.json"
+            bridge.run_configuration("config-save", [str(path), "run", "--model", "org/model"])
+            data = json.loads(path.read_text())
+            data["run"]["unknown"] = "not supported"
+            path.write_text(json.dumps(data))
+            with self.assertRaises(SystemExit):
+                bridge.run_configuration("config-read", [str(path)])
+            with self.assertRaises(ValueError):
+                bridge.run_configuration("config-save", [str(path), "engines"])
 
     def test_probe_does_not_load_engine_libraries(self):
         with patch("mlx_chronos.engines.get_engine", side_effect=AssertionError("must not instantiate an engine")):

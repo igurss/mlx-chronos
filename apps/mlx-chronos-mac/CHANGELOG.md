@@ -5,6 +5,12 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+- Add **Save configuration…** and **Load configuration…** for standard `run`
+  tests when supported by the selected CLI. Resolve and validate files through
+  that CLI; save/load never start inference or require thermal support. Show
+  loaded values before an explicit test start, preserve local result paths and
+  contributor attribution, and reject incompatible settings/protocols. Older
+  CLIs retain the existing form without these optional actions.
 - Show the selected CLI's expanded repeat summaries and optional two-series
   comparison through the existing command form. Label and validate the number
   of A files; keep **Compare selected** in ordinary per-file mode. The optional

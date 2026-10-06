@@ -54,6 +54,7 @@ struct CoreTests {
                                       "engine_model": "omlx=first\nvllm-mlx=second", "files": "/tmp/-first.json\n/tmp/second file.json",
                                       "file": "/tmp/one result.json"][option.name] ?? "required"
             }
+            if command.name == "run" { values["model"] = "model with spaces $(never execute)" }
             let args = try CommandBuilder.arguments(command, values: values)
             try expect(args.first == command.name, "wrong command")
             if command.options.first(where: { $0.name == "engine" })?.choices.contains("mlx-serve") == true {
@@ -64,6 +65,30 @@ struct CoreTests {
                 try expect(serveArgs[index + 1] == "mlx-serve", "mlx-serve engine argument changed")
             }
             if command.name == "run" {
+                try rejects { _ = try CommandBuilder.arguments(command, values: values.merging(["model": " "]) { _, rhs in rhs }) }
+                if command.supportsRunConfigurations {
+                    let imported = ["model": "loaded/model", "trials": "5", "max_tokens": "100", "repeat": "3", "preflight": "true"]
+                    let filled = try CommandBuilder.applyingConfiguration(imported, to: command,
+                        current: values.merging(["submitted_by": "local-owner", "save_config": "/tmp/unwanted.json"]) { _, rhs in rhs })
+                    try expect(filled["output_dir"] == values["output_dir"] && filled["submitted_by"] == "local-owner", "loading replaced local paths or attribution")
+                    try expect(filled["model"] == "loaded/model" && filled["trials"] == "5", "loaded settings were not applied")
+                    let configured = try CommandBuilder.arguments(command, values: filled)
+                    try expect(configured.contains("--trials") && configured.contains("--preflight"), "resolved settings were delegated back to new defaults")
+                    try expect(!configured.contains("--config") && !configured.contains("--save-config"), "starting a loaded form would save again or reload old settings")
+                    try rejects { _ = try CommandBuilder.applyingConfiguration(["unknown": "value"], to: command, current: values) }
+                    let path = root.appendingPathComponent("saved settings.json")
+                    let saved = await runner.run(executable: python,
+                        arguments: ["-I", "-B", bridge.path, "config-save", path.path, "run", "--model", "org/model", "--profile", "sustained"],
+                        directory: root, environment: RuntimeDiscovery.environment(), timeout: 20)
+                    try expect(saved.succeeded, "saving through bridge failed: \(saved.stderr)")
+                    let loaded = await runner.run(executable: python,
+                        arguments: ["-I", "-B", bridge.path, "config-read", path.path],
+                        directory: root, environment: RuntimeDiscovery.environment(), timeout: 20)
+                    try expect(loaded.succeeded, "loading through bridge failed: \(loaded.stderr)")
+                    let loadedDraft = try JSONDecoder().decode(RunConfigurationDraft.self, from: Data(loaded.stdout.utf8))
+                    try expect(loadedDraft.values["trials"] == "1" && loadedDraft.values["max_tokens"] == "1000", "CLI profile defaults were not resolved")
+                    try FileManager.default.removeItem(at: path)
+                }
                 try expect(CommandBuilder.resultDirectory(command, values: values, workingDirectory: root)?.path == root.standardizedFileURL.path,
                     "default output folder was not resolved")
                 try expect(CommandBuilder.resultDirectory(command, values: ["output_dir": "nested output"], workingDirectory: root)?.path

@@ -75,14 +75,18 @@ def cli_schema():
         captured = parser
         raise Captured()
 
-    argparse.ArgumentParser.parse_args = capture
-    try:
+    builder = getattr(cli, "build_parser", None)
+    if callable(builder):
+        captured = builder()
+    else:
+        argparse.ArgumentParser.parse_args = capture
         try:
-            cli.main()
-        except Captured:
-            pass
-    finally:
-        argparse.ArgumentParser.parse_args = original
+            try:
+                cli.main()
+            except Captured:
+                pass
+        finally:
+            argparse.ArgumentParser.parse_args = original
     if captured is None:
         raise RuntimeError("Could not read the selected CLI's command contract")
     subparser = next(a for a in captured._actions if isinstance(a, argparse._SubParsersAction))
@@ -158,6 +162,24 @@ def probe(source):
     except Exception as exc:
         info["error"] = f"{type(exc).__name__}: {exc}"
     return info
+
+
+def run_configuration(action, arguments):
+    """Use the selected CLI's validation and file format; never dispatch a run."""
+    from mlx_chronos.cli import parse_cli_args, resolve_run_settings
+    from mlx_chronos.run_config import form_values, save_run_configuration
+
+    if not arguments or (action == "config-read" and len(arguments) != 1):
+        raise ValueError("Choose one run configuration JSON file.")
+    path = Path(arguments[0])
+    cli_arguments = ["run", "--config", str(path)] if action == "config-read" else arguments[1:]
+    args = parse_cli_args(cli_arguments)
+    if args.command != "run" or getattr(args, "save_config", None) is not None:
+        raise ValueError("Only standard run settings can be saved or loaded.")
+    settings = resolve_run_settings(args)
+    if action == "config-save":
+        save_run_configuration(path, settings)
+    return {"values": form_values(settings)}
 
 
 def snapshot():
@@ -253,7 +275,7 @@ def main():
     isolate_process_group()
     parser = argparse.ArgumentParser()
     parser.add_argument("--source")
-    parser.add_argument("action", choices=("probe", "snapshot", "cli", "pip", "venv"))
+    parser.add_argument("action", choices=("probe", "snapshot", "cli", "pip", "venv", "config-read", "config-save"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     configure_source(args.source)
@@ -261,6 +283,12 @@ def main():
         print(json.dumps(probe(args.source), allow_nan=False))
     elif args.action == "snapshot":
         print(json.dumps(snapshot(), allow_nan=False))
+    elif args.action in ("config-read", "config-save"):
+        try:
+            print(json.dumps(run_configuration(args.action, args.arguments), allow_nan=False, ensure_ascii=False))
+        except (OSError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
     elif args.action == "cli":
         sys.argv = ["mlx-chronos"] + args.arguments
         try:

@@ -5,11 +5,27 @@ struct CommandForm: View {
     var command: CLICommand
     @State private var advanced = false
     @State private var preview = false
-    private var basicOptions: [CLIOption] { command.name == "upgrade" ? [] : command.options.filter { !OptionPresentation.isAdvanced($0.name, command: command.name) } }
-    private var advancedOptions: [CLIOption] { command.name == "upgrade" ? [] : command.options.filter { OptionPresentation.isAdvanced($0.name, command: command.name) } }
+    private var formOptions: [CLIOption] {
+        command.name == "upgrade" ? [] : command.options.filter {
+            command.name != "run" || !["config", "save_config"].contains($0.name)
+        }
+    }
+    private var basicOptions: [CLIOption] { formOptions.filter { !OptionPresentation.isAdvanced($0.name, command: command.name) } }
+    private var advancedOptions: [CLIOption] { formOptions.filter { OptionPresentation.isAdvanced($0.name, command: command.name) } }
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             ChronosCard(command.name == "upgrade" ? "Update app-managed CLI" : command.title, subtitle: guidance) {
+                if command.supportsRunConfigurations {
+                    ChronosActions {
+                        Button("Load configuration…") { store.loadRunConfiguration(command) }
+                            .disabled(store.isRunning || !store.selectedReady)
+                            .accessibilityIdentifier("command.run.loadConfiguration")
+                        Button("Save configuration…") { store.saveRunConfiguration(command) }
+                            .disabled(store.isRunning || !store.selectedReady)
+                            .accessibilityIdentifier("command.run.saveConfiguration")
+                    }
+                    if let notice = store.runConfigurationNotice { ChronosHelp(notice) }
+                }
                 VStack(alignment: .leading, spacing: 24) {
                     ForEach(basicOptions) { option in OptionField(option: option, command: command) }
                 }
@@ -30,7 +46,10 @@ struct CommandForm: View {
                         .disabled(store.isRunning || !store.selectedReady)
                         .accessibilityIdentifier("command.\(command.name).run")
                     if command.name != "upgrade" {
-                        Button("Restore CLI defaults") { store.drafts[command.name] = nil }
+                        Button("Restore CLI defaults") {
+                            store.drafts[command.name] = nil
+                            if command.name == "run" { store.runConfigurationNotice = nil }
+                        }
                             .disabled(store.isRunning)
                         Toggle("Show command", isOn: $preview).toggleStyle(.checkbox)
                     }
@@ -44,6 +63,9 @@ struct CommandForm: View {
                 }
             }
             if let outcome = store.outcome { CommandOutcomeView(outcome: outcome) }
+        }
+        .onChange(of: store.runConfigurationNotice) { _, notice in
+            if command.supportsRunConfigurations, notice != nil { advanced = true }
         }
     }
     private var actionTitle: String {
@@ -99,7 +121,7 @@ private struct OptionField: View {
                 .accessibilityIdentifier(identifier)
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(OptionPresentation.title(option.name) + (option.required ? " *" : ""))
+                    Text(OptionPresentation.title(option.name) + (option.required || (command.name == "run" && option.name == "model") ? " *" : ""))
                         .font(ChronosStyle.label)
                     Spacer()
                     if ["file", "files", "output_dir"].contains(option.name) {

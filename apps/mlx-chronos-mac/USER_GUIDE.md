@@ -179,6 +179,20 @@ the app.
 
 ### Standard benchmark — `run`
 
+With an app build and selected CLI containing the Unreleased configuration
+support, **Save configuration…** saves the current settings as JSON without
+starting a test. Blank overrides are resolved to the CLI's actual defaults and
+shown in the form. **Load configuration…** validates a saved file through the
+selected CLI and fills the form, including additional settings. Review/edit the
+values, then choose **Start test** to begin. Loading never starts a benchmark.
+
+The current result folder and contributor attribution are preserved. Changing
+the CLI later does not replace numeric values saved in a configuration.
+Unsupported file formats, options or benchmark protocols are reported without
+replacing the current form. Configurations are editable settings, not benchmark
+results or leaderboard submissions. See the [file-format and protocol
+explanation](../../docs/methodology.md#reusable-run-configurations).
+
 Measures cold and cached time to first token (TTFT), request throughput and
 memory. `--profile baseline` defaults to 5 trials and 100 output tokens;
 `sustained` defaults to 1 trial and 1000 tokens, with throughput-progress samples

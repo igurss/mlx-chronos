@@ -31,6 +31,7 @@ final class ChronosStore: ObservableObject {
     @Published private(set) var resultsNotice: String?
     private let resultCache = ResultSummaryCache()
     @Published var drafts: [String: [String: String]] = [:]
+    @Published var runConfigurationNotice: String?
     @Published var operation: String?
     @Published var isStopping = false
     @Published var lastError: String?
@@ -309,6 +310,45 @@ final class ChronosStore: ObservableObject {
         if option == "engine", values[option] != value { values["model"] = "" }
         values[option] = value
         drafts[command.name] = values
+        if command.name == "run" { runConfigurationNotice = nil }
+    }
+
+    func loadRunConfiguration(_ command: CLICommand) {
+        guard !isRunning, command.supportsRunConfigurations,
+              let runtime = selectedRuntime, runtime.probe?.ready == true else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        start("Load run configuration") {
+            let response = try await self.execute(runtime.candidate, action: "config-read",
+                arguments: [url.path], timeout: 30, stream: false)
+            let imported = try JSONDecoder().decode(RunConfigurationDraft.self, from: Data(response.stdout.utf8))
+            let values = try CommandBuilder.applyingConfiguration(imported.values, to: command,
+                current: self.values(for: command))
+            self.drafts[command.name] = values
+            self.runConfigurationNotice = "Loaded \(url.lastPathComponent). Review the settings, then choose Start test."
+        }
+    }
+
+    func saveRunConfiguration(_ command: CLICommand) {
+        guard !isRunning, command.supportsRunConfigurations,
+              let runtime = selectedRuntime, runtime.probe?.ready == true else { return }
+        do {
+            let values = executionValues(for: command)
+            let arguments = try CommandBuilder.arguments(command, values: values)
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "mlx-chronos-run.json"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            start("Save run configuration") {
+                let response = try await self.execute(runtime.candidate, action: "config-save",
+                    arguments: [url.path] + arguments, timeout: 30, stream: false)
+                let imported = try JSONDecoder().decode(RunConfigurationDraft.self, from: Data(response.stdout.utf8))
+                self.drafts[command.name] = try CommandBuilder.applyingConfiguration(imported.values,
+                    to: command, current: values)
+                self.runConfigurationNotice = "Saved \(url.lastPathComponent). No test was started."
+            }
+        } catch { lastError = error.localizedDescription }
     }
     func chooseFiles(option: CLIOption, command: CLICommand) {
         let panel = NSOpenPanel()

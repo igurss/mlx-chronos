@@ -34,6 +34,11 @@ struct CLICommand: Decodable, Identifiable, Equatable {
     var help: String
     var options: [CLIOption]
     var id: String { name }
+    var supportsRunConfigurations: Bool {
+        name == "run" && ["config", "save_config"].allSatisfy { name in
+            options.contains { $0.name == name }
+        }
+    }
     var title: String {
         ["run": "Standard benchmark", "matrix": "Multiple engines", "context": "Context length",
          "concurrency": "Concurrent requests", "energy": "System energy",
@@ -47,6 +52,10 @@ struct CLICommand: Decodable, Identifiable, Equatable {
         if ["run", "matrix", "context", "concurrency", "energy"].contains(name) { return .benchmark }
         return .setup
     }
+}
+
+struct RunConfigurationDraft: Decodable {
+    var values: [String: String]
 }
 
 struct RuntimeCandidate: Codable, Equatable, Identifiable {

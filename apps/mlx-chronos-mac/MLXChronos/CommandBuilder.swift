@@ -57,6 +57,22 @@ enum CommandBuilder {
         return arguments
     }
 
+    static func applyingConfiguration(_ imported: [String: String], to command: CLICommand,
+                                      current: [String: String]) throws -> [String: String] {
+        guard command.supportsRunConfigurations else {
+            throw CommandError.invalid("This CLI does not support saved run configurations.")
+        }
+        let allowed = Set(command.options.map(\.name)).subtracting(["config", "save_config", "output_dir", "submitted_by"])
+        guard Set(imported.keys).isSubset(of: allowed) else {
+            throw CommandError.invalid("The configuration contains unsupported settings.")
+        }
+        var values = current.merging(imported) { _, loaded in loaded }
+        values.removeValue(forKey: "config")
+        values.removeValue(forKey: "save_config")
+        _ = try arguments(command, values: values)
+        return values
+    }
+
     private static func flagged(_ flag: String, _ value: String) -> [String] {
         // argparse otherwise treats a leading '-' in a literal model ID or
         // note as another option. This is argv construction, not shell syntax.
@@ -84,6 +100,9 @@ enum CommandBuilder {
     }
 
     private static func validate(command: CLICommand, values: [String: String]) throws {
+        if command.name == "run", (values["model"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw CommandError.invalid("Enter the exact model ID or load a run configuration.")
+        }
         func numeric(_ key: String) -> Double? {
             let raw = values[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if let number = Double(raw) { return number }
