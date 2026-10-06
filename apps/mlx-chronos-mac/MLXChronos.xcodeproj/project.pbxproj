@@ -27,6 +27,8 @@
 		1A0000000000000000000120 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000220 /* Resources */; };
 		1A0000000000000000000121 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000221 /* AppIcon.icon */; };
 		1A0000000000000000000122 /* RuntimeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000222 /* RuntimeManager.swift */; };
+		1A0000000000000000000123 /* BenchmarkTrialData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000223 /* BenchmarkTrialData.swift */; };
+		1A0000000000000000000124 /* BenchmarkTrialsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000224 /* BenchmarkTrialsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +53,8 @@
 		1A0000000000000000000220 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
 		1A0000000000000000000221 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		1A0000000000000000000222 /* RuntimeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeManager.swift; sourceTree = "<group>"; };
+		1A0000000000000000000223 /* BenchmarkTrialData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkTrialData.swift; sourceTree = "<group>"; };
+		1A0000000000000000000224 /* BenchmarkTrialsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkTrialsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,6 +88,7 @@
 				1A0000000000000000000222 /* RuntimeManager.swift */,
 				1A0000000000000000000213 /* CommandBuilder.swift */,
 				1A0000000000000000000214 /* ResultRepository.swift */,
+				1A0000000000000000000223 /* BenchmarkTrialData.swift */,
 				1A0000000000000000000215 /* CommandLog.swift */,
 				1A0000000000000000000220 /* Resources */,
 				1A0000000000000000000007 /* Views */,
@@ -109,6 +114,7 @@
 				1A0000000000000000000207 /* BenchmarkView.swift */,
 				1A0000000000000000000208 /* LogsView.swift */,
 				1A0000000000000000000209 /* ResultsView.swift */,
+				1A0000000000000000000224 /* BenchmarkTrialsView.swift */,
 				1A0000000000000000000216 /* CommandForm.swift */,
 				1A0000000000000000000217 /* ChronosStyle.swift */,
 			);
@@ -202,6 +208,8 @@
 				1A0000000000000000000122 /* RuntimeManager.swift in Sources */,
 				1A0000000000000000000113 /* CommandBuilder.swift in Sources */,
 				1A0000000000000000000114 /* ResultRepository.swift in Sources */,
+				1A0000000000000000000123 /* BenchmarkTrialData.swift in Sources */,
+				1A0000000000000000000124 /* BenchmarkTrialsView.swift in Sources */,
 				1A0000000000000000000115 /* CommandLog.swift in Sources */,
 				1A0000000000000000000116 /* CommandForm.swift in Sources */,
 				1A0000000000000000000117 /* ChronosStyle.swift in Sources */,

@@ -291,6 +291,22 @@ Folders with more than 5,000 JSON files show the
 newest 5,000 and a notice with the total. Incomplete subfolder scans also show a
 notice.
 
+Select **one standard benchmark** to show **Trial measurements** below the list.
+The two charts display saved cold/cached TTFT in milliseconds and request/decode
+throughput in tok/s, with identical behavior for every engine. Hover or click a
+point to inspect it, or use each chart's **Inspect point** menu with the keyboard.
+**Show recorded means** adds dashed lines from the saved summaries; the app does
+not recalculate statistics. Individual points preserve trial order and can use
+different prompts, so they are not a time series.
+
+Historical files can omit individual measurements: missing series are labelled
+**not recorded**, rather than filled from summary values. Inconsistent counts or
+invalid samples show **Trial charts unavailable**. The viewer supports up to
+1,000 trials per file and uses the existing 10 MB browsing limit. **Refresh**
+reloads selected charts after a file changes. Recorded warnings appear below the
+charts with their limits; for example, similar cold/cached timings alone do not
+prove a cache miss. Select multiple files to use the existing comparison actions.
+
 **Inspect all recorded data** opens the selected JSON. Browsing alone does not
 verify its integrity seal or public eligibility.
 

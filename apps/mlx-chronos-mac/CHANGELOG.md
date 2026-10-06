@@ -5,6 +5,14 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+- Show trial charts below a single selected standard benchmark in **Results**:
+  cold/cached TTFT in milliseconds and request/decode throughput in tok/s.
+  Read the saved samples and optional means locally, preserve trial order,
+  identify missing measurements, and explain recorded warnings without inferring
+  causes. Support point inspection with pointer and keyboard controls, native
+  light/dark styling, and refresh after file changes. The same viewer serves all
+  engines and older files with available samples; browsing does not validate
+  schema/seals or public eligibility. No CLI or protocol change is required.
 - Add **Save configuration…** and **Load configuration…** for standard `run`
   tests when supported by the selected CLI. Resolve and validate files through
   that CLI; save/load never start inference or require thermal support. Show

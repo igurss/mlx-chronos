@@ -184,6 +184,7 @@ struct CoreTests {
         try Data(count: ResultRepository.fileLimit + 1).write(to: tooLarge)
         try rejects { _ = try ResultRepository.read(tooLarge) }
 
+        try checkTrialCharts(root)
         try checkResultListing(root)
 
         let large = await ProcessRunner().run(executable: python,
@@ -205,7 +206,7 @@ struct CoreTests {
         let cancelled = await cancelledRunner.run(executable: python, arguments: ["-V"], directory: root,
             environment: RuntimeDiscovery.environment(), timeout: 10)
         try expect(cancelled.cancelled, "cancel-before-launch was ignored")
-        print("Core checks passed: CLI parity, exact arguments, defaults, validation, removal policy, result parsing, pipes, timeout and cancellation.")
+        print("Core checks passed: CLI parity, exact arguments, defaults, validation, removal policy, result parsing/trial charts, pipes, timeout and cancellation.")
     }
     static func checkRuntimePolicy(_ probe: RuntimeProbe) throws {
         let contract = AppRuntimeContract(apiVersion: 1, minimumAppVersion: "0.2.0",
@@ -248,6 +249,85 @@ struct CoreTests {
         try rejects { try AppRuntimePolicy.validate(unsafe, release: release) }
         try expect(ReleaseVersion("0.5.0rc1") == nil && ReleaseVersion("0.5.10")! > ReleaseVersion("0.5.9")!, "Stable numeric version filtering failed")
         try expect(!ActiveRuntime.safeName("../external") && !ActiveRuntime.safeName("/tmp/external"), "Runtime pointer escaped its private tree")
+    }
+    static func checkTrialCharts(_ root: URL) throws {
+        let fixture = #"{"engine":{"name":"omlx","version":"1.2"},"model":{"name":"model","quantization":"4bit"},"hardware":{"chip":"Apple M4","memory_gb":32},"metrics":{"ttft_cold":{"mean":0.333},"ttft_cached":{"mean":0.111},"request_tokens_per_second":{"mean":77},"tokens_per_second":{"mean":99},"decode_tokens_per_second":{"mean":88}},"trials":{"count":2,"ttft_cold_raw":[0.2,0.4],"ttft_cached_raw":[0.1,0.2],"tokens_per_second_raw":[50,60],"decode_tokens_per_second_raw":[70,80]},"meta":{"benchmark_profile":"baseline","benchmark_protocol":{"name":"baseline","version":"4"},"cached_ttft_warning":true,"word_fallback_warning":false}}"#
+        let original = try JSONSerialization.jsonObject(with: Data(fixture.utf8)) as! [String: Any]
+        func parse(_ changed: [String: Any]) throws -> BenchmarkTrialData {
+            try BenchmarkTrialData.parse(JSONSerialization.data(withJSONObject: changed))
+        }
+        let parsed = try parse(original)
+        try expect(parsed.count == 2 && parsed.series.count == 4 && parsed.series[0].values == [200, 400],
+            "Trial order or seconds-to-milliseconds conversion changed")
+        try expect(parsed.series[0].recordedMean == 333 && parsed.series[2].recordedMean == 77,
+            "The viewer recalculated a saved mean or preferred the legacy throughput alias")
+        try expect(parsed.warnings.map(\.id) == ["cached_ttft_warning"] && parsed.protocolLabel == "baseline 4"
+            && parsed.conditions == "Apple M4 · 32 GB RAM · 4bit · baseline", "Recorded context or warnings were lost")
+        for engine in ["omlx", "vllm-mlx", "mlx-lm", "rapid-mlx", "lmstudio", "ollama", "mlx-serve"] {
+            var changed = original; changed["engine"] = ["name": engine]
+            let engineData = try parse(changed)
+            try expect(engineData.series == parsed.series, "Charts depend on an engine-specific branch")
+        }
+        var legacy = original
+        var legacyTrials = legacy["trials"] as! [String: Any]
+        legacyTrials["decode_tokens_per_second_raw"] = NSNull(); legacy["trials"] = legacyTrials
+        var legacyMetrics = legacy["metrics"] as! [String: Any]
+        legacyMetrics.removeValue(forKey: "request_tokens_per_second"); legacy["metrics"] = legacyMetrics
+        let legacyData = try parse(legacy)
+        try expect(legacyData.series.count == 3 && legacyData.series[2].recordedMean == 99,
+            "Missing decode samples were fabricated or legacy throughput summaries stopped working")
+        legacyMetrics["ttft_cold"] = [:]; legacy["metrics"] = legacyMetrics
+        let noSummary = try parse(legacy)
+        try expect(noSummary.series[0].recordedMean == nil, "A missing summary was reconstructed from trials")
+        for invalid in [true, -1, "0.1", NSNull()] as [Any] {
+            var changed = original; var trials = changed["trials"] as! [String: Any]
+            trials["ttft_cold_raw"] = [invalid, 0.4]; changed["trials"] = trials
+            try rejects { _ = try parse(changed) }
+        }
+        for invalid in [true, 0, 1.5, BenchmarkTrialData.displayTrialLimit + 1] as [Any] {
+            var changed = original; var trials = changed["trials"] as! [String: Any]
+            trials["count"] = invalid; changed["trials"] = trials
+            try rejects { _ = try parse(changed) }
+        }
+        var changed = original; var trials = changed["trials"] as! [String: Any]
+        trials["ttft_cached_raw"] = [0.1]; changed["trials"] = trials
+        try rejects { _ = try parse(changed) }
+        trials["ttft_cached_raw"] = [0.1, 0.2]; trials["ttft_cold_raw"] = [Double.greatestFiniteMagnitude, 0.4]
+        changed["trials"] = trials
+        try rejects { _ = try parse(changed) }
+        changed = original; changed["trials"] = ["count": 2]
+        try rejects { _ = try parse(changed) }
+        changed = original; changed["kind"] = "local_concurrency_diagnostic"
+        try rejects { _ = try parse(changed) }
+        changed = original; changed["meta"] = ["cached_ttft_warning": 1]
+        let noWarnings = try parse(changed)
+        try expect(noWarnings.warnings.isEmpty, "A numeric lookalike became a recorded Boolean warning")
+        changed = original; changed["trials"] = ["count": 1, "ttft_cold_raw": [0.0]]
+        let single = try parse(changed)
+        try expect(single.count == 1 && single.series.count == 1 && single.series[0].values == [0],
+            "A single or zero-valued observation was hidden")
+        changed = original; var badMetrics = changed["metrics"] as! [String: Any]
+        badMetrics["ttft_cold"] = ["mean": true]; changed["metrics"] = badMetrics
+        try rejects { _ = try parse(changed) }
+        let file = root.appendingPathComponent("chart-refresh.json")
+        try Data(fixture.utf8).write(to: file)
+        _ = try BenchmarkTrialData.load(file)
+        changed = original; changed["model"] = ["name": "updated model"]
+        try JSONSerialization.data(withJSONObject: changed).write(to: file)
+        let updated = try BenchmarkTrialData.load(file)
+        try expect(updated.model == "updated model", "Chart loading reused stale data")
+        try FileManager.default.removeItem(at: file)
+        // The public archive exercises the same viewer with real legacy samples.
+        let archive = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("../../../results/submitted").standardizedFileURL
+        let archived = try FileManager.default.contentsOfDirectory(at: archive, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "json" }
+        try expect(!archived.isEmpty, "Public archive fixtures are unavailable")
+        for file in archived {
+            let historical = try BenchmarkTrialData.load(file)
+            try expect(historical.series.allSatisfy { $0.values.count == historical.count },
+                "Historical trial alignment was lost: \(file.lastPathComponent)")
+        }
     }
     static func checkResultListing(_ root: URL) throws {
         let fm = FileManager.default

@@ -9,5 +9,5 @@ cd "$CHRONOS_PROJECT_DIR"
 swiftc -module-cache-path "$CHRONOS_CHECK_DIR/modules" -parse-as-library \
     MLXChronos/Models.swift MLXChronos/CommandBuilder.swift \
     MLXChronos/RuntimeDiscovery.swift MLXChronos/RuntimeManager.swift MLXChronos/ProcessRunner.swift \
-    MLXChronos/ResultRepository.swift Tests/CoreTests.swift -o "$CHRONOS_CHECK_DIR/core-checks"
+    MLXChronos/ResultRepository.swift MLXChronos/BenchmarkTrialData.swift Tests/CoreTests.swift -o "$CHRONOS_CHECK_DIR/core-checks"
 "$CHRONOS_CHECK_DIR/core-checks" "$CHRONOS_PYTHON" "$CHRONOS_PROJECT_DIR/MLXChronos/Resources/chronos_bridge.py"

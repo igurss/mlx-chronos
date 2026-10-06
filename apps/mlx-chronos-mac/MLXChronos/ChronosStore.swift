@@ -28,6 +28,7 @@ final class ChronosStore: ObservableObject {
     @Published var engineStatuses: [EngineStatus] = []
     @Published var macmonAvailable = false
     @Published var results: [ResultSummary] = []
+    @Published private(set) var resultsRevision = UUID()
     @Published private(set) var resultsNotice: String?
     private let resultCache = ResultSummaryCache()
     @Published var drafts: [String: [String: String]] = [:]
@@ -495,6 +496,7 @@ final class ChronosStore: ObservableObject {
                 guard !Task.isCancelled, revision == resultRevision else { return }
                 results = listing.results
                 resultsNotice = listing.notice
+                resultsRevision = revision
             } catch is CancellationError {
                 // A newer refresh owns the displayed list.
             } catch {

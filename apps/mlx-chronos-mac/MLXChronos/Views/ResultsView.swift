@@ -48,6 +48,9 @@ struct ResultsView: View {
                             }.padding(20).allowsHitTesting(false)
                         }
                     }
+                    if selection.count == 1, let result = selectedBenchmarks.first {
+                        BenchmarkTrialsView(file: result.url, revision: store.resultsRevision).id(result.url)
+                    }
                     ChronosActions {
                         Button("Inspect all recorded data") { inspectSelected() }.disabled(selection.count != 1)
                         Button("Compare selected") { useForComparison() }
@@ -82,6 +85,9 @@ struct ResultsView: View {
         .accessibilityIdentifier("results.form")
         .onChange(of: selection) { _, selected in
             if !selected.contains(reference ?? URL(fileURLWithPath: "/")) { reference = nil }
+        }
+        .onChange(of: store.results) { _, results in
+            selection.formIntersection(Set(results.map(\.url)))
         }
         .onChange(of: store.resultsDirectory) { _, _ in
             selection = []; reference = nil; closePreview()
