@@ -107,6 +107,7 @@ from mlx_chronos.constants import (
     DEFAULT_RAM_SAMPLE_INTERVAL,
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     ENGINE_NAME_LM_STUDIO,
+    ENGINE_NAME_MLX_LM,
     MAX_REPEATS,
     MAX_TRIALS,
     PUBLIC_BASELINE_TRIALS,
@@ -357,7 +358,7 @@ def _publishability_fix(error: str) -> str:
     if "model.reference_url" in error:
         return "rerun with --model-url pointing to the model page you used."
     if "known engine version" in error or "engine.version" in error:
-        return "restart or update the engine so mlx-chronos can detect its version."
+        return "check serving-version evidence; the server may not expose it, and a client installation alone cannot verify it."
     if "Low Power Mode" in error or "lowpowermode" in error:
         return "disable Low Power Mode in macOS Battery settings and rerun."
     if "warmup_failures" in error:
@@ -394,30 +395,6 @@ def _log_publishability_summary(result: dict, json_path: Path | None) -> bool:
     if len(errors) > 1:
         logger.info("  More       : %d additional issue(s) may remain", len(errors) - 1)
     return False
-
-
-def _emit_result_warnings(result: dict) -> None:
-    meta = result.get("meta", {})
-    if meta.get("word_fallback_warning"):
-        print(
-            "Warning: throughput used word_fallback token counts. Local tok/s is "
-            "an estimate and will not be accepted for the public leaderboard; "
-            "use an engine/server that returns usage.completion_tokens.",
-            file=sys.stderr,
-        )
-    if meta.get("engine_version_warning"):
-        print(
-            "Warning: engine.version is 'unknown'. Engine versions affect "
-            "comparability; try restarting the engine server or updating the "
-            "engine CLI if detection keeps failing.",
-            file=sys.stderr,
-        )
-    if meta.get("sustained_throttling_warning"):
-        print(
-            "Warning: sustained profile observed a late throughput drop while "
-            "thermal state changed or became non-nominal.",
-            file=sys.stderr,
-        )
 
 
 def _result_warning_labels(result: dict) -> list[str]:
@@ -506,8 +483,6 @@ def _run_model_preflight(
     """Run an opt-in model access probe before the measured benchmark."""
     logger.info("Running preflight model access check...")
     engine = get_engine(engine_name)
-    if not engine.is_installed():
-        raise RuntimeError(f"Engine '{engine_name}' is not installed.")
     if not engine.is_server_running():
         raise RuntimeError(
             f"Engine '{engine_name}' server is not running at {engine.base_url()}."
@@ -631,7 +606,6 @@ def _run_once(
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
-    _emit_result_warnings(result)
     _log_result_summary(result)
     reporters: list[tuple[str, BaseReporter]] = []
     if args.format in ("json", "all"):
@@ -659,7 +633,7 @@ def _log_repeat_summary(results: list[dict]) -> None:
     _log_series_summary(
         summarize_results(parsed), f"Repeat Summary ({len(results)} runs)"
     )
-    _log_series_cautions(
+    _log_compare_warnings(
         series_warnings(parsed), [f"R[{i + 1}]" for i in range(len(parsed))]
     )
     _log_series_limits()
@@ -1093,7 +1067,7 @@ def cmd_engines(args):
     for name in ENGINES:
         engine = get_engine(name)
         installed = engine.is_installed()
-        running = engine.is_server_running() if installed else False
+        running = engine.is_server_running()
         status = "running" if running else ("installed" if installed else "not installed")
         logger.info(f"  {name:<15} {status:<13} {engine.base_url()}")
     logger.info("")
@@ -1141,24 +1115,29 @@ def cmd_doctor(args):
     logger.info("")
     logger.info("Engines:")
     engine_names = [selected_engine] if selected_engine else list(ENGINES)
+    selected_ready_engine = None
     for name in engine_names:
         engine = get_engine(name)
         installed = engine.is_installed()
-        if not installed:
-            status = "fail" if selected_engine else "skip"
-            log_validation_check(status, f"{name} installed", "not installed")
-            if selected_engine:
-                failures += 1
-            continue
-
         running = engine.is_server_running()
-        defer_version = name == ENGINE_NAME_LM_STUDIO and bool(model) and running
+        if not installed:
+            log_validation_check(
+                "warn" if running or selected_engine else "skip",
+                f"{name} local installation", "not detected; server access is checked independently",
+            )
+        if not installed and not running and not selected_engine:
+            continue
+        defer_version = name in {ENGINE_NAME_LM_STUDIO, ENGINE_NAME_MLX_LM} and bool(model) and running
         version = "pending model probe" if defer_version else engine.get_version()
         if running:
             running_engines.append(name)
             selected_engine_ready = selected_engine == name or selected_engine is None
+            if selected_engine == name:
+                selected_ready_engine = engine
         status = "ok" if running else ("fail" if selected_engine else "warn")
         detail = f"{version} at {engine.base_url()}"
+        if not defer_version and engine.version_source == "process_package":
+            detail += " (server installation; indirect version evidence)"
         log_validation_check(status, f"{name} server", detail if running else f"not running at {engine.base_url()}")
         if selected_engine and not running:
             failures += 1
@@ -1167,11 +1146,12 @@ def cmd_doctor(args):
             log_validation_check(
                 "fail" if args.publishable else "warn",
                 "engine version",
-                "known engine version is required for public leaderboard submissions",
+                "known engine version is required for public leaderboard submissions"
+                if args.publishable else "serving version is unavailable; version equivalence cannot be verified",
             )
 
-    if selected_engine and selected_engine_ready:
-        engine = get_engine(selected_engine)
+    if selected_engine and selected_engine_ready and selected_ready_engine is not None:
+        engine = selected_ready_engine
         try:
             model_ids = engine.list_model_ids()
             detail = (
@@ -1222,6 +1202,14 @@ def cmd_doctor(args):
                 try:
                     request_model = engine.validate_completion_request(model)
                     log_validation_check("ok", "completion request", request_model)
+                    if selected_engine == ENGINE_NAME_MLX_LM:
+                        version = engine.get_version()
+                        if version == "unknown" and args.publishable:
+                            failures += 1
+                        log_validation_check(
+                            "ok" if version != "unknown" else ("fail" if args.publishable else "warn"),
+                            "engine version", f"{version} ({engine.version_source})",
+                        )
                 except RuntimeError as exc:
                     failures += 1
                     log_validation_check("fail", "completion request", str(exc))
@@ -1278,9 +1266,6 @@ def cmd_doctor(args):
 def cmd_models(args):
     """List model ids exposed by an engine's OpenAI-compatible /models endpoint."""
     engine = get_engine(args.engine)
-    if not engine.is_installed():
-        print(f"Error: engine '{args.engine}' is not installed.", file=sys.stderr)
-        raise SystemExit(1)
     if not engine.is_server_running():
         print(
             f"Error: engine '{args.engine}' server is not running at {engine.base_url()}.",
@@ -1424,20 +1409,41 @@ def cmd_compare(args):
 
 
 def _log_compare_warnings(warnings: list, labels: list[str]) -> None:
+    limits: dict[tuple, list[str]] = {}
     for warning in warnings:
         left, right = warning["baseline_value"], warning["value"]
         prompts = warning["field"].endswith(".prompts")
-        logger.warning(
+        left_evidence = _format_compare_evidence(left, other=right, prompts=prompts)
+        right_evidence = _format_compare_evidence(right, other=left, prompts=prompts)
+        if warning["kind"] == "incomplete":
+            key = (warning["baseline_index"], warning["result_index"], warning["metrics"])
+            detail = warning["message"].removeprefix("incomplete information: ")
+            if left != right:
+                detail += f" ({labels[key[0]]}={left_evidence}; {labels[key[1]]}={right_evidence})"
+            details = limits.setdefault(key, [])
+            if detail not in details:
+                details.append(detail)
+            continue
+        log = logger.info if warning["field"] == "meta.cached_ttft_warning" else logger.warning
+        log(
             "Comparison caution %s vs %s (%s): %s; %s=%s; %s=%s",
             labels[warning["baseline_index"]],
             labels[warning["result_index"]],
             ", ".join(warning["metrics"]),
             warning["message"],
             labels[warning["baseline_index"]],
-            _format_compare_evidence(left, other=right, prompts=prompts),
+            left_evidence,
             labels[warning["result_index"]],
-            _format_compare_evidence(right, other=left, prompts=prompts),
+            right_evidence,
         )
+    grouped: dict[tuple, list[str]] = {}
+    for (left_index, right_index, metrics), details in limits.items():
+        grouped.setdefault((metrics, tuple(details)), []).append(
+            f"{labels[left_index]} vs {labels[right_index]}"
+        )
+    for (metrics, details), pairs in grouped.items():
+        logger.info("Comparison limits %s (%s): %s",
+                    ", ".join(pairs), ", ".join(metrics), "; ".join(details))
 
 
 def _log_series_comparison(report: dict) -> None:
@@ -1472,28 +1478,8 @@ def _log_series_comparison(report: dict) -> None:
             change,
             f" ({row['delta_reason']})" if row["delta_reason"] else "",
         )
-    _log_series_cautions(report["warnings"], report["labels"])
+    _log_compare_warnings(report["warnings"], report["labels"])
     _log_series_limits()
-
-
-def _log_series_cautions(warnings: list, labels: list[str]) -> None:
-    _log_compare_warnings([w for w in warnings if w["kind"] != "incomplete"], labels)
-    # Common missing fields should not produce the same message for every
-    # pair in a long series. Keep concrete differences pair-specific.
-    incomplete: dict[tuple, set[int]] = {}
-    for warning in warnings:
-        if warning["kind"] == "incomplete":
-            key = (warning["field"], warning["metrics"])
-            incomplete.setdefault(key, set()).update(
-                (warning["baseline_index"], warning["result_index"])
-            )
-    for (field, metrics), indices in incomplete.items():
-        logger.warning(
-            "Incomplete comparison information among %s (%s): %s",
-            ", ".join(labels[i] for i in sorted(indices)),
-            ", ".join(metrics),
-            field,
-        )
 
 
 def _parse_concurrency_levels(raw: str | None) -> list[int] | None:
@@ -1626,26 +1612,24 @@ def cmd_validate(args):
         log_validation_check("fail", "hardware detection", str(exc))
 
     engine = get_engine(args.engine)
-    if engine.is_installed():
-        defer_version = args.engine == ENGINE_NAME_LM_STUDIO and bool(model)
+    log_validation_check(
+        "ok" if engine.is_installed() else "warn",
+        "local engine installation", "server access is checked independently",
+    )
+    if engine.is_server_running():
+        log_validation_check("ok", "server reachable", engine.base_url())
+        defer_version = args.engine in {ENGINE_NAME_LM_STUDIO, ENGINE_NAME_MLX_LM} and bool(model)
         engine_version = "pending model probe" if defer_version else engine.get_version()
-        log_validation_check(
-            "ok",
-            "engine installed",
-            f"{args.engine} ({engine_version})",
-        )
+        detail = f"{args.engine} ({engine_version})"
+        if not defer_version and engine.version_source == "process_package":
+            detail += " (server installation; indirect version evidence)"
+        log_validation_check("ok", "engine version", detail)
         if engine_version == "unknown":
             log_validation_check(
                 "warn",
                 "engine version",
-                "version detection failed; comparisons against other runs are weaker",
+                "serving version is unavailable; version equivalence cannot be verified",
             )
-    else:
-        failures += 1
-        log_validation_check("fail", "engine installed", args.engine)
-
-    if engine.is_server_running():
-        log_validation_check("ok", "server reachable", engine.base_url())
     else:
         failures += 1
         log_validation_check("fail", "server reachable", engine.base_url())
@@ -1703,6 +1687,10 @@ def cmd_validate(args):
             try:
                 request_model = engine.validate_completion_request(model)
                 log_validation_check("ok", "completion request", request_model)
+                if args.engine == ENGINE_NAME_MLX_LM:
+                    version = engine.get_version()
+                    log_validation_check("ok" if version != "unknown" else "warn",
+                                         "engine version", f"{version} ({engine.version_source})")
             except RuntimeError as exc:
                 failures += 1
                 log_validation_check("fail", "completion request", str(exc))
@@ -1740,8 +1728,7 @@ def cmd_submit(args):
         or DEFAULT_SUBMIT_ENDPOINT
     )
     submitter_email = (
-        args.email
-        or os.environ.get(SUBMITTER_EMAIL_ENV)
+        (os.environ.get(SUBMITTER_EMAIL_ENV) if args.email is None else args.email)
         or ANONYMOUS_SUBMITTER_EMAIL
     )
     try:

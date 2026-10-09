@@ -18,6 +18,7 @@ EXAMPLE_RESULT = {
     "engine": {
         "name": "omlx",
         "version": "0.3.9",
+        "version_source": "server_api",
     },
     "model": {
         "name": "Qwen3.5-4B-OptiQ-4bit",
@@ -75,12 +76,13 @@ EXAMPLE_RESULT = {
             "start_state": "nominal",
             "end_state": "nominal",
             "worst_state": "nominal",
-            "samples": 2,
+            "samples": 40,
             "changed_during_run": False,
             "non_nominal_observed": False,
             "non_nominal_phases": [],
             "sampling_errors": 0,
             "max_sample_gap_seconds": 1.0,
+            "sample_span_seconds": 38.0,
         },
         "warmup_failures": 0,
         "system_ram_monitor_errors": 0,
@@ -96,7 +98,7 @@ EXAMPLE_RESULT = {
         },
         "benchmark_protocol": {
             "name": "baseline",
-            "version": "4",
+            "version": "5",
             "warmup": {
                 "prompts": [
                     "Describe one practical reason local inference can be useful on a laptop."
@@ -181,6 +183,6 @@ EXAMPLE_RESULT = {
         "schema": "mlx-chronos-integrity-v1",
         "algorithm": "sha256-canonical-json",
         "signed_payload": "benchmark-result-without-integrity",
-        "digest": "2353f7c780222b8cca1f1a2f6da7153c0f7c2a6c963b7103b96fcf31f60472c0",
+        "digest": "4687a8fc7ec4cecc1bd3daa494c6fd5bbc49c5a6ed6c7c107d551a82a3a1ab95",
     },
 }

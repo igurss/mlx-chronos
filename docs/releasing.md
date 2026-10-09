@@ -81,6 +81,10 @@ on PyPI, then test installation of that version into a fresh environment.
 Record the workflow result and publish the corresponding GitHub release notes.
 Do not move an already published version tag to a different commit.
 
+When retiring a benchmark protocol, update `PUBLIC_PROTOCOL_VERSIONS` only after
+the replacement CLI is publicly installable. Keep archived readers and original
+seals intact; do not reject the currently published producer early.
+
 ## Publishing the independent macOS app
 
 App releases use `app-vX.Y.Z`; they do not trigger CLI publication. Update the

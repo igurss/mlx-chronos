@@ -8,8 +8,11 @@ from mlx_chronos.constants import (
 DEFAULT_THROUGHPUT_MAX_TOKENS = _DEFAULT_THROUGHPUT_MAX_TOKENS
 
 
-BASELINE_PROTOCOL_VERSION = "4"
-ARCHIVED_PROTOCOL_VERSIONS = frozenset({"3", BASELINE_PROTOCOL_VERSION})
+BASELINE_PROTOCOL_VERSION = "5"
+ARCHIVED_PROTOCOL_VERSIONS = frozenset({"3", "4", BASELINE_PROTOCOL_VERSION})
+# Keep the published 0.5.1 producer eligible during the protocol-5 transition.
+# Retire 4 here only when the replacement CLI release is publicly available.
+PUBLIC_PROTOCOL_VERSIONS = frozenset({"4", BASELINE_PROTOCOL_VERSION})
 CONNECTION_MODE_PER_REQUEST = "per_request"
 CONNECTION_MODE_PERSISTENT = "persistent"
 VALID_CONNECTION_MODES = {

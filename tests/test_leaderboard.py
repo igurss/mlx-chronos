@@ -129,3 +129,27 @@ def test_leaderboard_cli_main_generates_requested_output(tmp_path, capsys):
     assert exit_code == 0
     assert output.exists()
     assert "Generated index with 1 results" in capsys.readouterr().out
+
+
+def test_missing_archive_preserves_existing_index(tmp_path):
+    output = tmp_path / 'index.json'
+    output.write_text('existing index')
+    with pytest.raises(ValueError, match='existing directory'):
+        write_results_index(tmp_path / 'missing', output)
+    assert output.read_text() == 'existing index'
+
+
+def test_index_replace_failure_preserves_existing_index(tmp_path, monkeypatch):
+    archive = tmp_path / 'archive'
+    archive.mkdir()
+    output = tmp_path / 'index.json'
+    output.write_text('existing index')
+
+    def fail_replace(*args):
+        raise OSError('simulated filesystem failure')
+
+    monkeypatch.setattr('mlx_chronos.reporters.os.replace', fail_replace)
+    with pytest.raises(OSError, match='filesystem failure'):
+        write_results_index(archive, output)
+    assert output.read_text() == 'existing index'
+    assert not list(tmp_path.glob('*.tmp'))

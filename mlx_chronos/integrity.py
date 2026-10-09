@@ -106,6 +106,9 @@ def validate_integrity_seal(data: Mapping[str, Any]) -> None:
     ):
         raise IntegrityError("result integrity digest must be 64 lowercase hex characters")
 
-    expected_digest = result_digest(data)
+    try:
+        expected_digest = result_digest(data)
+    except (ValueError, TypeError) as exc:
+        raise IntegrityError(f"result content is not canonical JSON: {exc}") from exc
     if digest != expected_digest:
         raise IntegrityError("result integrity digest does not match result content")

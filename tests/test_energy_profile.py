@@ -135,7 +135,8 @@ def test_sampler_fails_when_macmon_is_not_installed():
 def test_profile_uses_separate_idle_and_throughput_windows():
     events = []
     engine = MagicMock()
-    engine.is_installed.return_value = True
+    engine.version_source = 'process_package'
+    engine.is_installed.return_value = False
     engine.is_server_running.return_value = True
     engine.validate_model_backend.return_value = {"format": "mlx", "quantization": "4bit"}
     engine.get_version.return_value = "test"
@@ -164,6 +165,7 @@ def test_profile_uses_separate_idle_and_throughput_windows():
     assert events.count("request") == 4  # one warm-up plus three measured trials
     assert [call.args[0] for call in pause.call_args_list] == [5, 5]
     assert report["pre_throughput_no_request"]["duration_seconds"] == 5
+    assert report['engine']['version_source'] == 'process_package'
     assert report["throughput"]["duration_seconds"] == 6
     assert report["throughput"]["estimated_mean_system_power_watts"] > (
         report["pre_throughput_no_request"]["estimated_mean_system_power_watts"]
@@ -228,3 +230,30 @@ def test_energy_command_fails_without_writing_when_sampler_fails(tmp_path):
             cmd_energy(args)
     assert error.value.code == 1
     assert not list(tmp_path.iterdir())
+
+
+def test_power_reader_rejects_duplicate_and_regressive_source_timestamps():
+    from datetime import datetime, timedelta
+    initial = datetime.fromisoformat(STAMP)
+    stamps = [(initial + timedelta(seconds=offset)).isoformat() for offset in [0, 0, -1, 1]]
+    sampler = MacmonPowerSampler()
+    sampler._process = MagicMock(stdout=io.StringIO('\n'.join(
+        json.dumps({'timestamp': stamp, 'sys_power': 5., 'all_power': 1.}) for stamp in stamps
+    )))
+    sampler._read()
+    assert sampler.invalid_samples == 2
+    assert len(sampler.samples()) == 2
+
+
+def test_power_trace_limit_fails_explicitly_instead_of_truncating():
+    sampler = MacmonPowerSampler()
+    sampler.max_samples = 1
+    sampler._process = MagicMock(stdout=io.StringIO('\n'.join([
+        json.dumps({'timestamp': STAMP, 'sys_power': 5., 'all_power': 1.}),
+        json.dumps({'timestamp': '2026-09-26T07:33:41+00:00', 'sys_power': 5., 'all_power': 1.}),
+    ])))
+    sampler._read()
+    with pytest.raises(RuntimeError, match='sample limit'):
+        sampler.samples()
+    with pytest.raises(RuntimeError, match='sample limit'):
+        sampler.wait_for_sample_after(float('inf'))

@@ -446,7 +446,7 @@ class WizardSession:
                     self._pause()
                     return False
                 if action == "print":
-                    self.console.print(build_run_command(config))
+                    self.console.print(build_run_command(config), markup=False, highlight=False)
                     return True
                 if action == "edit":
                     config = self._edit_run_config(config)
@@ -508,6 +508,7 @@ class WizardSession:
                     ("Quantization / format label", "quantization"),
                     ("Model reference URL", "model_url"),
                     ("Profile", "profile"),
+                    ("Prepare for public leaderboard submission", "publishable"),
                     *[
                         (label, key)
                         for key, label in OPTIONAL_RUN_SETTINGS.items()
@@ -555,6 +556,14 @@ class WizardSession:
             )
         if setting == "profile":
             return replace(config, profile=self._ask_profile(default=config.profile))
+        if setting == "publishable":
+            return replace(
+                config,
+                publishable=self._confirm(
+                    "Prepare this run for public leaderboard submission?",
+                    default=config.publishable,
+                ),
+            )
         if setting == "trials":
             return replace(
                 config,
@@ -658,6 +667,8 @@ class WizardSession:
         raise ValueError(f"unknown wizard setting: {setting}")
 
     def _render_run_summary(self, config: RunWizardConfig) -> None:
+        from rich.text import Text
+
         resolved_trials, resolved_max_tokens = resolved_run_defaults(config)
         table = self.Table(title="Benchmark configuration", show_header=True)
         table.add_column("Setting", style="bold cyan")
@@ -697,21 +708,23 @@ class WizardSession:
             ("Submitted by", _format_optional(config.submitted_by, "anonymous")),
         ]
         for key, value in rows:
-            table.add_row(key, value)
+            table.add_row(key, Text(value))
         self.console.print(table)
         self.console.print(
             self.Panel(
-                build_run_command(config),
+                Text(build_run_command(config)),
                 title="Equivalent command",
                 border_style="green",
             )
         )
 
     def _render_run_errors(self, errors: list[str]) -> None:
+        from rich.text import Text
+
         message = "\n".join(f"- {error}" for error in errors)
         self.console.print(
             self.Panel(
-                message,
+                Text(message),
                 title="Configuration needs attention",
                 border_style="red",
             )
@@ -767,7 +780,7 @@ class WizardSession:
             email = self._ask_optional_text(
                 "Contact email (leave empty to submit anonymously)",
                 None,
-            )
+            ) or ""
         if self._confirm("Customize submit endpoint or timeout?", default=False):
             endpoint = self._ask_optional_text("Submission endpoint URL", None)
             timeout = self._ask_float("Submission timeout in seconds", 30.0, 0.000001)
@@ -813,13 +826,12 @@ class WizardSession:
             rank = 2
             try:
                 engine = get_engine(name)
-                if engine.is_installed():
-                    if engine.is_server_running():
-                        status = f"running at {engine.base_url()}"
-                        rank = 0
-                    else:
-                        status = "installed, server not running"
-                        rank = 1
+                if engine.is_server_running():
+                    status = f"running at {engine.base_url()}"
+                    rank = 0
+                elif engine.is_installed():
+                    status = "installed, server not running"
+                    rank = 1
                 else:
                     status = "not installed"
             except Exception as exc:
@@ -861,9 +873,11 @@ class WizardSession:
             if selected != MANUAL_MODEL_ENTRY:
                 return selected
         else:
+            from rich.markup import escape
+
             detail = f": {error}" if error else ""
             self.console.print(
-                f"[yellow]Could not load models from {engine_name}{detail}.[/yellow]"
+                f"[yellow]Could not load models from {escape(engine_name + detail)}.[/yellow]"
             )
             if allow_back:
                 selected = self._select(
@@ -885,8 +899,6 @@ class WizardSession:
     def _load_model_ids(self, engine_name: str) -> tuple[list[str], str | None]:
         try:
             engine = get_engine(engine_name)
-            if not engine.is_installed():
-                return [], f"engine '{engine_name}' is not installed"
             if not engine.is_server_running():
                 return [], f"server is not running at {engine.base_url()}"
             model_ids = engine.list_model_ids()
@@ -1124,18 +1136,20 @@ class WizardSession:
         return value
 
     def _call_command(self, callback: CommandCallback, args: Namespace) -> bool:
+        from rich.markup import escape
+
         try:
             callback(args)
         except SystemExit as exc:
             code = 0 if exc.code is None else exc.code
             if code != 0:
                 self.console.print(
-                    f"[red]Command failed with exit code {code}.[/red]"
+                    f"[red]Command failed with exit code {escape(str(code))}.[/red]"
                 )
                 return False
             return True
         except Exception as exc:
-            self.console.print(f"[red]Command failed:[/red] {exc}")
+            self.console.print(f"[red]Command failed:[/red] {escape(str(exc))}")
             return False
         return True
 

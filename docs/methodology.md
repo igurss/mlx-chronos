@@ -116,8 +116,8 @@ The field is named `metrics.ttft_cached` in the v0.1 JSON schema. It means
 engines implement identical KV-cache or prefix-cache behavior.
 
 Results set `meta.cached_ttft_warning=true` when cached TTFT is close to cold
-TTFT, because that pattern may indicate that the engine did not reuse a
-prompt/KV cache for that run. For local diagnostics,
+TTFT. This is a timing observation; latency alone cannot confirm a cache miss
+or cache reuse. For local diagnostics,
 `MLX_CHRONOS_CACHED_TTFT_RATIO` can override the warning ratio. This changes
 only the warning threshold, not the measured values.
 
@@ -148,8 +148,8 @@ comparisons are still useful, but should be read as end-to-end user-observed
 latency rather than pure model latency.
 
 Current runs use one persistent `httpx.Client` across warmup, TTFT, and
-throughput requests by default. Internal protocol label `4` consumes and
-validates the complete HTTP body after capturing the first-token or completion
+throughput requests by default. Protocol labels `4` and `5` consume and
+validate the complete HTTP body after capturing the first-token or completion
 timestamp. This allows keep-alive reuse when the engine supports it without
 adding response-drain time to those metrics. Stream errors, malformed JSON and
 EOF without `[DONE]` or a supported terminal `finish_reason` fail the request.
@@ -166,6 +166,11 @@ retain their original labels and appear as separate protocol variants.
 ## Throughput Metrics
 
 ### Request Throughput
+
+Protocol 5 preserves raw clock durations and computes request/decode rates from
+those durations, without a millisecond floor. Standard-run summary statistics
+also retain their precision; presentation may format them for readability.
+Historical values keep their original rounding and protocol labels.
 
 Request throughput is completion tokens divided by full client-observed request
 time. The metric includes HTTP/client overhead, prompt prefill, and decode. It
@@ -429,11 +434,14 @@ New public submissions also require error-free system RAM, engine RSS, and
 continuous Foundation thermal sampling. Sampling failures remain recorded for
 local diagnostics but make a run non-publishable.
 
-Current label `4` results count only known thermal states as valid samples;
+Labels `4` and `5` count only known thermal states as valid samples;
 unavailable readings increment `sampling_errors`. Public eligibility requires
 at least two valid samples and `max_sample_gap_seconds` no larger than
 `max(1.0, 2.5 * sample_interval_seconds)`. Missing coverage fields remain unknown
-in historical files rather than being inferred from the initial state.
+in historical files rather than being inferred from the initial state. Protocol
+`5` additionally stores the first-to-last monotonic `sample_span_seconds`, requires
+that span to cover all measured phases (within the phase timing tolerance), and
+checks that the valid sample count and maximum gap can account for the span.
 
 The continuous thermal monitor samples only the Foundation path during the run.
 mlx-Chronos intentionally does not run `powermetrics` repeatedly during the
@@ -503,13 +511,16 @@ turn off the corresponding checkbox before running. Save an edited copy using
 `--config OLD --save-config NEW`; this also does not start a benchmark.
 
 `schema_version: mlx-chronos-run-config-v1` identifies the **configuration file
-format**, separately from `benchmark_protocol_version: 4`, which identifies
+format**, separately from `benchmark_protocol_version` (currently `5` in
+source and `4` in published CLI `0.5.1`), which identifies
 the measurement method. `chronos_version` records the saving CLI, without
 requiring that same software version on replay. Unknown/missing fields,
 duplicate JSON keys, invalid types/bounds and files over 1 MB are rejected.
-A different protocol or unsupported format blocks loading; review the settings
-and prepare a new configuration for the current method instead of silently
-claiming to repeat the old method. Prompt text comes from the protocol.
+A different saved protocol produces an explicit notice and does not block valid
+settings. Fresh measurements always use and record the current CLI's protocol;
+loading old settings does not reproduce the old method or relabel old results.
+Unsupported file formats and settings remain errors. Prompt text comes from the
+current protocol.
 
 Configurations are editable settings, not sealed results and not leaderboard
 submissions. They do not establish matching weights/tokenizers, cache state or
@@ -543,23 +554,44 @@ state.
 
 ### Version Detection
 
-Engine versions are recorded in `engine.version` when local detection succeeds.
-Public leaderboard submissions require a known engine version; local runs may
-still record `unknown` when detection is unavailable.
+Engine versions are recorded in `engine.version`, with their evidence in
+`engine.version_source`. Public submissions require a known version. Protocol 5
+accepts serving API/runtime evidence or indirect package evidence tied to the
+identified server process. A package found only in the client's environment
+does not meet that requirement. Local runs can record `unknown`.
 
 | Engine | Detection method |
 | --- | --- |
-| oMLX | `omlx --version`, legacy `omlx serve --help`, then `/v1/models` metadata fallback |
-| Rapid-MLX | `rapid-mlx version` |
-| vllm-mlx | installed package metadata, package `__version__`, then `/v1/models` metadata fallback |
-| mlx-lm | installed package metadata for `mlx-lm` |
-| mlx-serve | serving binary's `/api/version`; named `mlx-serve --version` component only when no identified server is available |
-| Ollama | server `/api/version`, then `ollama --version` fallback |
+| oMLX | `/v1/models` version metadata, then native `/openapi.json` `info.version` (populated from `__version__`); otherwise the identified server process installation |
+| Rapid-MLX | `/v1/models` version metadata when exposed; otherwise the identified server process installation |
+| vllm-mlx | `/v1/models` version metadata when exposed; otherwise the identified server process installation |
+| mlx-lm | Version prefix in the server's structured `system_fingerprint`, reused from existing completion/warmup responses; `/v1/models` metadata or the identified server process installation |
+| mlx-serve | Serving binary's `/api/version`; named `mlx-serve --version` component is separate client evidence |
+| Ollama | server `/api/version`; installed CLI version is recorded separately |
 | LM Studio | version of the runtime that answered the MLX backend probe below |
 
 If detection fails, a local result may record `unknown` rather than blocking
 measurement. `meta.engine_version_warning=true` calls out that uncertainty in
 reports. Public validation rejects an unknown engine version.
+
+The process fallback (`process_package`) reads package metadata in an isolated
+virtual environment identified from the unique listener's explicit Python path
+or console-script shebang, and checks that the executable and listener still
+match. It does not execute the server's Python, inspect its environment variables
+or save paths/PIDs in results. Ambiguous launchers, editable installs, duplicate
+distributions, inaccessible processes, and metadata changed after startup remain
+unknown. System/Conda environments and macOS module launches that hide the virtual
+environment path are not inferred from another installation. This identifies
+the associated installation, not the modules already loaded in memory: custom
+import paths or local code changes can differ from its package metadata. Reports,
+comparisons and the app label this evidence as indirect.
+
+Rapid-MLX and vllm-mlx currently hard-code their OpenAPI schema version, so Chronos
+does not use it as a release identifier. See the upstream
+[Rapid-MLX server](https://github.com/raullenchai/Rapid-MLX/blob/main/rapid_mlx/server.py),
+[vllm-mlx server](https://github.com/waybarrios/vllm-mlx/blob/main/vllm_mlx/server.py),
+[oMLX server](https://github.com/jundot/omlx/blob/main/omlx/server.py) and
+[mlx-lm fingerprint](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/server.py).
 
 ### Serving Configuration
 
@@ -609,7 +641,30 @@ contribute no API-observed serving settings.
 The field is bounded and part of the integrity-sealed result. Historical results
 without it remain valid. The leaderboard displays it in row details, but does
 not use it to group models or claim that two settings are equivalent. Settings
-can also change during a run; the observed snapshot is taken after measurement.
+can also change during a run. `observation_phase` and `observed_at` identify the
+capture: mlx-serve uses its verified instance before measurement; Ollama and LM
+Studio are queried after measurement. These snapshots do not prove that settings
+stayed constant between the two boundaries.
+
+### Version and client-environment evidence
+
+`engine.version` prefers the serving API or, for LM Studio, the runtime that
+answered the backend probe. `version_source` distinguishes `server_api` and
+`runtime_probe` from `process_package`, the indirect evidence described above.
+`client_version` is separate: a package or executable in the client's environment
+cannot prove which version is running on another port or in another environment.
+If no version can be established, it stays `unknown`. Protocol 5 requires explicit
+evidence tied to the server; equality with `client_version` does not establish
+that link. Historical `client_cli` and `client_package` values remain readable
+with a warning, but are insufficient for a new protocol-5 submission. Protocol-4
+submission rules remain unchanged during the release transition.
+
+`meta.client_environment` records selected measurement-client dependency versions.
+The existing result integrity seal covers this mapping, so no second hash is
+generated. Early development files with a fingerprint remain readable. The field
+contains no installation paths and makes no network requests. It documents the
+client environment; it
+does not attest the server environment or replace artifact verification.
 
 ### Server Identity Checks
 
@@ -618,7 +673,8 @@ another server on the same port.
 
 oMLX and vllm-mlx both default to port `8000`, so oMLX validation also checks
 the listening process with `lsof` and requires it to match the expected oMLX
-process name. This prevents accidentally labeling a vllm-mlx server as oMLX.
+process name. Rapid-MLX and mlx-lm also require their expected listener process.
+A reachable OpenAI-compatible endpoint alone does not establish engine identity.
 
 If macOS blocks `lsof`, permissions are restricted, or the listener cannot be
 inspected, `mlx-chronos validate` or `mlx-chronos run` may report that the oMLX
@@ -772,7 +828,7 @@ be running. On a low-memory Mac, start with only engines and models the machine
 can keep loaded safely; the command does not start, stop or unload servers.
 
 Before any measured benchmark, matrix checks *every* selected engine for
-installation, server availability, model listing/backend and a small accepted
+identified server availability, model listing/backend and a small accepted
 completion request. A declared quantization mismatch is rejected when the
 engine exposes authoritative quantization metadata; unavailable metadata is
 not treated as proof of a match. Any failed preflight aborts the whole sweep.
@@ -943,6 +999,11 @@ to cached TTFT. Cache-control evidence identifies the relevant cold/cached
 measurements. Failed warmup calls caution subsequent metrics, while the existing
 sustained-throttling warning concerns throughput. Missing or unknown optional
 metadata remains incomplete even on both sides; it never establishes equality.
+The console groups missing evidence into informational comparison limits,
+retaining affected pairs and metrics. Warmup/TTFT input-token counts absent on
+both sides do not produce cautions because standard runs do not collect them;
+available counts and throughput input-usage gaps remain compared. Cached timing
+close to cold timing is an observation, not proof that cache reuse failed.
 An explicitly recorded `requested_min_tokens: null` means no minimum was
 requested, while an omitted field is unknown. Optional parser defaults do not
 turn omitted cache evidence or phase settings into observations.
@@ -952,8 +1013,8 @@ Each percentage is descriptive and does not establish a causal performance gain.
 Even without cautions, these checks **do not certify equivalent conditions**:
 inspect serving settings, runtime conditions and the underlying results as well.
 RAM peak and rise are whole-device diagnostics, not memory attributable to the
-engine. These interpretation changes do not alter saved results, protocol
-revision **4**, integrity seals or public-submission rules.
+engine. These interpretation changes do not alter saved results, the measurement
+protocol, integrity seals or public-submission rules.
 
 ### Comparing Two Series
 
@@ -1070,14 +1131,14 @@ If only some requests supply counts, missing positions are `null`; source
 field is `null` and the source is `unavailable`, as in older results. Warmup
 and TTFT counts remain unavailable. Local comparisons flag partial counts as
 incomplete and compare only positions known in both results. This adds
-observational metadata without changing protocol 4 or leaderboard eligibility.
+observational metadata without making otherwise eligible runs unpublishable.
 
 ### What does the protocol number mean?
 
 **The number identifies a revision of the standard benchmark method and its
 validation rules.** In JSON it is `meta.benchmark_protocol.version`; reports
-may show `baseline 4`, and leaderboard details show `Protocol: 4`. Here,
-`baseline` is the test profile and `4` is the protocol revision. The `sustained`
+may show `baseline 5`, and leaderboard details show `Protocol: 5`. Here,
+`baseline` is the test profile and `5` is the protocol revision. The `sustained`
 profile uses the same revision number.
 
 It is not a performance score, the mlx-Chronos package version, or the macOS
@@ -1093,6 +1154,7 @@ engines, hardware, or test conditions.
 | `2` | Streaming throughput, with the streaming and token-usage request settings recorded explicitly. |
 | `3` | Persistent HTTP client behavior recorded in the protocol. Later refinements under this label added a separate warmup prompt, fixed throughput prompts, and deterministic generation settings. |
 | `4` | Complete, validated consumption of completion streams, plus thermal sampling coverage requirements for public submissions. |
+| `5` | Unrounded raw clock durations and rates, thermal coverage across measured phases, explicit version provenance, strict progress chronology and bounded stream parsing. |
 
 With `4`, the client captures the first-token or completion timestamp and then
 finishes reading and validating the response. The extra response-drain time is
@@ -1104,10 +1166,22 @@ bodies unread, preventing connection reuse.
 
 **CLI `0.5.1` uses `4`; release `0.5.0` uses `3`.** Revision `4` is included in
 [release 0.5.1](../CHANGELOG.md#051--2026-10-04), available through the normal
-PyPI installation. Current validation requires `4` for new public submissions.
-Archived `3` results remain readable with their
+PyPI installation. The unreleased source on `main` produces `5`. During the
+transition, public submissions accept both `4` and `5`, each with its own rules;
+protocol `3` is archive-only. Acceptance of `4` will be retired only after the
+replacement CLI is publicly available. Archived `3` and `4` remain readable with their
 original data and seals; the leaderboard keeps protocol variants separate,
 and local comparison warns about differing protocol metadata.
+
+Older producers could record an intermediate progress timestamp after the final
+timestamp. Such historical files remain readable without altering their seal.
+Reports omit those progress curves from trend interpretation and comparisons
+warn against inferring throttling from them. The leaderboard and app label a
+stored sustained warning as unverified rather than reporting a confirmed late
+slowdown. The derived index records `progress_chronology_warning` and, when the
+original warning was set, `sustained_warning_unverified`; its usable
+`sustained_throttling_warning` is false. The raw JSON and final trial metrics
+remain intact. Protocol `5` rejects inconsistent progress chronology.
 
 To produce a result under a newer protocol, install a CLI that implements it
 and run the benchmark again. **Never change the number in an existing JSON.**

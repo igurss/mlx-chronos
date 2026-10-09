@@ -18,7 +18,7 @@ from pathlib import Path
 
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware
-from mlx_chronos.engines import get_engine
+from mlx_chronos.engines import get_engine, version_evidence
 from mlx_chronos.matrix import sample_matrix_conditions
 from mlx_chronos.measurements import (
     INPUT_TOKEN_COUNT_ENGINE,
@@ -27,7 +27,7 @@ from mlx_chronos.measurements import (
 )
 from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.protocol import CONNECTION_MODE_PERSISTENT, VALID_CONNECTION_MODES
-from mlx_chronos.reporters import _write_text_atomic
+from mlx_chronos.reporters import _write_text_atomic, _version_evidence_text
 from mlx_chronos.schema import normalize_model_quantization
 from mlx_chronos.stats import compute_stats
 
@@ -159,8 +159,6 @@ def run_context_profile(
         model_quantization = normalize_model_quantization(model_quantization)
 
     engine = get_engine(engine_name)
-    if not engine.is_installed():
-        raise RuntimeError(f"Engine '{engine_name}' is not installed")
     if not engine.is_server_running():
         raise RuntimeError(f"Engine '{engine_name}' server is not running")
     backend = engine.validate_model_backend(model_name)
@@ -235,7 +233,7 @@ def run_context_profile(
         "chronos_version": VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "hardware": detect_hardware(),
-        "engine": {"name": engine_name, "version": engine.get_version()},
+        "engine": {"name": engine_name, **version_evidence(engine)},
         "model": {
             "name": model_name, "quantization": model_quantization,
             "reference_url": model_reference_url, "format": backend.get("format"),
@@ -277,6 +275,8 @@ def save_context_reports(report: dict, output_dir: Path, format_name: str = "all
         lines = [
             "# mlx-Chronos context diagnostic", "",
             f"- Engine: {_markdown_text(report['engine']['name'])}",
+            f"- Engine version: {_markdown_text(report['engine'].get('version', 'unknown'))}",
+            f"- Version evidence: {_version_evidence_text(report['engine'])}",
             f"- Model: {_markdown_text(report['model']['name'])}",
             f"- Hardware: {_markdown_text(report['hardware']['chip'])}",
             "- Scope: local diagnostic; not a leaderboard result", "",

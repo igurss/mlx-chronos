@@ -186,6 +186,15 @@ class ServingConfig(ChronosBaseModel):
 
     observed: dict[str, ServingConfigValue] = Field(default_factory=dict)
     declared: dict[str, ServingConfigValue] = Field(default_factory=dict)
+    observation_phase: Optional[Literal["before_measurement", "after_measurement"]] = None
+    observed_at: Optional[datetime] = None
+
+    @field_validator("observed_at")
+    @classmethod
+    def aware_observation(cls, value):
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("observed_at must include a timezone")
+        return value
 
     @model_validator(mode="after")
     def validate_entries(self):
@@ -210,6 +219,8 @@ class ServingConfig(ChronosBaseModel):
 class Engine(ChronosBaseModel):
     name: EngineName = Field(..., description="Engine name")
     version: str = Field(..., min_length=1, description="Engine version string")
+    client_version: Optional[str] = Field(None, min_length=1)
+    version_source: Optional[Literal["server_api", "runtime_probe", "process_package", "client_cli", "client_package", "unavailable"]] = None
     serving_config: Optional[ServingConfig] = Field(
         None,
         description=(
@@ -484,7 +495,7 @@ class Trials(ChronosBaseModel):
             "decode throughput trial"
         ),
     )
-    completion_tokens_raw: list[NonNegativeInt] = Field(
+    completion_tokens_raw: list[StrictNonNegativeInt] = Field(
         ...,
         description=(
             "Generated completion token counts per throughput trial when available. "
@@ -686,6 +697,10 @@ class ThermalMonitor(ChronosBaseModel):
         None, description="Largest monotonic interval between thermal samples; absent in legacy results",
     )
 
+    sample_span_seconds: Optional[NonNegativeFloat] = Field(
+        None, description="Monotonic span from first to last thermal sample; absent in legacy results",
+    )
+
     @model_validator(mode="after")
     def validate_thermal_monitor(self):
         if not self.changed_during_run and (
@@ -751,7 +766,25 @@ class CacheValidation(ChronosBaseModel):
         return self
 
 
+class ClientEnvironment(ChronosBaseModel):
+    dependencies: dict[str, str] = Field(max_length=100)
+    # Read early development files; new producers rely on the result seal.
+    sha256: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def verify_fingerprint(self):
+        if self.sha256 is None:
+            return self
+        import hashlib
+        import json
+        encoded = json.dumps(self.dependencies, sort_keys=True, separators=(",", ":")).encode()
+        if hashlib.sha256(encoded).hexdigest() != self.sha256:
+            raise ValueError("client dependency fingerprint does not match versions")
+        return self
+
+
 class Meta(ChronosBaseModel):
+    client_environment: Optional[ClientEnvironment] = None
     chronos_version: str = Field(..., min_length=1, description="mlx-chronos version used")
     timestamp: datetime = Field(..., description="Timestamp of the benchmark run")
     benchmark_profile: BenchmarkProfile = Field(
@@ -981,6 +1014,10 @@ class BenchmarkResult(ChronosBaseModel):
             final_sample = samples[-1]
             expected_tokens = self.trials.completion_tokens_raw[index - 1]
             expected_elapsed = self.trials.throughput_elapsed_seconds_raw[index - 1]
+            if self.meta.benchmark_protocol.version not in {"3", "4"}:
+                issue = self.progress_chronology_issue(index - 1)
+                if issue:
+                    raise ValueError(issue)
             if final_sample.completion_tokens != expected_tokens:
                 raise ValueError(
                     "final throughput progress sample must match completion "
@@ -991,6 +1028,24 @@ class BenchmarkResult(ChronosBaseModel):
                     "final throughput progress sample must match throughput "
                     f"elapsed seconds for trial {index}"
                 )
+
+    def progress_chronology_issue(self, trial_index: int) -> str | None:
+        """Diagnose legacy progress without altering sealed raw measurements."""
+        progress = self.trials.throughput_progress_samples_raw
+        if progress is None:
+            return None
+        previous = None
+        for sample in progress[trial_index]:
+            if sample.elapsed_seconds > self.trials.throughput_elapsed_seconds_raw[trial_index] + 0.001:
+                return "throughput progress sample exceeds trial duration"
+            if previous is not None:
+                if sample.elapsed_seconds < previous.elapsed_seconds:
+                    return "throughput progress samples must be chronological"
+                if (sample.token_count_source == previous.token_count_source
+                        and sample.completion_tokens < previous.completion_tokens):
+                    return "throughput progress counts must not decrease within one source"
+            previous = sample
+        return None
 
     def _assert_protocol_trial_alignment(self) -> None:
         protocol = self.meta.benchmark_protocol

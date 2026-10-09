@@ -2,19 +2,73 @@
 
 ## Unreleased
 
+- Report identified external servers as running in `engines`, independently of
+  whether their package is installed in Chronos' Python environment.
+- Discard indirect serving-version evidence when package metadata changes after
+  server startup, including copied metadata with preserved modification times.
+- Allow switching an existing wizard configuration between public and local
+  runs while preserving custom settings. Render commands, metadata and errors
+  literally so brackets cannot alter text or interrupt the wizard.
+- Report non-canonical result JSON as an integrity/file error instead of an
+  uncaught serialization or encoding exception.
+- Allow reachable, identified engine servers in separate Python environments
+  across benchmarks, diagnostics and model/preflight checks. Local installation
+  detection is diagnostic; backend and response validation remain required.
+- Reuse valid saved settings across protocol revisions with an explicit method
+  notice; fresh measurements record the current protocol. Preserve strict file
+  format/settings validation and historical result seals.
+- Remove comparison cautions for warmup/TTFT input usage that is not collected,
+  deduplicate identical cautions, and group incomplete evidence as informational
+  comparison limits. Keep concrete differences and measurement warnings visible;
+  explain cache timing without inferring a cache miss. Emit run warnings once.
+- Introduce benchmark protocol **5** on `main`: retain clock precision in raw
+  timings, rates and baseline/sustained summaries; require thermal sample spans
+  covering all measured phases and explicit engine-version provenance. Preserve
+  protocol-4 submissions during the release transition and historical files/seals;
+  flag legacy progress anomalies instead of making old results unreadable.
+- Correct input-token publication validation and the result-only submission CI
+  path. Explicitly blank wizard contact information now stays anonymous even
+  when an email is configured in the environment. Reject missing archive paths
+  and replace generated indexes atomically. Run the complete archive/index check
+  when a rewritten Git history leaves the previous push commit unavailable.
+- Bound streaming line buffers and check deadlines on transport chunks; reject
+  non-object events and content after a terminal finish reason. Finalize progress
+  at the actual completion time, validate its chronology, and require strict
+  integer completion counts in saved files.
+- Separate installed client versions from server evidence, verify Rapid-MLX and
+  mlx-lm listener identity, and prefer exact model IDs before unambiguous aliases.
+  Reuse mlx-lm completion fingerprints and oMLX's native release metadata; retain
+  indirect package evidence tied to the identified server process for engines
+  without a serving-version API. Keep client-only installations separate and
+  reject them as version evidence in new protocol-5 submissions. Preserve
+  provenance in local diagnostics, reports, leaderboard and app displays.
+  Record serving-configuration observation time/phase and client dependency
+  versions, covered by the existing result seal. Comparisons flag power, configuration, thermal,
+  monitor and swap conditions; Markdown preserves literal metadata and context.
+  Empty manual configuration declarations do not create missing-data warnings.
+- Mark sustained warnings from inconsistent historical progress as unverified
+  in the leaderboard and app as well as reports/comparisons. Preserve original
+  files and seals; do not reinterpret final trial values or saved means.
+- Clean up monitors after partial startup, fail explicitly when RAM is unavailable,
+  validate integer API inputs, bound sysctl probes and handle oversized numbers.
+  Keep concurrency warmup count provenance; diagnose non-increasing power source
+  timestamps and bound long power traces. Compare update versions with PEP 440
+  semantics. Clarify that leaderboard charts use the latest run per engine.
+
+
 - Add `run --save-config PATH` to save validated, resolved settings without
   hardware checks, inference or update requests, and `run --config PATH` to
   reuse them with explicit CLI overrides. Keep defaults fixed in saved files,
-  reject unsupported formats/protocols and invalid or unknown settings, and
+  reject unsupported file formats and invalid or unknown settings, and
   use the existing run/public-readiness checks for fresh measurements.
-  Configuration format v1 is separate from benchmark protocol 4; no changes
+  Configuration format v1 is separate from benchmark protocol revisions; this feature makes no changes
   to measurement, result seals or leaderboard eligibility.
 - Retain server-reported input token counts from existing throughput requests
   through the common path for all seven engines. Store counts in trial order
   in protocol metadata, preserve unknown positions without estimates, and show
   them in Markdown results. Validate integer counts strictly; local comparisons
   flag incomplete evidence and compare mutually known positions. Older results
-  remain readable; no extra requests, protocol 4 or leaderboard-rule changes.
+  remain readable; input-count observations alone do not change eligibility.
 - Expand the console-only `--repeat` summary to request/decode throughput,
   cold/cached TTFT and system RAM diagnostics, with available session counts,
   mean, median, inclusive quartiles, unscaled MAD, sample SD and min/max.
@@ -23,18 +77,18 @@
   Preserve outliers, report missing values, skip duplicate sealed evidence
   within a series and reject overlap between series. Do not aggregate
   incompatible completion-count units. No confidence intervals, automatic
-  superiority verdicts, extra dependencies or changes to protocol 4.
+  superiority verdicts or changes to the comparison estimands.
 - Refine local `compare` with reference/result-pair and metric-specific cautions,
   phase dependencies, concrete differing values and incomplete metadata.
   Mark percentages from two word-count estimates; omit throughput percentages
   for exact-versus-estimated or mixed completion counts with an explicit reason.
-  Preserve exploratory deltas, saved results, protocol 4 and leaderboard rules.
+  Preserve exploratory deltas and saved results.
 - Add `ddalcu/mlx-serve` support for local MLX safetensors chat models.
   Verify exact model IDs and loaded backends; reject all GGUF paths,
   including native MLX GGUF, llama.cpp/ds4 and remote providers before
   loading or inference, and record available context,
   KV-cache and draft-model metadata. Public results require API-observed
-  backend evidence and a matching model format. Benchmark protocol remains 4.
+  backend evidence and a matching model format. The adapter uses the common benchmark protocol.
 
 ## [0.5.1] — 2026-10-04
 

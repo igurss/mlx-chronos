@@ -16,7 +16,6 @@ from mlx_chronos.cli import (
     _parse_engine_options,
     _result_timestamp,
     _parse_concurrency_levels,
-    _emit_result_warnings,
     _ensure_publishable_run_args,
     _log_result_summary,
     _log_publishability_summary,
@@ -387,11 +386,29 @@ def test_cmd_compare_series_prints_available_counts_and_descriptive_median_chang
     incomplete = [
         r.message
         for r in caplog.records
-        if r.message.startswith("Incomplete comparison information")
-        and r.message.endswith("model.format")
+        if r.message.startswith("Comparison limits")
+        and "model.format" in r.message
     ]
     assert len(incomplete) == 1  # Consolidate repetitive absence, not real differences.
     assert all(label in incomplete[0] for label in ("A[1]", "A[2]", "B[1]", "B[2]"))
+
+
+def test_comparison_limits_are_grouped_but_real_differences_remain_cautions(tmp_path, caplog):
+    from tests.test_compare import write_result
+
+    first = write_result(tmp_path / "first.json")
+    second = write_result(tmp_path / "second.json", mutate=lambda data: data["hardware"].update(
+        chip="Different chip",
+    ))
+    with caplog.at_level(logging.INFO, logger="mlx_chronos"):
+        cmd_compare(Namespace(files=[str(first), str(second)]))
+    differences = [r for r in caplog.records if r.message.startswith("Comparison caution")]
+    assert len(differences) == 1 and differences[0].levelno == logging.WARNING
+    assert "hardware.chip" in differences[0].message
+    limits = [r for r in caplog.records if r.message.startswith("Comparison limits")]
+    assert all(r.levelno == logging.INFO and "[1] vs [2]" in r.message for r in limits)
+    assert any("model.format" in r.message and "engine.serving_config.observed" in r.message
+               for r in limits)
 
 
 def test_cmd_compare_series_reports_an_invalid_seal_without_a_summary(
@@ -657,7 +674,7 @@ def test_cmd_models_requires_running_server(mock_get_engine, capsys):
 
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")
-def test_cmd_validate_engine_only(mock_detect, mock_get_engine):
+def test_cmd_validate_engine_only(mock_detect, mock_get_engine, caplog):
     mock_detect.return_value = {
         "chip": "Apple M2",
         "memory_gb": 8.0,
@@ -667,11 +684,14 @@ def test_cmd_validate_engine_only(mock_detect, mock_get_engine):
     mock_engine = mock_get_engine.return_value
     mock_engine.is_installed.return_value = True
     mock_engine.get_version.return_value = "1.0.0"
+    mock_engine.version_source = "process_package"
     mock_engine.is_server_running.return_value = True
     mock_engine.base_url.return_value = "http://localhost:8000/v1"
     mock_engine.list_model_ids.return_value = ["org/test-model"]
 
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
     cmd_validate(Namespace(engine="omlx", model=None))
+    assert "server installation; indirect version evidence" in caplog.text
 
     mock_engine.list_model_ids.assert_called_once()
     mock_engine.validate_completion_request.assert_not_called()
@@ -737,7 +757,7 @@ def test_cmd_validate_warns_on_unknown_engine_version(
 
     cmd_validate(Namespace(engine="omlx", model=None))
 
-    assert "[warn] engine version: version detection failed" in caplog.text
+    assert "[warn] engine version: serving version is unavailable" in caplog.text
 
 @patch("mlx_chronos.cli.get_engine")
 @patch("mlx_chronos.cli.detect_hardware")
@@ -1013,7 +1033,7 @@ def test_publishable_environment_errors_explains_untrusted_host_metadata():
     ("error", "fix"),
     [
         ("model.reference_url missing", "rerun with --model-url"),
-        ("known engine version required", "restart or update the engine"),
+        ("known engine version required", "check serving-version evidence"),
         ("Low Power Mode is on", "disable Low Power Mode"),
         ("warmup_failures=1", "engine is stable"),
         ("usage.completion_tokens missing", "returns usage.completion_tokens"),
@@ -1500,12 +1520,6 @@ def test_cmd_submit_rejects_non_publishable_token_source(tmp_path, capsys):
     assert "usage.completion_tokens" in capsys.readouterr().err
 
 
-def test_emit_result_warnings_does_not_duplicate_cached_ttft_warning(capsys):
-    _emit_result_warnings({"meta": {"cached_ttft_warning": True}})
-
-    assert "cached TTFT" not in capsys.readouterr().err
-
-
 def test_log_result_summary_reports_core_metrics_and_clean_run(caplog):
     caplog.set_level(logging.INFO, logger="mlx_chronos")
 
@@ -1631,6 +1645,33 @@ def test_cmd_doctor_defers_lmstudio_version_until_backend_probe(
     engine.get_version.assert_called_once()
 
 
+def test_cmd_doctor_waits_for_mlx_lm_completion_version_evidence(caplog):
+    from copy import deepcopy
+    from mlx_chronos.engines import MLXLMEngine
+    from mlx_chronos.examples import EXAMPLE_RESULT
+
+    engine = MLXLMEngine()
+    response = MagicMock()
+    response.json.return_value = {'choices': [{'text': 'ok'}],
+        'system_fingerprint': '0.31.2-0.30.2-macOS-26.0-arm64-Metal4'}
+    with patch('mlx_chronos.cli.get_engine', return_value=engine) as factory, \
+         patch('mlx_chronos.cli.detect_hardware', return_value=deepcopy(EXAMPLE_RESULT['hardware'])), \
+         patch('mlx_chronos.cli.get_benchmark_condition_warnings', return_value=[]), \
+         patch.object(engine, 'is_installed', return_value=True), \
+         patch.object(engine, 'is_server_running', return_value=True), \
+         patch.object(engine, 'list_model_ids', return_value=['default_model']), \
+         patch.object(engine, '_get_version_from_models_endpoint', return_value=None), \
+         patch.object(engine, 'get_client_version', return_value='unknown'), \
+         patch('mlx_chronos.engines.httpx.post', return_value=response) as post:
+        caplog.set_level(logging.INFO, logger='mlx_chronos')
+        cmd_doctor(Namespace(engine='mlx-lm', model='default_model',
+            model_url='https://huggingface.co/org/model', publishable=True))
+    assert '[ok] engine version: 0.31.2 (server_api)' in caplog.text
+    assert 'Ready for a publishable run' in caplog.text
+    factory.assert_called_once()
+    post.assert_called_once()
+
+
 def test_cmd_doctor_requires_engine_for_model(capsys):
     with pytest.raises(SystemExit) as exc:
         cmd_doctor(
@@ -1654,6 +1695,21 @@ def test_load_publishable_result_rejects_tampered_integrity(tmp_path):
 
     with pytest.raises(SubmissionError, match="integrity"):
         load_publishable_result(result_path)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), "\ud800"])
+def test_submit_reports_noncanonical_json_as_a_file_error(tmp_path, capsys, value):
+    result = copy.deepcopy(EXAMPLE_RESULT)
+    result["meta"]["notes"] = value
+    path = tmp_path / "invalid.json"
+    path.write_text(json.dumps(result), encoding="utf-8")
+    with pytest.raises(SubmissionError, match="integrity"):
+        load_publishable_result(path)
+    from mlx_chronos.cli import parse_cli_args
+    with pytest.raises(SystemExit) as error:
+        cmd_submit(parse_cli_args(["submit", "--file", str(path), "--dry-run"]))
+    assert error.value.code == 1
+    assert "integrity" in capsys.readouterr().err
 
 
 def test_load_publishable_result_rejects_missing_model_reference(tmp_path):
@@ -2276,3 +2332,32 @@ def test_cmd_run_repeat_observes_cooldown_between_runs():
         cmd_run(args)
 
     assert mock_sleep.call_args_list == [((8.0,),), ((10.0,),)]
+
+
+@pytest.mark.parametrize('counts', [[24] * 5, [24, None, None, None, None], None])
+def test_public_loader_accepts_observed_input_counts(tmp_path, counts):
+    from copy import deepcopy
+    from mlx_chronos.protocol import build_benchmark_protocol
+    result = deepcopy(EXAMPLE_RESULT)
+    result['meta']['benchmark_protocol'] = build_benchmark_protocol(
+        5, 100, None, throughput_input_tokens=counts,
+    )
+    path = tmp_path / 'observed.json'
+    path.write_text(json.dumps(seal_result(result)))
+    _, parsed = load_publishable_result(path)
+    assert parsed.meta.benchmark_protocol.throughput.input_tokens == counts
+
+
+def test_wizard_blank_contact_excludes_environment_email(tmp_path, monkeypatch):
+    from mlx_chronos.wizard import WizardSession
+    session = object.__new__(WizardSession)
+    path = write_result(tmp_path / 'result.json')
+    session._ask_required_path = lambda *args: path
+    session._confirm = lambda *args, **kwargs: False
+    session._ask_optional_text = lambda *args: None
+    session.callbacks = Namespace(submit=cmd_submit)
+    session._call_command = lambda callback, args: callback(args)
+    monkeypatch.setenv('MLX_CHRONOS_SUBMITTER_EMAIL', 'private@example.test')
+    with patch('mlx_chronos.cli.submit_result_file') as sender:
+        session._submit_flow()
+    assert sender.call_args.kwargs['submitter_email'] == ANONYMOUS_SUBMITTER_EMAIL

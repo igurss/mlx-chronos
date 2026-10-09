@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import re
 
+import pytest
+
 from mlx_chronos.constants import (
     DEFAULT_THROUGHPUT_MAX_TOKENS,
     PUBLIC_BASELINE_TRIALS,
@@ -31,7 +33,7 @@ def test_tests_workflow_covers_leaderboard_and_python_314():
     assert "ruff check mlx_chronos tests" in text
     assert "mypy" in text
     assert "pytest --cov" in text
-    assert "python -m mlx_chronos.leaderboard --check" in text
+    assert "python .github/scripts/check_leaderboard.py" in text
     assert "python -m mlx_chronos.detect" not in text
     assert "detect_hardware" in text
 
@@ -149,15 +151,10 @@ def test_protocol_reexports_default_throughput_constant():
 def test_readme_lists_every_default_engine_port():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    for engine, port in (
-        ("oMLX", "8000"),
-        ("Rapid-MLX", "8001"),
-        ("vllm-mlx", "8000"),
-        ("mlx-lm", "8080"),
-        ("Ollama", "11434"),
-        ("LM Studio", "1234"),
-    ):
-        assert f"| {engine} | `{port}` |" in readme
+    from mlx_chronos.engines import ENGINES
+    labels = {"omlx": "oMLX", "rapid-mlx": "Rapid-MLX", "ollama": "Ollama", "lmstudio": "LM Studio"}
+    for name, adapter in ENGINES.items():
+        assert f"| {labels.get(name, name)} | `{adapter.default_port}` |" in readme
 
 
 def test_readme_current_release_matches_pyproject_version():
@@ -336,3 +333,96 @@ def test_leaderboard_clean_badge_is_not_blocked_by_integrity_badge():
     assert "no flags" in html
     assert "warmup skipped" not in html
     assert "warmup failure" in html
+
+
+def test_json_only_submission_passes_both_ci_policies(tmp_path):
+    import os
+    import subprocess
+    import sys
+    import textwrap
+    from copy import deepcopy
+    from mlx_chronos.examples import EXAMPLE_RESULT
+    from mlx_chronos.integrity import seal_result
+    from mlx_chronos.leaderboard import write_results_index
+
+    def git(*args):
+        return subprocess.check_output(['git', '-c', 'user.name=Fixture', '-c',
+            'user.email=fixture@example.test', *args], cwd=tmp_path, text=True).strip()
+
+    git('init', '-q')
+    archive = tmp_path / 'results/submitted'
+    archive.mkdir(parents=True)
+    output = tmp_path / 'docs/results_index.json'
+    output.parent.mkdir()
+    (archive / 'one.json').write_text(json.dumps(seal_result(EXAMPLE_RESULT)))
+    write_results_index(archive, output)
+    git('add', '.')
+    git('commit', '-qm', 'initial fixture')
+    base = git('rev-parse', 'HEAD')
+    second = deepcopy(EXAMPLE_RESULT)
+    second['meta']['timestamp'] = '2026-10-04T09:00:00Z'
+    (archive / 'two.json').write_text(json.dumps(seal_result(second)))
+    git('add', '.')
+    git('commit', '-qm', 'new submission')
+
+    workflow = workflow_text('validate_result.yml')
+    scope = workflow.split('      - name: Check pull request scope', 1)[1]
+    script = textwrap.dedent(scope.split('        run: |\n', 1)[1].split('\n      - name:', 1)[0])
+    env = dict(os.environ, TARGET_BRANCH=base, GITHUB_OUTPUT=str(tmp_path / 'output'), INDEX_BASE_SHA=base)
+    scope_result = subprocess.run(['bash', '-c', script], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert scope_result.returncode == 0, scope_result.stderr + scope_result.stdout
+    quality_script = ROOT / '.github/scripts/check_leaderboard.py'
+    quality = subprocess.run([sys.executable, str(quality_script)], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert quality.returncode == 0, quality.stderr
+    assert 'generable (2 results)' in quality.stdout
+    # Once source/index ownership changes, a stale index must be rejected.
+    (tmp_path / 'source.py').write_text('# changed code')
+    git('add', 'source.py')
+    git('commit', '-qm', 'code change')
+    quality = subprocess.run([sys.executable, str(quality_script)], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert quality.returncode != 0 and 'stale' in quality.stderr
+
+
+@pytest.mark.parametrize('stale_index', [False, True])
+def test_index_check_without_previous_commit_keeps_full_validation(tmp_path, stale_index):
+    import os
+    import subprocess
+    import sys
+    from copy import deepcopy
+    from mlx_chronos.examples import EXAMPLE_RESULT
+    from mlx_chronos.integrity import seal_result
+    from mlx_chronos.leaderboard import write_results_index
+
+    def git(*args):
+        return subprocess.check_output(['git', '-c', 'user.name=Fixture', '-c',
+            'user.email=fixture@example.test', *args], cwd=tmp_path, text=True).strip()
+
+    git('init', '-q')
+    archive = tmp_path / 'results/submitted'
+    archive.mkdir(parents=True)
+    output = tmp_path / 'docs/results_index.json'
+    output.parent.mkdir()
+    (archive / 'one.json').write_text(json.dumps(seal_result(EXAMPLE_RESULT)))
+    write_results_index(archive, output)
+    git('add', '.')
+    git('commit', '-qm', 'fixture with current index')
+
+    second = deepcopy(EXAMPLE_RESULT)
+    second['meta']['timestamp'] = '2026-10-04T09:00:00Z'
+    (archive / 'two.json').write_text(json.dumps(seal_result(second)))
+    if not stale_index:
+        write_results_index(archive, output)
+    git('add', '.')
+    git('commit', '-qm', 'fixture after history rewrite')
+
+    # Like github.event.before after a force push, this SHA is not in the checkout.
+    env = dict(os.environ, INDEX_BASE_SHA='f' * 40)
+    quality_script = ROOT / '.github/scripts/check_leaderboard.py'
+    quality = subprocess.run([sys.executable, str(quality_script)], cwd=tmp_path,
+        env=env, capture_output=True, text=True)
+    if stale_index:
+        assert quality.returncode != 0 and 'stale' in quality.stderr
+    else:
+        assert quality.returncode == 0, quality.stderr
+        assert 'index is current (2 results)' in quality.stdout
+    assert 'bad object' not in quality.stderr

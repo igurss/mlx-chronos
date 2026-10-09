@@ -37,6 +37,21 @@ def model_entry(backend="mlx", *, loaded=True):
     }
 
 
+def test_version_source_refreshes_when_server_becomes_available(monkeypatch):
+    engine = MLXServeEngine()
+    monkeypatch.setattr(engine, '_server_identity_matches', lambda: False)
+    monkeypatch.setattr(engine, '_binary_path', lambda: '/test/mlx-serve')
+    with patch('mlx_chronos.engines.subprocess.run', return_value=CompletedProcess([], 0, 'mlx-serve 1.0.0')):
+        assert engine.get_version() == 'unknown'
+        assert engine.version_source == 'unavailable'
+        assert engine.get_client_version() == '1.0.0'
+        assert engine.version_source == 'unavailable'
+    monkeypatch.setattr(engine, '_server_identity_matches', lambda: True)
+    monkeypatch.setattr(engine, '_server_json', lambda *a, **kw: {'version': '2.0.0'})
+    assert engine.get_version() == '2.0.0'
+    assert engine.version_source == 'server_api'
+
+
 def test_ready_safetensors_backend_and_configuration(monkeypatch):
     engine = get_engine("mlx-serve")
     entry = model_entry()
@@ -203,7 +218,8 @@ def test_offline_version_does_not_take_mlx_library_version(monkeypatch, output, 
     monkeypatch.setattr(engine, "_server_identity_matches", lambda: False)
     monkeypatch.setattr(engine, "_binary_path", lambda: "/tmp/mlx-serve")
     with patch("mlx_chronos.engines.subprocess.run", return_value=CompletedProcess([], 0, output, "")):
-        assert engine.get_version() == expected
+        assert engine.get_client_version() == expected
+        assert engine.get_version() == 'unknown'
 
 
 def test_installation_and_server_identity_use_native_evidence(monkeypatch):

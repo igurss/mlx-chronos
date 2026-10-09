@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 import html
 import os
 import re
@@ -6,6 +7,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from datetime import datetime, timezone
+from mlx_chronos.schema import BenchmarkResult
 
 
 def _write_text_atomic(output_path: Path, content: str) -> None:
@@ -79,11 +81,11 @@ class BaseReporter(ABC):
 
     def _format_stats(self, stats: dict, unit: str) -> str:
         text = (
-            f"{stats['mean']} {unit} "
-            f"(±{stats['stddev']}; min {stats['min']}, max {stats['max']})"
+            f"{stats['mean']:.6g} {unit} "
+            f"(±{stats['stddev']:.6g}; min {stats['min']:.6g}, max {stats['max']:.6g})"
         )
         if stats.get("p95") is not None:
-            text += f", p95 {stats['p95']} {unit}"
+            text += f", p95 {stats['p95']:.6g} {unit}"
         return text
 
 
@@ -112,6 +114,17 @@ class ConcurrencyProfileJSONReporter:
         return output_path
 
 
+def _version_evidence_text(engine: dict) -> str:
+    return {
+        "server_api": "Server API",
+        "runtime_probe": "Active runtime probe",
+        "process_package": "Server process installation; loaded runtime version unverified",
+        "client_cli": "Client CLI; serving version unverified",
+        "client_package": "Client package; serving version unverified",
+        "unavailable": "Unavailable",
+    }.get(engine.get("version_source") or "", "Not recorded")
+
+
 class ConcurrencyProfileMarkdownReporter:
     """Save a concise human-readable view of the same diagnostic."""
 
@@ -126,6 +139,7 @@ class ConcurrencyProfileMarkdownReporter:
             "# mlx-Chronos concurrency diagnostic",
             "",
             f"- Engine: {engine_name} ({engine_version})",
+            f"- Version evidence: {_version_evidence_text(report['engine'])}",
             f"- Model: {model_name}",
             f"- Hardware: {chip} ({report['hardware']['memory_gb']} GB)",
             f"- Request max tokens: {report['request_max_tokens']}",
@@ -183,6 +197,25 @@ class MarkdownReporter(BaseReporter):
         filename = f"{self._generate_base_filename(result)}.md"
         output_path = results_dir / filename
         
+        progress_result = (
+            BenchmarkResult.model_validate(result)
+            if result.get('trials', {}).get('throughput_progress_samples_raw') else None
+        )
+        progress_invalid = progress_result is not None and any(
+            progress_result.progress_chronology_issue(index) for index in range(progress_result.trials.count)
+        )
+        version_source = result.get('engine', {}).get('version_source')
+        result = deepcopy(result)
+        for section, keys in (
+            ("engine", ("name", "version", "client_version", "version_source")),
+            ("model", ("name", "quantization", "reference_url")),
+            ("hardware", ("chip", "machine_model", "macos_version", "thermal_state")),
+            ("meta", ("notes", "submitted_by", "chronos_version")),
+        ):
+            for key in keys:
+                value = result.get(section, {}).get(key)
+                if value is not None:
+                    result[section][key] = _concurrency_markdown_text(value)
         hw = result["hardware"]
         metrics = result["metrics"]
         meta = result.get("meta", {})
@@ -235,6 +268,22 @@ class MarkdownReporter(BaseReporter):
                     f"- **Throughput input tokens:** {input_counts} "
                     f"(source: {throughput_protocol.get('input_token_count_source', 'unavailable')})\n"
                 )
+        config = result.get("engine", {}).get("serving_config") or {}
+        if config:
+            for section in ("observed", "declared"):
+                settings = config.get(section) or {}
+                for key, value in sorted(settings.items()):
+                    md += f"- **Server setting ({section}):** {_concurrency_markdown_text(key)} = {_concurrency_markdown_text(value)}\n"
+            md += f"- **Server observation phase:** {_concurrency_markdown_text(config.get('observation_phase') or 'unknown')}\n"
+            md += f"- **Server observed at:** {_concurrency_markdown_text(config.get('observed_at') or 'unknown')}\n"
+        md += f"- **Engine version source:** {result['engine'].get('version_source') or 'unknown'}\n"
+        md += f"- **Installed client version:** {result['engine'].get('client_version') or 'unknown'}\n"
+        if version_source in {"client_cli", "client_package"}:
+            md += "- **Warning:** engine version was detected locally; the serving version is unverified.\n"
+        elif version_source == 'process_package':
+            md += "- **Warning:** version read from the server process installation; the loaded runtime did not report its version.\n"
+        if meta.get("memory_pressure_warning"):
+            md += "- **Warning:** system-wide swap grew during this run; inspect memory pressure before comparing timings.\n"
         if meta.get("word_fallback_warning"):
             md += (
                 "- **Warning:** throughput token counts used word_fallback; "
@@ -242,18 +291,19 @@ class MarkdownReporter(BaseReporter):
             )
         if meta.get("engine_version_warning"):
             md += (
-                "- **Warning:** engine version detection failed; "
+                "- **Comparison limit:** serving engine version is unavailable; "
                 "`engine.version` is `unknown`.\n"
             )
         if meta.get("sustained_throttling_warning"):
-            md += (
+            md += "- **Warning:** recorded sustained warning is unverified because legacy progress chronology is inconsistent.\n" if progress_invalid else (
                 "- **Warning:** sustained profile observed late throughput "
                 "degradation with a thermal-state signal.\n"
             )
         if meta.get("cached_ttft_warning"):
             md += (
-                "- **Warning:** cached TTFT is close to cold TTFT; prompt/KV "
-                "cache reuse may not have occurred.\n"
+                "- **Cache timing:** cached TTFT is close to cold TTFT; no clear "
+                "latency benefit was observed. Timings alone do not establish "
+                "whether the prompt/KV cache was reused.\n"
             )
         cache_validation = meta.get("cache_validation") or {}
         if cache_validation.get("source") == "engine_cache_api":
@@ -320,8 +370,7 @@ class MarkdownReporter(BaseReporter):
             )
         else:
             md += (
-                "- **Post-warmup engine RSS diagnostic fallback "
-                "(system RAM):** "
+                "- **Engine RSS unavailable; whole-run system RAM fallback:** "
                 f"{ram_peak_gb} GB\n"
             )
         md += (
@@ -333,7 +382,7 @@ class MarkdownReporter(BaseReporter):
             f"({system_ram_peak_percent}%)\n"
         )
         for label, key in (
-            ("System RAM before run", "system_ram_baseline_gb"),
+            ("System RAM first successful sample", "system_ram_baseline_gb"),
             ("Whole-system RAM rise", "system_ram_delta_gb"),
             ("System swap growth", "swap_growth_gb"),
         ):
@@ -406,6 +455,9 @@ class MarkdownReporter(BaseReporter):
             md += "\n## Throughput Progress Samples\n"
             for index, samples in enumerate(progress_samples, start=1):
                 if not samples:
+                    continue
+                if progress_result is not None and progress_result.progress_chronology_issue(index - 1):
+                    md += f"- **Trial {index}:** legacy progress has inconsistent chronology; excluded from trend interpretation. Raw samples remain in JSON.\n"
                     continue
                 rendered_samples = ", ".join(
                     (

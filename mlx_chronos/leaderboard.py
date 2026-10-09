@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Iterable
@@ -18,6 +19,7 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.submit import load_publishable_result
+from mlx_chronos.reporters import _write_text_atomic
 
 
 class DuplicateResultError(ValueError):
@@ -85,9 +87,21 @@ def assert_unique_results(records: Iterable[ArchiveResult]) -> None:
 
 
 def load_archive_results(results_dir: Path) -> list[ArchiveResult]:
+    if not results_dir.is_dir():
+        raise ValueError(f"result archive is not an existing directory: {results_dir}")
     records: list[ArchiveResult] = []
     errors: list[str] = []
-    for path in sorted(results_dir.rglob("*.json")):
+    # Path.rglob can silently skip unreadable subdirectories. An incomplete
+    # archive must never replace the public index as if it were complete.
+    def scan_error(error: OSError) -> None:
+        raise ValueError(f"could not read result archive: {error}") from error
+
+    paths = [
+        Path(root) / name
+        for root, _, names in os.walk(results_dir, onerror=scan_error)
+        for name in names if name.endswith(".json")
+    ]
+    for path in sorted(paths):
         try:
             _, result = load_publishable_result(
                 path,
@@ -123,6 +137,7 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
     trials = data["trials"]
     meta = data["meta"]
     decode_stats = metrics.get("decode_tokens_per_second") or {}
+    progress_invalid = any(result.progress_chronology_issue(i) for i in range(result.trials.count))
 
     return {
         "chip": hardware["chip"],
@@ -131,6 +146,9 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
         "machine_model": hardware["machine_model"],
         "engine": engine["name"],
         "engine_version": engine["version"],
+        **({"engine_version_source": engine["version_source"],
+            "engine_client_version": engine.get("client_version")}
+           if engine.get("version_source") is not None else {}),
         "engine_serving_config": engine.get("serving_config"),
         "model": model["name"],
         "quantization": model["quantization"],
@@ -167,7 +185,9 @@ def _index_row(result: BenchmarkResult) -> dict[str, object]:
         "thermal_monitor_source": meta["thermal_monitor"]["source"],
         "thermal_non_nominal_phases": meta["thermal_monitor"]["non_nominal_phases"],
         "cached_ttft_warning": meta["cached_ttft_warning"],
-        "sustained_throttling_warning": meta["sustained_throttling_warning"],
+        "sustained_throttling_warning": meta["sustained_throttling_warning"] and not progress_invalid,
+        **({"progress_chronology_warning": True,
+            "sustained_warning_unverified": meta["sustained_throttling_warning"]} if progress_invalid else {}),
         "warmup_failures": meta["warmup_failures"],
         "submitted_by": meta.get("submitted_by"),
         "chronos_version": meta["chronos_version"],
@@ -196,7 +216,7 @@ def _serialized_results_index(results_dir: Path) -> tuple[dict[str, object], str
 
 def write_results_index(results_dir: Path, output: Path) -> int:
     payload, serialized = _serialized_results_index(results_dir)
-    output.write_text(serialized, encoding="utf-8")
+    _write_text_atomic(output, serialized)
     results = payload["results"]
     if not isinstance(results, list):
         raise TypeError("generated results index must contain a results list")

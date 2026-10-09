@@ -49,8 +49,9 @@ class MockStreamResponse:
     def raise_for_status(self):
         self.response.raise_for_status()
 
-    def iter_lines(self):
-        yield from self.lines
+    def iter_bytes(self):
+        for line in self.lines:
+            yield (line + "\n").encode("utf-8")
 
 
 class MockStreamContext:
@@ -258,7 +259,7 @@ def test_throughput_input_usage_contract_for_every_engine(engine_name, prompt_to
     assert measurement.input_tokens == (24 if type(prompt_tokens) is int and prompt_tokens > 0 else None)
     assert measurement.completion_tokens == 100
     assert measurement.elapsed_seconds == 1.5
-    assert measurement.request_tokens_per_second == 66.67
+    assert measurement.request_tokens_per_second == pytest.approx(100 / 1.5)
     assert measurement.decode_tokens_per_second == 99.0
     assert len(requests) == 1
     assert requests[0].url.path == "/v1/chat/completions"
@@ -328,7 +329,7 @@ def test_measure_throughput_uses_provided_http_client(mock_stream):
             client=client,
         )
 
-    assert measurement.request_tokens_per_second == pytest.approx(66.67, abs=0.001)
+    assert measurement.request_tokens_per_second == pytest.approx(100 / 1.5)
     client.stream.assert_called_once()
     mock_stream.assert_not_called()
 
@@ -342,7 +343,7 @@ def test_measure_throughput_uses_client_stream_decode_timing(mock_stream):
     with patch("time.perf_counter", side_effect=[0.0, 0.5, 5.5]):
         measurement = engine.measure_throughput("test prompt", "default", 100)
 
-    assert measurement.request_tokens_per_second == pytest.approx(18.18, abs=0.001)
+    assert measurement.request_tokens_per_second == pytest.approx(100 / 5.5)
     assert measurement.decode_tokens_per_second == pytest.approx(19.8, abs=0.001)
     assert measurement.decode_timing_source == "client_stream"
 
@@ -356,9 +357,9 @@ def test_measure_throughput_uses_stored_elapsed_for_request_tps(mock_stream):
     with patch("time.perf_counter", side_effect=[0.0, 0.1, 0.4995]):
         measurement = engine.measure_throughput("test prompt", "default", 100)
 
-    rounded_elapsed = round(0.4995, 3)
+    rounded_elapsed = 0.4995
     assert measurement.elapsed_seconds == rounded_elapsed
-    assert measurement.request_tokens_per_second == round(100 / rounded_elapsed, 2)
+    assert measurement.request_tokens_per_second == 100 / rounded_elapsed
 
 
 @patch("httpx.stream")
@@ -383,7 +384,7 @@ def test_measure_throughput_records_progress_samples(mock_stream):
         completion_stream(content=content, completion_tokens=120)
     )
     engine = OMLXEngine()
-    with patch("time.perf_counter", side_effect=[0.0, 0.5, 1.0, 2.0]):
+    with patch("time.perf_counter", side_effect=[0.0, 0.5, 2.0]):
         measurement = engine.measure_throughput(
             "test prompt",
             "default",
@@ -395,8 +396,8 @@ def test_measure_throughput_records_progress_samples(mock_stream):
     assert measurement.progress_samples == (
         {
             "completion_tokens": 100,
-            "elapsed_seconds": 1.0,
-            "tokens_per_second": 100.0,
+            "elapsed_seconds": 0.5,
+            "tokens_per_second": 200.0,
             "token_count_source": "word_fallback",
         },
         {
@@ -417,7 +418,7 @@ def test_measure_throughput_deduplicates_burst_progress_samples(mock_stream):
     engine = OMLXEngine()
     with patch(
         "time.perf_counter",
-        side_effect=[0.0, 0.5, *([32.7324] * 9), 32.733],
+        side_effect=[0.0, 32.7324, 32.733],
     ):
         measurement = engine.measure_throughput(
             "test prompt",
@@ -429,14 +430,14 @@ def test_measure_throughput_deduplicates_burst_progress_samples(mock_stream):
     assert measurement.progress_samples == (
         {
             "completion_tokens": 900,
-            "elapsed_seconds": 32.732,
-            "tokens_per_second": round(900 / 32.732, 2),
+            "elapsed_seconds": 32.733,
+            "tokens_per_second": 900 / 32.733,
             "token_count_source": "word_fallback",
         },
     )
 
 
-def test_append_progress_sample_uses_rounded_elapsed_for_tps():
+def test_append_progress_sample_uses_raw_elapsed_for_tps():
     engine = OMLXEngine()
     samples = []
     elapsed_seconds = 0.4995
@@ -448,18 +449,18 @@ def test_append_progress_sample_uses_rounded_elapsed_for_tps():
         token_count_source="usage.completion_tokens",
     )
 
-    rounded_elapsed_seconds = round(elapsed_seconds, 3)
+    rounded_elapsed_seconds = elapsed_seconds
     assert samples == [
         {
             "completion_tokens": 100,
             "elapsed_seconds": rounded_elapsed_seconds,
-            "tokens_per_second": round(100 / rounded_elapsed_seconds, 2),
+            "tokens_per_second": 100 / rounded_elapsed_seconds,
             "token_count_source": "usage.completion_tokens",
         }
     ]
 
 
-def test_append_progress_sample_skips_elapsed_that_rounds_to_zero():
+def test_append_progress_sample_preserves_submillisecond_elapsed():
     engine = OMLXEngine()
     samples = []
 
@@ -470,7 +471,8 @@ def test_append_progress_sample_skips_elapsed_that_rounds_to_zero():
         token_count_source="usage.completion_tokens",
     )
 
-    assert samples == []
+    assert samples[0]["elapsed_seconds"] == 0.0004
+    assert samples[0]["tokens_per_second"] == 100 / 0.0004
 
 
 def test_append_progress_sample_replaces_duplicate_elapsed_for_same_source():
@@ -493,8 +495,8 @@ def test_append_progress_sample_replaces_duplicate_elapsed_for_same_source():
     assert samples == [
         {
             "completion_tokens": 200,
-            "elapsed_seconds": 1.234,
-            "tokens_per_second": round(200 / 1.234, 2),
+            "elapsed_seconds": 1.2344,
+            "tokens_per_second": 200 / 1.2344,
             "token_count_source": "word_fallback",
         }
     ]
@@ -664,11 +666,11 @@ def test_measure_tokens_per_second_reports_status_model_and_body(mock_stream):
     assert "model not found" in message
 
 @patch("httpx.stream")
-def test_measure_tokens_per_second_rejects_empty_stream(mock_stream):
+def test_measure_tokens_per_second_rejects_nonobject_event(mock_stream):
     mock_stream.return_value = stream_response(["data: []", "data: [DONE]"])
     engine = OMLXEngine()
     with patch("time.perf_counter", side_effect=[0.0, 1.0]):
-        with pytest.raises(RuntimeError, match="stream ended before"):
+        with pytest.raises(RuntimeError, match="event must be a JSON object"):
             engine.measure_tokens_per_second("test prompt", "default", 100)
 
 @patch("httpx.get")
@@ -970,19 +972,19 @@ def test_get_server_pid_filters_listening_process(mock_process_cls, mock_run):
     assert "-sTCP:LISTEN" in mock_run.call_args.args[0]
 
 @patch("subprocess.run")
-def test_omlx_get_version_uses_cli_version_flag(mock_run):
+def test_omlx_get_client_version_uses_cli_version_flag(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "omlx 0.4.1\n"
     mock_result.stderr = ""
     mock_result.returncode = 0
     mock_run.return_value = mock_result
 
-    assert OMLXEngine().get_version() == "0.4.1"
+    assert OMLXEngine().get_client_version() == "0.4.1"
     assert mock_run.call_args.args[0] == ["omlx", "--version"]
     assert mock_run.call_args.kwargs["timeout"] == 3
 
 @patch("subprocess.run")
-def test_omlx_get_version_falls_back_to_serve_help(mock_run):
+def test_omlx_get_client_version_falls_back_to_serve_help(mock_run):
     empty_result = MagicMock()
     empty_result.stdout = ""
     empty_result.stderr = ""
@@ -993,7 +995,7 @@ def test_omlx_get_version_falls_back_to_serve_help(mock_run):
     help_result.returncode = 0
     mock_run.side_effect = [empty_result, help_result]
 
-    assert OMLXEngine().get_version() == "0.3.9"
+    assert OMLXEngine().get_client_version() == "0.3.9"
     assert [call.args[0] for call in mock_run.call_args_list] == [
         ["omlx", "--version"],
         ["omlx", "serve", "--help"],
@@ -1016,7 +1018,7 @@ def test_omlx_get_version_falls_back_to_models_metadata(mock_run, mock_get):
     assert mock_get.call_args.args[0] == "http://localhost:8000/v1/models"
 
 @patch("subprocess.run")
-def test_ollama_get_version(mock_run):
+def test_ollama_get_client_version(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "ollama version is 0.24.0\n"
     mock_result.returncode = 0
@@ -1024,7 +1026,7 @@ def test_ollama_get_version(mock_run):
 
     engine = OllamaEngine()
     with patch.object(engine, "_server_version", return_value=None):
-        assert engine.get_version() == "0.24.0"
+        assert engine.get_client_version() == "0.24.0"
 
 
 @patch("httpx.get")
@@ -1050,8 +1052,8 @@ def test_ollama_get_version_ignores_failed_command_output(mock_run):
         assert engine.get_version() == "unknown"
 
 @patch("importlib.metadata.version", return_value="0.4.0rc1")
-def test_vllm_mlx_get_version_uses_package_metadata(mock_version):
-    assert VLLMMLXEngine().get_version() == "0.4.0rc1"
+def test_vllm_mlx_get_client_version_uses_package_metadata(mock_version):
+    assert VLLMMLXEngine().get_client_version() == "0.4.0rc1"
     mock_version.assert_called_once_with("vllm-mlx")
 
 @patch("httpx.get")
@@ -1071,40 +1073,40 @@ def test_vllm_mlx_get_version_falls_back_to_models_metadata(
     mock_get.return_value = mock_response
 
     assert VLLMMLXEngine().get_version() == "0.4.1"
-    mock_version.assert_called_once_with("vllm-mlx")
+    mock_version.assert_not_called()
 
 @patch("subprocess.run")
-def test_rapid_mlx_get_version_uses_timeout(mock_run):
+def test_rapid_mlx_get_client_version_uses_timeout(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "rapid-mlx 0.6.68\n"
     mock_result.stderr = ""
     mock_result.returncode = 0
     mock_run.return_value = mock_result
 
-    assert RapidMLXEngine().get_version() == "0.6.68"
+    assert RapidMLXEngine().get_client_version() == "0.6.68"
     assert mock_run.call_args.kwargs["timeout"] == 3
 
 
 @patch("subprocess.run")
-def test_rapid_mlx_get_version_accepts_plain_version(mock_run):
+def test_rapid_mlx_get_client_version_accepts_plain_version(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "0.6.68\n"
     mock_result.stderr = ""
     mock_result.returncode = 0
     mock_run.return_value = mock_result
 
-    assert RapidMLXEngine().get_version() == "0.6.68"
+    assert RapidMLXEngine().get_client_version() == "0.6.68"
 
 
 @patch("subprocess.run")
-def test_rapid_mlx_get_version_ignores_failed_command_output(mock_run):
+def test_rapid_mlx_get_client_version_ignores_failed_command_output(mock_run):
     mock_result = MagicMock()
     mock_result.stdout = "Error: rapid-mlx not initialized\n"
     mock_result.stderr = ""
     mock_result.returncode = 1
     mock_run.return_value = mock_result
 
-    assert RapidMLXEngine().get_version() == "unknown"
+    assert RapidMLXEngine().get_client_version() == "unknown"
 
 
 def test_parse_version_output_strips_trailing_punctuation():
@@ -1281,6 +1283,9 @@ def mock_stream_response(*args, **kwargs):
     class MockResponse:
         def raise_for_status(self):
             pass
+        def iter_bytes(self):
+            for line in self.iter_lines():
+                yield (line + "\n").encode()
         def iter_lines(self):
             yield 'data: {"choices": [{"delta": {"role": "assistant"}}]}'
             yield 'data: {"choices": [{"delta": {"content": "Hello"}}]}'
@@ -1314,6 +1319,9 @@ def mock_stream_response_reasoning_only_length(*args, **kwargs):
     class MockResponse:
         def raise_for_status(self):
             pass
+        def iter_bytes(self):
+            for line in self.iter_lines():
+                yield (line + "\n").encode()
         def iter_lines(self):
             yield 'data: {"choices": [{"delta": {"role": "assistant"}}]}'
             yield 'data: {"choices": [{"delta": {"content": ""}, "finish_reason": "length"}]}'
@@ -1360,6 +1368,9 @@ def mock_stream_response_empty(*args, **kwargs):
     class MockResponse:
         def raise_for_status(self):
             pass
+        def iter_bytes(self):
+            for line in self.iter_lines():
+                yield (line + "\n").encode()
         def iter_lines(self):
             yield 'data: {"choices": [{"delta": {"role": "assistant"}}]}'
             yield 'data: [DONE]'
@@ -1610,3 +1621,101 @@ def test_lmstudio_uses_its_own_port_environment_variable(monkeypatch):
     assert LMStudioEngine().port == 1234
     monkeypatch.setenv("MLX_CHRONOS_LMSTUDIO_PORT", "1235")
     assert LMStudioEngine().port == 1235
+
+
+@pytest.mark.parametrize('adapter', [OMLXEngine, RapidMLXEngine, VLLMMLXEngine, MLXLMEngine])
+def test_engine_version_prefers_server_then_its_process_installation(adapter):
+    engine = adapter()
+    with patch.object(engine, '_get_version_from_models_endpoint', return_value='9.8.7'), \
+         patch.object(engine, '_get_version_from_server_process') as process, \
+         patch.object(engine, 'get_client_version') as local:
+        assert engine.get_version() == '9.8.7'
+        assert engine.version_source == 'server_api'
+        local.assert_not_called()
+        process.assert_not_called()
+    with patch.object(engine, '_get_version_from_models_endpoint', return_value=None), \
+         patch.object(engine, '_get_version_from_openapi', return_value=None), \
+         patch.object(engine, '_get_version_from_server_process', return_value='1.2.3'), \
+         patch.object(engine, 'get_client_version', return_value='9.8.7') as local:
+        assert engine.get_version() == '1.2.3'
+        assert engine.version_source == 'process_package'
+        local.assert_not_called()
+    with patch.object(engine, '_get_version_from_models_endpoint', return_value=None), \
+         patch.object(engine, '_get_version_from_openapi', return_value=None), \
+         patch.object(engine, '_get_version_from_server_process', return_value=None), \
+         patch.object(engine, 'get_client_version', return_value='9.8.7') as local:
+        assert engine.get_version() == 'unknown'
+        assert engine.version_source == 'unavailable'
+        local.assert_not_called()
+
+
+@pytest.mark.parametrize('title,expected', [('oMLX API', '0.3.1'), ('FastAPI', '9.8.7')])
+def test_omlx_reads_only_its_native_release_in_openapi(title, expected):
+    engine = OMLXEngine()
+    response = httpx.Response(200, json={'info': {'title': title, 'version': '0.3.1'}},
+                              request=httpx.Request('GET', 'http://localhost:8000/openapi.json'))
+    with patch.object(engine, '_get_version_from_models_endpoint', return_value=None), \
+         patch.object(engine, '_http_get', return_value=response) as get, \
+         patch.object(engine, '_get_version_from_server_process', return_value='9.8.7'):
+        assert engine.get_version() == expected
+        assert get.call_args.args[0] == 'http://localhost:8000/openapi.json'
+        assert engine.version_source == ('server_api' if title == 'oMLX API' else 'process_package')
+
+
+@patch('mlx_chronos.engines.httpx.post')
+def test_mlx_lm_reuses_completion_probe_for_server_version(post):
+    engine = MLXLMEngine()
+    response = post.return_value
+    response.json.return_value = {'choices': [{'text': 'ok'}],
+        'system_fingerprint': '0.31.2-0.30.2-macOS-26.0-arm64-Metal4'}
+    with patch.object(engine, '_get_version_from_models_endpoint', return_value=None), \
+         patch.object(engine, '_get_version_from_server_process', return_value=None):
+        assert engine.get_version() == 'unknown'
+        engine.validate_completion_request('default_model')
+        assert engine.get_version() == '0.31.2'
+        assert engine.version_source == 'server_api'
+    post.assert_called_once()
+
+
+def test_process_version_is_discarded_when_listener_changes():
+    engine = VLLMMLXEngine()
+    with patch.object(engine, '_get_server_pids', side_effect=[[123], [456]]), \
+         patch('mlx_chronos.engines.process_package_version', return_value='1.2.3'):
+        assert engine._get_version_from_server_process() is None
+
+
+def test_multiple_listeners_preserve_server_presence_but_cannot_supply_a_version():
+    with patch('mlx_chronos.engines.subprocess.run', return_value=MagicMock(stdout='123\n456\n')), \
+         patch.object(RapidMLXEngine, '_process_matches_engine', return_value=True), \
+         patch('mlx_chronos.engines.process_package_version') as version:
+        engine = RapidMLXEngine()
+        assert engine._server_identity_matches() is True
+        assert engine._get_version_from_server_process() is None
+        version.assert_not_called()
+
+
+@pytest.mark.parametrize('fingerprint', [None, 'fp_a123', '0.31.2', '0.31.2bad-0.30.2-macOS-arm64'])
+def test_mlx_lm_does_not_interpret_unrecognized_fingerprints_as_versions(fingerprint):
+    engine = MLXLMEngine()
+    engine._observe_completion_version({'system_fingerprint': fingerprint})
+    assert engine._completion_server_version is None
+
+
+@pytest.mark.parametrize('adapter', [RapidMLXEngine, MLXLMEngine])
+def test_compatible_endpoint_does_not_prove_engine_identity(adapter):
+    engine = adapter()
+    with patch.object(engine, '_http_get', return_value=httpx.Response(200)), patch.object(
+        engine, 'get_server_pid', return_value=None,
+    ):
+        assert not engine.is_server_running()
+    with patch.object(engine, '_http_get', return_value=httpx.Response(200)), patch.object(
+        engine, 'get_server_pid', return_value=123,
+    ):
+        assert engine.is_server_running()
+
+
+def test_model_alias_prefers_exact_then_requires_unique_suffix():
+    engine = OMLXEngine()
+    assert engine._match_listed_model_id('foo', 'foo', ['owner/foo', 'foo']) == 'foo'
+    assert engine._match_listed_model_id('foo', 'foo', ['owner/foo', 'other/foo']) is None
+    assert engine._match_listed_model_id('foo', 'foo', ['owner/foo']) == 'owner/foo'

@@ -405,7 +405,7 @@ def test_wizard_engine_choices_rank_ready_engines_first(monkeypatch):
     engines = {
         "omlx": FakeEngine(False, False, "http://localhost:10240/v1"),
         "rapid-mlx": FakeEngine(True, False, "http://localhost:10241/v1"),
-        "vllm-mlx": FakeEngine(True, True, "http://localhost:8000/v1"),
+        "vllm-mlx": FakeEngine(False, True, "http://localhost:8000/v1"),
         "mlx-lm": FakeEngine(False, False, "http://localhost:8080/v1"),
         "mlx-serve": FakeEngine(False, False, "http://localhost:11234/v1"),
         "ollama": FakeEngine(False, False, "http://localhost:11434/v1"),
@@ -556,6 +556,51 @@ def test_wizard_prompt_run_config_prepares_publishable_defaults():
     assert config.connection_mode == "persistent"
 
 
+def test_wizard_can_switch_to_local_run_without_losing_custom_settings():
+    session = object.__new__(WizardSession)
+    session._confirm = lambda *_args, **_kwargs: False
+    selections = iter(["publishable", "done"])
+
+    def select(_message, choices, **_kwargs):
+        selected = next(selections)
+        assert selected in {key for _, key in choices}
+        return selected
+
+    session._select = select
+    original = RunWizardConfig(model="test", publishable=True, max_tokens=75,
+                               trials=2, min_tokens=50, connection_mode="per_request")
+    edited = session._edit_run_config(original)
+    assert not edited.publishable
+    assert (edited.max_tokens, edited.trials, edited.min_tokens, edited.connection_mode) == (
+        75, 2, 50, "per_request",
+    )
+    assert validate_run_config(edited) == []
+    assert "--publishable" not in shlex.split(build_run_command(edited))
+
+
+def test_wizard_summary_and_printed_command_preserve_literal_metadata():
+    from io import StringIO
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    output = StringIO()
+    session = object.__new__(WizardSession)
+    session.console = Console(file=output, width=220, color_system=None)
+    session.Panel = Panel
+    session.Table = Table
+    config = RunWizardConfig(model="org/model[blue]", notes="literal [/broken] [red]")
+    session._render_run_summary(config)
+    assert config.model in output.getvalue()
+    assert config.notes in output.getvalue()
+    output.truncate(0)
+    output.seek(0)
+    session._prompt_run_config = lambda _config: config
+    session._select = lambda *_args, **_kwargs: "print"
+    assert session._run_benchmark_flow() is True
+    assert build_run_command(config) in output.getvalue()
+
+
 def test_wizard_doctor_flow_passes_publishable_context():
     captured = {}
     confirmations = iter([True, True, True])
@@ -630,3 +675,27 @@ def test_wizard_call_command_catches_unexpected_exception():
 
     assert session._call_command(fail, None) is False
     assert session.console.messages == ["[red]Command failed:[/red] boom"]
+
+
+def test_wizard_error_messages_preserve_literal_text_and_manual_fallback():
+    from io import StringIO
+    from rich.console import Console
+    from rich.panel import Panel
+
+    output = StringIO()
+    session = object.__new__(WizardSession)
+    session.console = Console(file=output, width=160, color_system=None)
+    session.Panel = Panel
+    message = "server said [/broken] [red]"
+    session._load_model_ids = lambda _engine: ([], message)
+    session._ask_required_text = lambda *_args, **_kwargs: "manual-model"
+    assert session._ask_model("omlx") == "manual-model"
+    assert message in output.getvalue()
+
+    for error in (RuntimeError(message), SystemExit(message)):
+        def fail(_args):
+            raise error
+
+        assert session._call_command(fail, Namespace()) is False
+    session._render_run_errors([message])
+    assert output.getvalue().count(message) == 4

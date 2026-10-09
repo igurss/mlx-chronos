@@ -111,3 +111,12 @@ def test_background_update_check_notifies_when_update_available(monkeypatch, cap
     captured = capsys.readouterr()
     assert "Update available: mlx-chronos 0.2.2" in captured.err
     assert "mlx-chronos upgrade" in captured.err
+
+
+def test_version_order_preserves_release_qualifiers():
+    assert is_newer_version('0.5.1', '0.5.1rc1')
+    assert is_newer_version('0.5.1.post1', '0.5.1')
+    assert is_newer_version('0.5.1rc1', '0.5.1.dev1')
+    assert not is_newer_version('0.5.1rc1', '0.5.1')
+    assert not is_newer_version('garbage', '0.5.1')
+    assert not is_newer_version('v0.5.1', '0.5.1.0')

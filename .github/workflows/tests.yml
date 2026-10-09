@@ -89,6 +89,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -98,8 +100,12 @@ jobs:
       - name: Install package
         run: pip install -e ".[test]"
 
-      - name: Verify checked-in leaderboard index is current
-        run: python -m mlx_chronos.leaderboard --check
+      # Result-only changes are indexed by update_leaderboard after merge.
+      # Code/index changes still require the checked-in index to be current.
+      - name: Validate archive and check index ownership
+        env:
+          INDEX_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python .github/scripts/check_leaderboard.py
 
       - name: Lint
         run: ruff check mlx_chronos tests

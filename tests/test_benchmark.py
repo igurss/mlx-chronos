@@ -71,6 +71,43 @@ def test_invalid_input_counts_cannot_enter_throughput_results(input_tokens):
         validate_throughput_measurement(throughput_measurement(input_tokens=input_tokens))
 
 
+def test_cli_local_run_without_thermal_keeps_measurements_and_emits_warnings_once(tmp_path, caplog):
+    import json
+    from mlx_chronos.cli import cmd_run, parse_cli_args
+    from mlx_chronos.examples import EXAMPLE_RESULT
+
+    engine = MagicMock()
+    engine.name = "omlx"
+    engine.is_installed.return_value = False
+    engine.is_server_running.return_value = True
+    engine.validate_model_backend.return_value = {}
+    engine.get_version.return_value = "unknown"
+    engine.get_server_pid.return_value = None
+    engine.measure_ttft.return_value = 0.5
+    engine.measure_throughput.return_value = throughput_measurement(
+        tps=2, tokens=4, elapsed=2, source="word_fallback",
+    )
+    thermal = ThermalStateTracker(sampler=lambda: "unavailable_no_foundation")
+    memory = MagicMock(total=8 * 1024 ** 3, available=2 * 1024 ** 3)
+    caplog.set_level(logging.INFO, logger="mlx_chronos")
+    with patch("mlx_chronos.benchmark.get_engine", return_value=engine), \
+         patch("mlx_chronos.benchmark.detect_hardware", return_value=EXAMPLE_RESULT["hardware"]), \
+         patch("mlx_chronos.benchmark.ThermalStateTracker", return_value=thermal), \
+         patch("mlx_chronos.trackers.psutil.virtual_memory", return_value=memory):
+        cmd_run(parse_cli_args(["run", "--engine", "omlx", "--model", "org/model",
+                               "--trials", "1", "--format", "json", "--output-dir", str(tmp_path)]))
+    result = json.loads(next(tmp_path.glob("*.json")).read_text())
+    validate_integrity_seal(result)
+    assert result["metrics"]["request_tokens_per_second"]["mean"] == 2
+    assert result["meta"]["thermal_monitor"]["source"] == "unavailable"
+    assert result["meta"]["word_fallback_warning"] is True
+    explanations = [record for record in caplog.records
+                    if "throughput token counts used word_fallback" in record.message]
+    assert len(explanations) == 1
+    cache = [record for record in caplog.records if record.message.startswith("  Cache timing:")]
+    assert len(cache) == 1 and cache[0].levelno == logging.INFO
+
+
 def test_benchmark_profile_constants_are_schema_values():
     assert BENCHMARK_PROFILE_BASELINE == "baseline"
     assert BENCHMARK_PROFILE_SUSTAINED == "sustained"
@@ -415,6 +452,8 @@ def test_run_benchmark(mock_detect, mock_get_engine, input_counts):
     
     mock_engine = MagicMock()
     mock_engine.name = "omlx"
+    mock_engine.is_installed.return_value = False
+    mock_engine.is_server_running.return_value = True
     mock_engine.measure_ttft.side_effect = [0.5, 0.5, 0.2, 0.2, 0.2]
     mock_engine.measure_tokens_per_second.return_value = 20.0
     mock_engine.measure_throughput.side_effect = [
@@ -460,10 +499,11 @@ def test_run_benchmark(mock_detect, mock_get_engine, input_counts):
     
     assert result["engine"]["name"] == "omlx"
     assert result["engine"]["version"] == "1.0.0"
-    assert result["engine"]["serving_config"] == {
-        "observed": {"allocated_context_length": 8192},
-        "declared": {"allocated_context_length": 4096, "cache_policy": "off"},
-    }
+    config = result["engine"]["serving_config"]
+    assert config["observed"] == {"allocated_context_length": 8192}
+    assert config["declared"] == {"allocated_context_length": 4096, "cache_policy": "off"}
+    assert config["observation_phase"] == "after_measurement"
+    assert config["observed_at"].endswith("Z")
     assert result["model"]["name"] == "org/test-model"
     assert result["model"]["reference_url"] == "https://huggingface.co/org/test-model"
     assert result["metrics"]["tokens_per_second"]["mean"] == 20.0
@@ -516,7 +556,7 @@ def test_run_benchmark(mock_detect, mock_get_engine, input_counts):
     ]
     protocol = result["meta"]["benchmark_protocol"]
     assert protocol["name"] == "baseline"
-    assert protocol["version"] == "4"
+    assert protocol["version"] == "5"
     assert protocol["warmup"]["request_mode"] == "streaming"
     assert protocol["warmup"]["stream_usage_requested"] is False
     assert protocol["warmup"]["connection_mode"] == "persistent"
@@ -1557,3 +1597,38 @@ def test_run_benchmark_rejects_invalid_throughput_token_bounds():
             throughput_max_tokens=20,
             throughput_min_tokens=30,
         )
+
+
+def test_monitor_startup_failure_stops_already_acquired_tracker():
+    engine = MagicMock()
+    engine.get_version.return_value = '1.0.0'
+    engine.validate_model_backend.return_value = {}
+    thermal = MagicMock()
+    thermal.stop.return_value = FakeThermalStateTracker().stop()
+    ram = MagicMock()
+    ram.start.side_effect = RuntimeError('thread startup failed')
+    ram.stop.return_value = (1., 10.)
+    with patch('mlx_chronos.benchmark.detect_hardware', return_value={
+        'chip': 'Apple M2', 'memory_gb': 8., 'macos_version': '15.3.1',
+    }), patch('mlx_chronos.benchmark.get_engine', return_value=engine), patch(
+        'mlx_chronos.benchmark.ThermalStateTracker', return_value=thermal,
+    ), patch('mlx_chronos.benchmark.SystemRAMTracker', return_value=ram):
+        with pytest.raises(RuntimeError, match='thread startup failed'):
+            run_benchmark('omlx', 'model', '4bit')
+    thermal.stop.assert_called_once()
+    ram.stop.assert_called_once()
+
+
+def test_failed_ram_fallback_is_unavailable_not_zero():
+    from mlx_chronos.benchmark import _sample_current_system_ram
+    with patch('mlx_chronos.benchmark.psutil.virtual_memory', side_effect=OSError('unavailable')):
+        with pytest.raises(RuntimeError, match='RAM measurement is unavailable'):
+            _sample_current_system_ram()
+
+
+@pytest.mark.parametrize('value', [True, 1.5, '5', None])
+def test_nonintegral_trial_count_is_rejected_before_hardware_probes(value):
+    with patch('mlx_chronos.benchmark.detect_hardware') as hardware:
+        with pytest.raises(ValueError, match='integer'):
+            run_benchmark('omlx', 'model', '4bit', trials=value)
+        hardware.assert_not_called()

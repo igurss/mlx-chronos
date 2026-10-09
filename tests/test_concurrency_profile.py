@@ -17,7 +17,7 @@ def _measurement(source="usage.completion_tokens", tokens=50):
 
 def _engine():
     engine = MagicMock()
-    engine.is_installed.return_value = True
+    engine.is_installed.return_value = False
     engine.is_server_running.return_value = True
     engine.validate_model_backend.return_value = {
         "format": "mlx",
@@ -54,7 +54,9 @@ def _run(engine, **kwargs):
 
 def test_default_run_never_reuses_a_prompt_across_warmup_or_measured_waves():
     engine = _engine()
+    engine.version_source = 'process_package'
     report = _run(engine)
+    assert report['engine']['version_source'] == 'process_package'
 
     assert [level["concurrency"] for level in report["levels"]] == [1, 2, 4, 8]
     prompts = [
@@ -100,7 +102,10 @@ def test_warmup_is_separate_and_exact_usage_is_required_only_for_measurement():
 
     engine.measure_throughput.side_effect = measurement
     report = _run(engine, levels=[2], trials_per_level=1)
-    assert report["levels"][0]["waves"][0]["warmup"]["total_completion_tokens"] == 100
+    warmup = report["levels"][0]["waves"][0]["warmup"]
+    assert warmup["token_count_sources"] == ["word_fallback", "word_fallback"]
+    assert warmup["token_count_source"] == "word_fallback"
+    assert warmup["total_completion_tokens"] == 100
     assert report["levels"][0]["waves"][0]["total_completion_tokens"] == 100
     assert all(
         call.kwargs["allow_stream_usage_fallback"] is False

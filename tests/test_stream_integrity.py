@@ -146,3 +146,102 @@ def test_estimated_words_preserve_boundaries_between_chunks():
         value = OMLXEngine().measure_throughput("fake", client=client, progress_sample_interval_tokens=2)
     assert value.completion_tokens == len("".join(fragments).split()) == 5
     assert value.token_count_source == "word_fallback"
+
+
+@pytest.mark.parametrize('event', ['42', '[]', 'null'])
+def test_nonobject_events_are_rejected(event):
+    with stream_client([event, CONTENT, '[DONE]']) as client:
+        with pytest.raises(RuntimeError, match='JSON object'):
+            OMLXEngine().measure_ttft('fake', client=client)
+
+
+def test_finish_allows_usage_but_rejects_further_content():
+    finish = '{"choices":[{"delta":{},"finish_reason":"stop"}]}'
+    with stream_client([CONTENT, finish, USAGE, '[DONE]']) as client:
+        assert OMLXEngine().measure_throughput('fake', client=client).completion_tokens == 100
+    with stream_client([finish, CONTENT, '[DONE]']) as client:
+        with pytest.raises(RuntimeError, match='after finish_reason'):
+            OMLXEngine().measure_ttft('fake', client=client)
+
+
+def test_deadline_is_checked_without_a_newline():
+    from mlx_chronos.streaming import completion_lines
+    clock = [0.0]
+    consumed = []
+
+    class SlowBody(httpx.SyncByteStream):
+        def __iter__(self):
+            for index in range(50):
+                clock[0] += 0.4
+                consumed.append(index)
+                yield b'data: '
+
+    response = httpx.Response(200, stream=SlowBody())
+    with pytest.raises(RuntimeError, match='deadline exceeded'):
+        list(completion_lines(response, deadline=1.0, context='test', clock=lambda: clock[0]))
+    assert len(consumed) == 3
+
+
+def test_unterminated_line_has_a_byte_limit(monkeypatch):
+    from mlx_chronos.streaming import completion_lines
+    monkeypatch.setattr('mlx_chronos.streaming.MAX_STREAM_LINE_BYTES', 8)
+    response = httpx.Response(200, content=b'data: ' + b'x' * 9)
+    with pytest.raises(RuntimeError, match='size limit'):
+        list(completion_lines(response, deadline=float('inf'), context='test'))
+
+
+def test_utf8_and_crlf_can_cross_transport_chunks():
+    from mlx_chronos.streaming import completion_lines
+
+    class Body(httpx.SyncByteStream):
+        def __iter__(self):
+            yield b'data: caf\xc3'
+            yield b'\xa9\r'
+            yield b'\nnext\n'
+
+    response = httpx.Response(200, stream=Body())
+    assert [line for line in completion_lines(response, deadline=float('inf'), context='test') if line] == ['data: café', 'next']
+
+
+def test_ttft_retains_submillisecond_precision():
+    with stream_client([CONTENT, '[DONE]']) as client, patch('mlx_chronos.engines.time') as clock:
+        clock.monotonic.return_value = 0.
+        clock.perf_counter.side_effect = [0.0, 0.0004]
+        assert OMLXEngine().measure_ttft('fake', client=client) == 0.0004
+
+
+def test_estimated_progress_ends_at_delayed_done():
+    content = json.dumps({'choices': [{'delta': {'content': 'word ' * 100}}]})
+    with stream_client([content, '[DONE]']) as client, patch('mlx_chronos.engines.time') as clock:
+        clock.monotonic.return_value = 0.
+        clock.perf_counter.side_effect = [0.0, 0.2, 1.0]
+        result = OMLXEngine().measure_throughput('fake', client=client, progress_sample_interval_tokens=100)
+    assert result.elapsed_seconds == 1.0
+    assert result.progress_samples[-1]['elapsed_seconds'] == result.elapsed_seconds
+    assert result.progress_samples[-1]['tokens_per_second'] == 100.0
+
+
+@pytest.mark.parametrize('prior_content', [False, True])
+def test_final_content_and_finish_share_one_arrival_time(prior_content):
+    from mlx_chronos.measurements import validate_throughput_measurement
+
+    lines = []
+    ticks = [0.0]
+    if prior_content:
+        lines.append(json.dumps({'choices': [{'delta': {'content': 'word ' * 100}}]}))
+        ticks.append(0.5)
+    lines.append(json.dumps({
+        'choices': [{'delta': {'content': 'word ' * (100 if prior_content else 200)}, 'finish_reason': 'length'}],
+        'usage': {'completion_tokens': 200},
+    }))
+    ticks.append(1.0)
+    with stream_client(lines) as client, patch('mlx_chronos.engines.time') as clock:
+        clock.monotonic.return_value = 0.0
+        clock.perf_counter.side_effect = ticks
+        result = OMLXEngine().measure_throughput(
+            'fake', max_tokens=200, client=client, progress_sample_interval_tokens=50,
+        )
+    validate_throughput_measurement(result, max_tokens=200)
+    assert result.elapsed_seconds == 1.0
+    assert all(sample['elapsed_seconds'] <= 1.0 for sample in result.progress_samples)
+    assert result.decode_elapsed_seconds == (0.5 if prior_content else None)

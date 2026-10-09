@@ -9,7 +9,7 @@ from mlx_chronos.engines import OMLXEngine
 
 def _stream_response(lines):
     response = MagicMock()
-    response.iter_lines.return_value = lines
+    response.iter_bytes.return_value = [(line + "\n").encode() for line in lines]
     return nullcontext(response)
 
 

@@ -27,8 +27,8 @@ from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
 from mlx_chronos.http_retry import request_with_retry
 from mlx_chronos.numeric import require_finite_positive
 from mlx_chronos.protocol import (
-    BASELINE_PROTOCOL_VERSION,
     ARCHIVED_PROTOCOL_VERSIONS,
+    PUBLIC_PROTOCOL_VERSIONS,
     CONNECTION_MODE_PERSISTENT,
     build_benchmark_protocol,
 )
@@ -124,7 +124,7 @@ def _expected_public_profile_shape(profile: str) -> tuple[int, int]:
     return SUSTAINED_TRIALS, SUSTAINED_THROUGHPUT_MAX_TOKENS
 
 
-def _validate_public_protocol(result: BenchmarkResult, *, allow_archived_protocol: bool = False) -> None:
+def _validate_public_protocol(result: BenchmarkResult) -> None:
     expected_trials, expected_max_tokens = _expected_public_profile_shape(
         result.meta.benchmark_profile
     )
@@ -140,10 +140,12 @@ def _validate_public_protocol(result: BenchmarkResult, *, allow_archived_protoco
                 name=result.meta.benchmark_profile,
                 connection_mode=CONNECTION_MODE_PERSISTENT,
                 warmup_stream_usage_requested=warmup_stream_usage_requested,
+                throughput_input_tokens=result.meta.benchmark_protocol.throughput.input_tokens,
             )
         ).model_dump(mode="json")
-        if allow_archived_protocol:
-            expected_protocol["version"] = actual_protocol["version"]
+        # Eligibility was checked separately. Compare the complete contract for
+        # both accepted producers, without upgrading or resealing the file.
+        expected_protocol["version"] = actual_protocol["version"]
         difference = _first_protocol_difference(expected_protocol, actual_protocol)
         if difference is None:
             return
@@ -305,14 +307,14 @@ def validate_publishable_result(
     expected_trials, expected_max_tokens = _expected_public_profile_shape(profile)
 
     protocol = result.meta.benchmark_protocol
-    if protocol.version != BASELINE_PROTOCOL_VERSION and not (
+    if protocol.version not in PUBLIC_PROTOCOL_VERSIONS and not (
         allow_archived_protocol and protocol.version in ARCHIVED_PROTOCOL_VERSIONS
     ):
         raise SubmissionError(
             "leaderboard submissions must use the current internal protocol "
-            f"label {BASELINE_PROTOCOL_VERSION!r}; got {protocol.version!r}"
+            f"labels ({', '.join(sorted(PUBLIC_PROTOCOL_VERSIONS))}); got {protocol.version!r}"
         )
-    if protocol.version == BASELINE_PROTOCOL_VERSION:
+    if protocol.version in {"4", "5"}:
         monitor = result.meta.thermal_monitor
         if (
             monitor.samples < 2
@@ -380,7 +382,21 @@ def validate_publishable_result(
         )
 
     _validate_public_completion_tokens(result, expected_max_tokens)
-    _validate_public_protocol(result, allow_archived_protocol=allow_archived_protocol)
+    if protocol.version == "5":
+        if result.engine.version_source not in {"server_api", "runtime_probe", "process_package"}:
+            raise SubmissionError("leaderboard submissions require version evidence tied to the serving process; a client installation alone is insufficient")
+        monitor = result.meta.thermal_monitor
+        phase_duration = sum(
+            duration for name, duration in result.meta.phase_timings_seconds.model_dump().items()
+            if name != "total_runtime"
+        )
+        span = monitor.sample_span_seconds
+        gap = monitor.max_sample_gap_seconds
+        if (span is None or gap is None
+                or span + PHASE_TIMING_TOLERANCE_SECONDS < phase_duration
+                or (monitor.samples - 1) * gap + PHASE_TIMING_TOLERANCE_SECONDS < span):
+            raise SubmissionError("leaderboard submissions require thermal sampling covering all benchmark phases")
+    _validate_public_protocol(result)
     _validate_public_ollama_model_format(
         result,
         allow_legacy_missing_ollama_model_format=(

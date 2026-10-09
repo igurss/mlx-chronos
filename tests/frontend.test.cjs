@@ -208,6 +208,34 @@ test("server settings are labeled by source and escaped in details", () => {
   assert.doesNotMatch(markup, /<img src=x onerror=1>/);
 });
 
+test("local engine versions carry their uncertainty into public details and badges", () => {
+  for (const source of ["client_cli", "client_package"]) {
+    const row = {engine_version: "1.2.3", engine_version_source: source, engine_client_version: "1.2.3"};
+    assert.match(context.detailsPanel(row), /serving version unverified/);
+    assert.match(context.conditionBadges(row), /serving version unverified/);
+  }
+  assert.match(context.detailsPanel({engine_version_source: "server_api"}), /Server API/);
+  assert.match(context.detailsPanel({}), /Version evidence[\s\S]*not recorded/);
+});
+
+test("process installation evidence remains explicitly indirect", () => {
+  const row = {engine_version: "1.2.3", engine_version_source: "process_package"};
+  assert.match(context.detailsPanel(row), /Server process installation; loaded runtime version unverified/);
+  assert.match(context.conditionBadges(row), /indirect version evidence/);
+});
+
+test("inconsistent historical progress cannot confirm sustained slowdown", () => {
+  for (const recorded of [false, true]) {
+    const markup = context.conditionBadges({progress_chronology_warning: true,
+      sustained_warning_unverified: recorded, sustained_throttling_warning: false});
+    assert.match(markup, /progress timing inconsistent/);
+    assert.doesNotMatch(markup, /sustained slowdown/);
+    assert.equal(markup.includes("slowdown unverified"), recorded);
+  }
+  assert.match(context.conditionBadges({sustained_throttling_warning: true}), /sustained slowdown/);
+  assert.match(context.conditionBadges({sustained_throttling_warning: true, progress_chronology_warning: true}), /slowdown unverified/);
+});
+
 test("buildCompareChartMarkup draws one bar per engine with request tok/s widths", () => {
   const representatives = [
     { engine: "rapid-mlx", tps: 27.46 },

@@ -29,6 +29,7 @@ from mlx_chronos.measurements import (
     validate_throughput_measurement,
 )
 from mlx_chronos.model_reference import normalize_model_reference_url
+from mlx_chronos.reproducibility import client_environment
 from mlx_chronos.numeric import (
     is_finite_number,
     require_finite_non_negative,
@@ -180,8 +181,8 @@ def _rounded_or_none(value: object, digits: int = 3) -> float | None:
 def _sample_current_system_ram() -> tuple[float, float]:
     try:
         mem = psutil.virtual_memory()
-    except Exception:
-        return 0.0, 0.0
+    except Exception as exc:
+        raise RuntimeError("system RAM measurement is unavailable") from exc
     used_bytes = max(0, mem.total - mem.available)
     percent = (used_bytes / mem.total * 100) if mem.total else 0.0
     return used_bytes / (1024 ** 3), percent
@@ -355,6 +356,13 @@ def run_benchmark(
         raise ValueError(
             f"benchmark_profile must be one of {sorted(VALID_BENCHMARK_PROFILES)}"
         )
+    for name, value in (
+        ("trials", trials), ("throughput_max_tokens", throughput_max_tokens),
+        ("throughput_min_tokens", throughput_min_tokens),
+        ("progress_sample_interval_tokens", progress_sample_interval_tokens),
+    ):
+        if type(value) is not int and (value is not None or name in {"trials", "throughput_max_tokens"}):
+            raise ValueError(f"{name} must be an integer")
     if trials > MAX_TRIALS:
         raise ValueError(
             f"Max trials is {MAX_TRIALS} (one unique cold prompt per trial). "
@@ -432,9 +440,6 @@ def run_benchmark(
     # 2. Get engine
     engine = get_engine(engine_name)
 
-    if not engine.is_installed():
-        raise RuntimeError(f"Engine '{engine_name}' is not installed.")
-
     if not engine.is_server_running():
         raise RuntimeError(
             f"Engine '{engine_name}' server is not running. "
@@ -463,17 +468,9 @@ def run_benchmark(
 
     # 3. Engine version
     engine_version = engine.get_version()
-    logger.info(f"Engine version: {engine_version}\n")
+    version_note = " (server installation; indirect)" if engine.version_source == "process_package" else ""
+    logger.info(f"Engine version: {engine_version}{version_note}\n")
     engine_version_warning = engine_version == "unknown"
-    if engine_version_warning:
-        logger.warning(
-            "  Warning: engine version could not be detected; "
-            "engine.version will be saved as 'unknown'."
-        )
-        logger.warning(
-            "  Engine versions affect comparability. Try restarting the engine "
-            "server or updating the engine CLI if this persists.\n"
-        )
 
     # 4. Start background sampling before warmup so load/cache pressure is captured.
     phase_timings: dict[str, float] = {}
@@ -483,14 +480,12 @@ def run_benchmark(
         f"({DEFAULT_THERMAL_SAMPLE_INTERVAL:.3f}s interval)..."
     )
     thermal_tracker = ThermalStateTracker(interval=DEFAULT_THERMAL_SAMPLE_INTERVAL)
-    thermal_tracker.start()
 
     logger.info(
         f"Starting continuous background system RAM sampling "
         f"({ram_sample_interval:.3f}s interval)..."
     )
     system_ram_tracker = SystemRAMTracker(interval=ram_sample_interval)
-    system_ram_tracker.start()
 
     # 5. Run warmup and trials
     ttft_cold_trials = []
@@ -525,9 +520,13 @@ def run_benchmark(
     }
     thermal_summary = None
     ram_tracker = None
+    system_ram_teardown_failed = False
+    engine_ram_teardown_failed = False
     ram_is_process_rss = False
 
     try:
+        thermal_tracker.start()
+        system_ram_tracker.start()
         # Warmup phase — 2 calls with the throughput prompt, not recorded
         with (
             engine.http_client()
@@ -727,24 +726,11 @@ def run_benchmark(
                     exc,
                 )
                 peak_ram_gb = None
+                engine_ram_teardown_failed = True
                 ram_is_process_rss = False
         else:
             ram_is_process_rss = False
 
-        try:
-            system_ram_peak_gb, system_ram_peak_percent = system_ram_tracker.stop()
-            system_ram_occupancy = system_ram_tracker.occupancy_summary()
-        except Exception as exc:
-            logger.warning(
-                "System RAM sampling failed during teardown; using current "
-                "system RAM snapshot as fallback: %s",
-                exc,
-            )
-            system_ram_peak_gb, system_ram_peak_percent = _sample_current_system_ram()
-        logger.info(
-            "System RAM sampling finished. Peak detected: "
-            f"{system_ram_peak_gb:.2f} GB ({system_ram_peak_percent:.1f}%)\n"
-        )
         try:
             thermal_summary = thermal_tracker.stop()
         except Exception as exc:
@@ -754,6 +740,21 @@ def run_benchmark(
                 exc,
             )
             thermal_summary = _unavailable_thermal_summary()
+        try:
+            system_ram_peak_gb, system_ram_peak_percent = system_ram_tracker.stop()
+            system_ram_occupancy = system_ram_tracker.occupancy_summary()
+        except Exception as exc:
+            logger.warning(
+                "System RAM sampling failed during teardown; using current "
+                "system RAM snapshot as fallback: %s",
+                exc,
+            )
+            system_ram_teardown_failed = True
+            system_ram_peak_gb, system_ram_peak_percent = _sample_current_system_ram()
+        logger.info(
+            "System RAM sampling finished. Peak detected: "
+            f"{system_ram_peak_gb:.2f} GB ({system_ram_peak_percent:.1f}%)\n"
+        )
         phase_timings["total_runtime"] = round(
             time.perf_counter() - total_runtime_start,
             3,
@@ -772,18 +773,19 @@ def run_benchmark(
     logger.info("")
 
     # 6. Compute statistics
-    ttft_cold_stats = compute_stats(ttft_cold_trials)
-    ttft_cached_stats = compute_stats(ttft_cached_trials)
-    tps_stats = compute_stats(tps_trials)
+    ttft_cold_stats = compute_stats(ttft_cold_trials, round_digits=None)
+    ttft_cached_stats = compute_stats(ttft_cached_trials, round_digits=None)
+    tps_stats = compute_stats(tps_trials, round_digits=None)
     cached_ttft_warning = (
         ttft_cold_stats["mean"] > 0
         and ttft_cached_stats["mean"]
         >= ttft_cold_stats["mean"] * _cached_ttft_warning_ratio()
     )
     if cached_ttft_warning:
-        logger.warning(
-            "  Warning: cached TTFT is close to cold TTFT. The engine may not "
-            "have reused a prompt/KV cache for this run."
+        logger.info(
+            "  Cache timing: cached TTFT is close to cold TTFT; no clear "
+            "latency benefit was observed. Timings alone do not establish "
+            "whether the prompt/KV cache was reused."
         )
     token_count_source = _summarize_token_count_sources(token_count_sources)
     word_fallback_warning = token_count_source in {
@@ -822,7 +824,7 @@ def run_benchmark(
         if len(unique_decode_sources) == 1 and unique_decode_sources <= {
             DECODE_TIMING_CLIENT_STREAM,
         }:
-            decode_tps_stats = compute_stats(decode_tps_trials)
+            decode_tps_stats = compute_stats(decode_tps_trials, round_digits=None)
             decode_timing_source = next(iter(unique_decode_sources))
         else:
             logger.warning(
@@ -859,6 +861,26 @@ def run_benchmark(
             swap_growth_gb,
         )
 
+    if engine.version_requires_completion_probe is True:
+        # Existing warmup/measurement responses may supply mlx-lm's version.
+        # Do not add another inference request or retain a stale local fallback.
+        engine_version = engine.get_version()
+        engine_version_warning = engine_version == "unknown"
+    if engine_version_warning:
+        logger.info(
+            "Serving engine version is unavailable; saved as 'unknown'. "
+            "The server may not expose version evidence; version equivalence "
+            "cannot be verified for comparisons."
+        )
+    client_version = engine.get_client_version()
+    if not isinstance(client_version, str):
+        client_version = None
+    version_source = getattr(engine, "version_source", None)
+    if version_source not in {"server_api", "runtime_probe", "process_package", "client_cli", "client_package"}:
+        version_source = None
+    if engine_version == "unknown":
+        version_source = "unavailable"
+
     # 7. Build result
     model_metadata = {
         "name": model_name,
@@ -879,10 +901,23 @@ def run_benchmark(
         observed_config = {}
     declared_config = declared_serving_config or {}
     serving_config = None
+    observation_phase = getattr(engine, "configuration_observation_phase", None)
+    if observation_phase not in {"before_measurement", "after_measurement"}:
+        observation_phase = "after_measurement"
+    observed_at = getattr(engine, "configuration_observed_at", None)
+    if not isinstance(observed_at, str):
+        observed_at = datetime.now(timezone.utc).isoformat()
     if observed_config or declared_config:
         try:
             serving_config = ServingConfig.model_validate({
                 "observed": observed_config, "declared": declared_config,
+                "observation_phase": (
+                    observation_phase
+                    if observed_config else None
+                ),
+                "observed_at": (
+                    observed_at if observed_config else None
+                ),
             })
         except ValueError as exc:
             logger.warning("Ignoring invalid observed server configuration: %s", exc)
@@ -894,6 +929,8 @@ def run_benchmark(
         "engine": {
             "name": engine_name,
             "version": engine_version,
+            "client_version": client_version,
+            "version_source": version_source,
             "serving_config": (
                 serving_config.model_dump(mode="json") if serving_config else None
             ),
@@ -944,6 +981,7 @@ def run_benchmark(
         },
         "meta": {
             "chronos_version": VERSION,
+            "client_environment": client_environment(),
             "timestamp": datetime.now(timezone.utc),
             "benchmark_profile": benchmark_profile,
             "ram_sample_interval_seconds": ram_sample_interval,
@@ -956,13 +994,11 @@ def run_benchmark(
             "phase_timings_seconds": phase_timings,
             "thermal_monitor": thermal_summary,
             "warmup_failures": warmup_failures,
-            "system_ram_monitor_errors": getattr(
-                system_ram_tracker,
-                "sample_errors",
-                0,
+            "system_ram_monitor_errors": max(
+                getattr(system_ram_tracker, "sample_errors", 0), int(system_ram_teardown_failed),
             ),
             "engine_ram_monitor_errors": (
-                getattr(ram_tracker, "sample_errors", 0)
+                max(getattr(ram_tracker, "sample_errors", 0), int(engine_ram_teardown_failed))
                 if ram_tracker is not None
                 else 0
             ),

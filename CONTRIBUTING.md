@@ -43,7 +43,7 @@ result submission, one fix, or one feature.
 | --- | --- |
 | Hardware | Apple Silicon Mac with an M-series chip, `arm64`, and a valid macOS version |
 | Python | Python 3.10 or newer |
-| Engine | One supported engine installed and running, with a known engine version |
+| Engine | One reachable, identified supported server, with a known serving version; its installation may use a separate environment |
 | Power mode | Low Power Mode must be off for public leaderboard rows |
 | Token counts | Public rows must use `usage.completion_tokens` |
 | Monitoring | Continuous Foundation thermal sampling and error-free RAM/RSS monitoring |
@@ -241,10 +241,12 @@ fallback results also set `meta.word_fallback_warning`.
 `meta.benchmark_protocol.version` identifies the revision of the benchmark
 method and validation rules, independently of the CLI and app versions. See
 [what the protocol number means](docs/methodology.md#what-does-the-protocol-number-mean)
-for the history of labels `1`–`4` and their effect on comparisons.
+for the history of labels `1`–`5` and their effect on comparisons.
 
-CLI `0.5.1` and current-source submissions require label `4`, which records
-fully drained and validated completion streams plus thermal sampling coverage.
+Published CLI `0.5.1` uses label `4`, which records fully drained and validated
+completion streams plus thermal sampling coverage. Current source records label
+`5`, adding full clock precision, thermal coverage across measured phases and
+engine-version provenance. Both labels are accepted during the release transition.
 Archived label `3` results retain their original data and seals; they do not satisfy the
 current rules for a new submission. Never relabel an existing measurement.
 

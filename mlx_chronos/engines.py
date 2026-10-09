@@ -7,9 +7,11 @@ import os
 import re
 import importlib.metadata
 import importlib.util
+from datetime import datetime, timezone
 from collections.abc import Iterator
 import httpx
 import psutil
+from packaging.version import InvalidVersion, Version
 from abc import ABC, abstractmethod
 
 from urllib.parse import quote
@@ -43,6 +45,8 @@ from mlx_chronos.measurements import (
 )
 from mlx_chronos.http_retry import request_with_retry, stream_with_retry
 from mlx_chronos.numeric import require_finite_non_negative
+from mlx_chronos.streaming import completion_lines
+from mlx_chronos.server_versions import process_package_version
 
 logger = logging.getLogger("mlx_chronos")
 
@@ -59,9 +63,14 @@ class BaseEngine(ABC):
     default_port: int
     expected_process_names: tuple[str, ...] = ()
     requires_model_backend_validation = False
+    version_requires_completion_probe = False
+    version_source = "server_api"
+    configuration_observation_phase = "after_measurement"
+    configuration_observed_at: str | None = None
 
     def __init__(self, port: int | None = None):
         self.port = port if port is not None else self._configured_port()
+        self._completion_server_version: str | None = None
 
     def port_env_var(self) -> str:
         normalized_name = self.name.upper().replace("-", "_")
@@ -354,12 +363,14 @@ class BaseEngine(ABC):
         """Return a model id matching either user input or request payload id."""
         candidates = {requested, request_model}
 
-        for model_id in model_ids:
-            if model_id in candidates:
-                return model_id
-            if any(model_id.endswith(f"/{candidate}") for candidate in candidates):
-                return model_id
-        return None
+        for candidate in (requested, request_model):
+            if candidate in model_ids:
+                return candidate
+        matches = {
+            model_id for model_id in model_ids
+            if any(model_id.endswith(f"/{candidate}") for candidate in candidates)
+        }
+        return next(iter(matches)) if len(matches) == 1 else None
 
     def validate_completion_request(self, model: str) -> str:
         """Send a tiny non-streaming completion request and return the request model id."""
@@ -423,7 +434,11 @@ class BaseEngine(ABC):
                     request_model=request_model,
                 )
             )
+        self._observe_completion_version(data)
         return request_model
+
+    def _observe_completion_version(self, data: dict) -> None:
+        """Observe version evidence in an existing response, without another request."""
 
     def validate_model_backend(self, model: str) -> dict[str, str]:
         """Validate engine-specific model backend requirements."""
@@ -446,6 +461,11 @@ class BaseEngine(ABC):
 
     def get_server_pid(self) -> int | None:
         """Return the listening server PID for this engine port when available."""
+        pids = self._get_server_pids()
+        return pids[0] if pids else None
+
+    def _get_server_pids(self) -> list[int]:
+        """Find listeners without conflating server presence with unique provenance."""
         try:
             result = subprocess.run(
                 ["lsof", "-nP", f"-iTCP:{self.port}", "-sTCP:LISTEN", "-t"],
@@ -454,16 +474,18 @@ class BaseEngine(ABC):
                 timeout=2,
             )
             pids = result.stdout.strip().split()
+            matches = []
             for pid_text in pids:
                 try:
                     pid = int(pid_text)
                 except ValueError:
                     continue
-                if self._process_matches_engine(pid):
-                    return pid
+                if pid not in matches and self._process_matches_engine(pid):
+                    matches.append(pid)
+            return matches
         except Exception:
             pass
-        return None
+        return []
 
     def _process_matches_engine(self, pid: int) -> bool:
         if not self.expected_process_names:
@@ -604,9 +626,7 @@ class BaseEngine(ABC):
         deadline = time.monotonic() + timeout
         done = False
         terminal = False
-        for line in response.iter_lines():
-            if time.monotonic() >= deadline:
-                raise RuntimeError(f"{context}; completion stream deadline exceeded")
+        for line in completion_lines(response, deadline=deadline, context=context, clock=time.monotonic):
             if isinstance(line, bytes):
                 line = line.decode("utf-8", errors="strict")
             if not line or not line.startswith("data:"):
@@ -625,15 +645,18 @@ class BaseEngine(ABC):
             except json.JSONDecodeError as exc:
                 raise RuntimeError(f"{context}; malformed completion stream JSON") from exc
             if not isinstance(chunk, dict):
-                continue
+                raise RuntimeError(f"{context}; completion stream event must be a JSON object")
             if "error" in chunk:
                 detail = str(chunk["error"])[:ERROR_RESPONSE_BODY_LIMIT]
                 raise RuntimeError(f"{context}; completion stream error: {detail}")
+            if terminal and self._stream_chunk_has_content(chunk):
+                raise RuntimeError(f"{context}; content received after finish_reason")
             reason = self._extract_stream_finish_reason(chunk)
             if reason is not None:
                 if reason not in {"stop", "length", "tool_calls", "function_call", "content_filter"}:
                     raise RuntimeError(f"{context}; unsupported finish_reason: {reason!r}")
                 terminal = True
+            self._observe_completion_version(chunk)
             yield chunk
         if not terminal:
             raise RuntimeError(f"{context}; stream ended without a completion marker")
@@ -647,18 +670,15 @@ class BaseEngine(ABC):
     ) -> None:
         if completion_tokens <= 0 or elapsed_seconds <= 0:
             return
-        rounded_elapsed_seconds = round(elapsed_seconds, 3)
-        if rounded_elapsed_seconds <= 0:
-            return
         sample = {
             "completion_tokens": completion_tokens,
-            "elapsed_seconds": rounded_elapsed_seconds,
-            "tokens_per_second": round(completion_tokens / rounded_elapsed_seconds, 2),
+            "elapsed_seconds": elapsed_seconds,
+            "tokens_per_second": completion_tokens / elapsed_seconds,
             "token_count_source": token_count_source,
         }
         if (
             samples
-            and samples[-1]["elapsed_seconds"] == rounded_elapsed_seconds
+            and samples[-1]["elapsed_seconds"] == elapsed_seconds
             and samples[-1]["token_count_source"] == token_count_source
         ):
             samples[-1] = sample
@@ -672,7 +692,7 @@ class BaseEngine(ABC):
     ) -> str | None:
         for key in version_keys:
             value = mapping.get(key)
-            if isinstance(value, (str, int, float)):
+            if isinstance(value, str):
                 version = str(value).strip()
                 if version:
                     return version
@@ -719,9 +739,43 @@ class BaseEngine(ABC):
         if isinstance(items, list):
             for item in items:
                 if isinstance(item, dict):
-                    version = self._version_from_mapping(item, version_keys)
+                    version = self._version_from_mapping(item, tuple(key for key in version_keys if key != "version"))
                     if version:
                         return version
+        return None
+
+    def _get_version_from_server_process(self) -> str | None:
+        pids = self._get_server_pids()
+        if len(pids) != 1:
+            return None
+        pid = pids[0]
+        version = process_package_version(pid, self.name)
+        # Do not retain evidence if the listener was replaced during the read.
+        return version if self._get_server_pids() == pids else None
+
+    def _version_with_process_fallback(self, server_version: str | None) -> str:
+        if server_version:
+            self.version_source = "server_api"
+            return server_version
+        version = self._get_version_from_server_process()
+        self.version_source = "process_package" if version else "unavailable"
+        return version or "unknown"
+
+    def _get_version_from_openapi(self, expected_title: str) -> str | None:
+        # oMLX sets info.version from __version__. Rapid/vllm instead use a
+        # static API-schema version, which must not be treated as a release.
+        try:
+            response = self._http_get(
+                f"{self.root_url()}/openapi.json", timeout=2.0,
+                action="version lookup", log_retries=False,
+            )
+            response.raise_for_status()
+            data = response.json()
+            info = data.get("info") if isinstance(data, dict) else None
+            if isinstance(info, dict) and info.get("title") == expected_title:
+                return self._version_from_mapping(info, ("version",))
+        except Exception:
+            pass
         return None
 
     def _should_retry_without_stream_usage(self, exc: httpx.HTTPError) -> bool:
@@ -787,7 +841,7 @@ class BaseEngine(ABC):
                         self._stream_chunk_has_content(chunk)
                         or self._stream_chunk_has_terminal_token(chunk)
                     ):
-                        ttft = round(time.perf_counter() - start, 3)
+                        ttft = time.perf_counter() - start
                 if ttft is not None:
                     return ttft
         except httpx.HTTPError as exc:
@@ -847,7 +901,7 @@ class BaseEngine(ABC):
                             self._stream_chunk_has_content(chunk)
                             or self._stream_chunk_has_terminal_token(chunk)
                         ):
-                            ttft = round(max(time.perf_counter() - started, 0.001), 3)
+                            ttft = time.perf_counter() - started
                         usage = chunk.get("usage")
                         if isinstance(usage, dict):
                             count = usage.get("prompt_tokens")
@@ -891,6 +945,14 @@ class BaseEngine(ABC):
         allow_stream_usage_fallback: bool = True,
     ) -> ThroughputMeasurement:
         """Measure request throughput and client-observed decode throughput."""
+        for name, value in (("max_tokens", max_tokens), ("min_tokens", min_tokens),
+                            ("progress_sample_interval_tokens", progress_sample_interval_tokens)):
+            if value is None and name != "max_tokens":
+                continue
+            if type(value) is not int or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if min_tokens is not None and min_tokens > max_tokens:
+            raise ValueError("min_tokens must not exceed max_tokens")
         if (
             progress_sample_interval_tokens is not None
             and progress_sample_interval_tokens <= 0
@@ -954,13 +1016,21 @@ class BaseEngine(ABC):
                             input_tokens = usage_input_tokens
 
                         chunk_finish_reason = self._extract_stream_finish_reason(chunk)
+                        has_content = self._stream_chunk_has_content(chunk)
+                        # One event has one arrival time, including a final event
+                        # carrying content or a burst crossing several thresholds.
+                        received_at = (
+                            time.perf_counter()
+                            if has_content or chunk_finish_reason is not None else None
+                        )
                         if chunk_finish_reason is not None:
                             finish_reason = chunk_finish_reason
-                            terminal_at = time.perf_counter()
+                            terminal_at = received_at
 
-                        if self._stream_chunk_has_content(chunk):
+                        if has_content:
+                            assert received_at is not None
                             if first_token_at is None:
-                                first_token_at = time.perf_counter()
+                                first_token_at = received_at
                             text = self._extract_stream_text(chunk)
                             if text:
                                 if next_progress_sample_at is None:
@@ -975,7 +1045,7 @@ class BaseEngine(ABC):
                                         self._append_progress_sample(
                                             progress_samples,
                                             next_progress_sample_at,
-                                            time.perf_counter() - start,
+                                            received_at - start,
                                             TOKEN_COUNT_SOURCE_WORD_FALLBACK,
                                         )
                                         next_progress_sample_at += (
@@ -1003,9 +1073,8 @@ class BaseEngine(ABC):
         if ended_at is None:
             raise RuntimeError("completion stream has no terminal timestamp")
         elapsed = ended_at - start
-        rounded_elapsed = round(max(elapsed, 0.0), 3)
-        if rounded_elapsed <= 0:
-            rounded_elapsed = 0.001
+        if elapsed <= 0:
+            raise RuntimeError("completion stream has no measurable elapsed time")
 
         if first_token_at is None:
             raise RuntimeError(
@@ -1026,9 +1095,9 @@ class BaseEngine(ABC):
             completion_tokens = max(1, estimated_words)
             token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 
-        request_tps = round(completion_tokens / rounded_elapsed, 2)
+        request_tps = completion_tokens / elapsed
         decode_tps = None
-        rounded_decode_elapsed = None
+        decode_elapsed_seconds = None
         decode_source = DECODE_TIMING_UNAVAILABLE
         decode_elapsed = elapsed - (first_token_at - start)
         if (
@@ -1036,13 +1105,8 @@ class BaseEngine(ABC):
             and completion_tokens > 1
             and decode_elapsed > 0
         ):
-            rounded_decode_elapsed = round(decode_elapsed, 3)
-            if rounded_decode_elapsed <= 0:
-                rounded_decode_elapsed = 0.001
-            decode_tps = round(
-                (completion_tokens - 1) / rounded_decode_elapsed,
-                2,
-            )
+            decode_elapsed_seconds = decode_elapsed
+            decode_tps = (completion_tokens - 1) / decode_elapsed
             decode_source = DECODE_TIMING_CLIENT_STREAM
         finalized_progress_samples = []
         if progress_sample_interval_tokens is not None:
@@ -1053,24 +1117,20 @@ class BaseEngine(ABC):
                     for sample in finalized_progress_samples
                     if sample["completion_tokens"] < completion_tokens
                 ]
-            if (
-                not finalized_progress_samples
-                or finalized_progress_samples[-1]["completion_tokens"]
-                != completion_tokens
-            ):
-                self._append_progress_sample(
-                    finalized_progress_samples,
-                    completion_tokens,
-                    max(elapsed, 0.0),
-                    token_count_source,
-                )
+            if (finalized_progress_samples
+                    and finalized_progress_samples[-1]["completion_tokens"] == completion_tokens
+                    and finalized_progress_samples[-1]["token_count_source"] == token_count_source):
+                finalized_progress_samples.pop()
+            self._append_progress_sample(
+                finalized_progress_samples, completion_tokens, elapsed, token_count_source,
+            )
         return ThroughputMeasurement(
             request_tokens_per_second=request_tps,
             completion_tokens=completion_tokens,
             token_count_source=token_count_source,
-            elapsed_seconds=rounded_elapsed,
+            elapsed_seconds=elapsed,
             decode_tokens_per_second=decode_tps,
-            decode_elapsed_seconds=rounded_decode_elapsed,
+            decode_elapsed_seconds=decode_elapsed_seconds,
             decode_timing_source=decode_source,
             progress_samples=tuple(finalized_progress_samples),
             finish_reason=finish_reason,
@@ -1100,6 +1160,13 @@ class BaseEngine(ABC):
     def is_installed(self) -> bool:
         pass
 
+    def get_client_version(self) -> str:
+        """Installed client package, never evidence of the running server version."""
+        try:
+            return importlib.metadata.version(self.name)
+        except Exception:
+            return "unknown"
+
     @abstractmethod
     def get_version(self) -> str:
         pass
@@ -1118,7 +1185,7 @@ class OMLXEngine(BaseEngine):
     def _server_identity_matches(self) -> bool:
         return self.get_server_pid() is not None
 
-    def get_version(self) -> str:
+    def get_client_version(self) -> str:
         version_commands = [
             ["omlx", "--version"],
             ["omlx", "serve", "--help"],
@@ -1147,13 +1214,17 @@ class OMLXEngine(BaseEngine):
                     version = line.split("Version:")[-1].strip()
                     if version:
                         return version
-        http_version = self._get_version_from_models_endpoint()
-        if http_version:
-            return http_version
         return "unknown"
 
 
+    def get_version(self) -> str:
+        return self._version_with_process_fallback(
+            self._get_version_from_models_endpoint() or self._get_version_from_openapi("oMLX API")
+        )
+
+
 # ─── Rapid-MLX ────────────────────────────────────────────────────────────────
+
 
 class RapidMLXEngine(BaseEngine):
     name = ENGINE_NAME_RAPID_MLX
@@ -1279,7 +1350,7 @@ class RapidMLXEngine(BaseEngine):
     def is_installed(self) -> bool:
         return shutil.which("rapid-mlx") is not None
 
-    def get_version(self) -> str:
+    def get_client_version(self) -> str:
         try:
             result = subprocess.run(
                 ["rapid-mlx", "version"],
@@ -1295,7 +1366,15 @@ class RapidMLXEngine(BaseEngine):
             return "unknown"
 
 
+    def get_version(self) -> str:
+        return self._version_with_process_fallback(self._get_version_from_models_endpoint())
+
+    def _server_identity_matches(self) -> bool:
+        return self.get_server_pid() is not None
+
+
 # ─── vLLM-MLX ────────────────────────────────────────────────────────────────
+
 
 class VLLMMLXEngine(BaseEngine):
     name = ENGINE_NAME_VLLM_MLX
@@ -1360,20 +1439,6 @@ class VLLMMLXEngine(BaseEngine):
         )
 
     def get_version(self) -> str:
-        try:
-            return importlib.metadata.version("vllm-mlx")
-        except Exception:
-            pass
-
-        try:
-            import vllm_mlx
-
-            version = getattr(vllm_mlx, "__version__", None)
-            if isinstance(version, str) and version.strip():
-                return version.strip()
-        except Exception:
-            pass
-
         http_version = self._get_version_from_models_endpoint(
             version_keys=(
                 "vllm_mlx_version",
@@ -1383,8 +1448,8 @@ class VLLMMLXEngine(BaseEngine):
             )
         )
         if http_version:
-            return self._parse_version_output(http_version) or http_version
-        return "unknown"
+            http_version = self._parse_version_output(http_version) or http_version
+        return self._version_with_process_fallback(http_version)
 
 
 # ─── mlx-lm ───────────────────────────────────────────────────────────────────
@@ -1393,6 +1458,7 @@ class MLXLMEngine(BaseEngine):
     name = ENGINE_NAME_MLX_LM
     default_port = 8080
     expected_process_names = ("mlx_lm", "mlx-lm")
+    version_requires_completion_probe = True
 
     def __init__(
         self,
@@ -1412,6 +1478,9 @@ class MLXLMEngine(BaseEngine):
         except RuntimeError:
             return None
 
+        if model in model_ids:
+            self._model_id_cache[model] = model
+            return model
         matches = [
             model_id
             for model_id in model_ids
@@ -1447,14 +1516,42 @@ class MLXLMEngine(BaseEngine):
     def is_installed(self) -> bool:
         return importlib.util.find_spec("mlx_lm") is not None
 
-    def get_version(self) -> str:
+    def get_client_version(self) -> str:
         try:
             return importlib.metadata.version("mlx-lm")
         except Exception:
             return "unknown"
 
 
+    def get_version(self) -> str:
+        return self._version_with_process_fallback(
+            self._completion_server_version or self._get_version_from_models_endpoint(),
+        )
+
+    def _observe_completion_version(self, data: dict) -> None:
+        # mlx-lm constructs this as mlx-lm version / MLX version / platform /
+        # architecture. Require the complete shape, not arbitrary fingerprints.
+        fingerprint = data.get("system_fingerprint")
+        if not isinstance(fingerprint, str):
+            return
+        match = re.fullmatch(
+            r"(\d+\.\d+\.\d+(?:[a-zA-Z0-9.+]*))-(\d+\.\d+\.\d+(?:[a-zA-Z0-9.+]*))-(.+)-([^-]+)",
+            fingerprint,
+        )
+        if match:
+            try:
+                Version(match.group(1))
+                Version(match.group(2))
+            except InvalidVersion:
+                return
+            self._completion_server_version = match.group(1)
+
+    def _server_identity_matches(self) -> bool:
+        return self.get_server_pid() is not None
+
+
 # ─── mlx-serve (ddalcu) ────────────────────────────────────────────────────────
+
 
 class MLXServeEngine(BaseEngine):
     """ddalcu/mlx-serve, restricted to local MLX safetensors chat models.
@@ -1567,13 +1664,19 @@ class MLXServeEngine(BaseEngine):
     def get_version(self) -> str:
         # The serving binary can differ from the one on PATH. Prefer its API;
         # an unavailable API on a live server must not acquire a local version.
+        self.version_source = "unavailable"
         if self._server_identity_matches():
             try:
                 data = self._server_json("/api/version", action="version lookup")
             except RuntimeError:
                 return "unknown"
             version = data.get("version")
-            return version.strip() if isinstance(version, str) and version.strip() else "unknown"
+            if isinstance(version, str) and version.strip():
+                self.version_source = "server_api"
+                return version.strip()
+        return "unknown"
+
+    def get_client_version(self) -> str:
         binary = self._binary_path()
         if binary:
             try:
@@ -1654,6 +1757,8 @@ class MLXServeEngine(BaseEngine):
                 model=requested,
             ))
         self._validated_entry = entry
+        self.configuration_observation_phase = "before_measurement"
+        self.configuration_observed_at = datetime.now(timezone.utc).isoformat()
         metadata = {"format": MLX_SERVE_BACKEND_FORMATS[backend]}
         quantization = meta.get("quantization") if isinstance(meta, dict) else None
         # Zero/16-bit metadata does not distinguish fp16 from bf16. Preserve
@@ -1868,8 +1973,12 @@ class OllamaEngine(BaseEngine):
 
     def get_version(self) -> str:
         server_version = self._server_version()
+        self.version_source = "server_api" if server_version is not None else "unavailable"
         if server_version is not None:
             return server_version
+        return "unknown"
+
+    def get_client_version(self) -> str:
         try:
             result = subprocess.run(
                 ["ollama", "--version"], capture_output=True, text=True, timeout=3
@@ -2146,11 +2255,15 @@ class LMStudioEngine(BaseEngine):
             metadata["quantization"] = quantization.strip()
         return metadata
 
+    version_source = "runtime_probe"
+
     def get_version(self) -> str:
         # The MLX runtime version is what determines performance, and it is
         # captured by the backend check that must run before any measurement.
         if self._runtime_version:
+            self.version_source = "runtime_probe"
             return self._runtime_version
+        self.version_source = "unavailable"
         return "unknown"
 
     def observed_serving_configuration(self, model: str) -> dict[str, object]:
@@ -2221,3 +2334,10 @@ def get_engine(name: str) -> BaseEngine:
     if name not in ENGINES:
         raise ValueError(f"Unknown engine: '{name}'. Available: {list(ENGINES.keys())}")
     return ENGINES[name]()
+
+
+def version_evidence(engine: BaseEngine) -> dict[str, str | None]:
+    """Keep provenance beside versions in local diagnostic reports too."""
+    version = engine.get_version()
+    source = engine.version_source
+    return {"version": version, "version_source": source if isinstance(source, str) else None}

@@ -55,7 +55,7 @@ def get_chip_model() -> str:
     try:
         result = subprocess.run(
             ["sysctl", "-n", "machdep.cpu.brand_string"],
-            capture_output=True, text=True
+            capture_output=True, text=True, timeout=5.0
         )
         chip = result.stdout.strip()
         if result.returncode == 0 and chip:
@@ -78,7 +78,7 @@ def get_machine_model() -> str:
     try:
         result = subprocess.run(
             ["sysctl", "-n", "hw.model"],
-            capture_output=True, text=True
+            capture_output=True, text=True, timeout=5.0
         )
         model = result.stdout.strip()
         if result.returncode == 0 and model:

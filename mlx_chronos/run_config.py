@@ -1,6 +1,7 @@
 """Portable run settings; loading a configuration never executes an experiment."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -13,6 +14,7 @@ from mlx_chronos.reporters import _write_text_atomic
 
 
 MAX_RUN_CONFIG_BYTES = 1024 * 1024
+logger = logging.getLogger("mlx_chronos")
 
 
 class RunSettings(BaseModel):
@@ -104,10 +106,11 @@ def load_run_configuration(path: Path) -> RunConfiguration:
         raise ValueError("configuration JSON is nested too deeply") from exc
     config = RunConfiguration.model_validate(data)
     if config.benchmark_protocol_version != BASELINE_PROTOCOL_VERSION:
-        raise ValueError(
-            f"saved benchmark protocol {config.benchmark_protocol_version!r} differs "
-            f"from current protocol {BASELINE_PROTOCOL_VERSION!r}; review the settings "
-            "and save a new configuration with this CLI"
+        logger.warning(
+            "Saved settings refer to benchmark protocol %r; new measurements "
+            "use the current protocol %r. Review the settings before running; "
+            "loading does not reproduce the previous measurement method.",
+            config.benchmark_protocol_version, BASELINE_PROTOCOL_VERSION,
         )
     return config
 

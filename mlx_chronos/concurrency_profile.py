@@ -22,7 +22,7 @@ from mlx_chronos.constants import (
 )
 from mlx_chronos.measurements import validate_throughput_measurement
 from mlx_chronos.detect import detect_hardware, get_thermal_state
-from mlx_chronos.engines import get_engine
+from mlx_chronos.engines import get_engine, version_evidence
 from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.protocol import THROUGHPUT_PROMPTS
 from mlx_chronos.schema import normalize_model_quantization
@@ -135,6 +135,11 @@ def _wave(
         "prompts": prompts,
         "prompt_chars": [len(prompt) for prompt in prompts],
         "completion_tokens": tokens,
+        "token_count_sources": [item[2].token_count_source for item in observations],
+        "token_count_source": (
+            observations[0][2].token_count_source
+            if len({item[2].token_count_source for item in observations}) == 1 else "mixed"
+        ),
         "total_completion_tokens": sum(tokens),
         "elapsed_seconds": round(elapsed, 6),
         "aggregate_tokens_per_second": round(sum(tokens) / elapsed, 3),
@@ -208,8 +213,6 @@ def run_concurrency_profile(
     model_reference_url = normalize_model_reference_url(model_reference_url)
 
     engine = get_engine(engine_name)
-    if not engine.is_installed():
-        raise RuntimeError(f"Engine '{engine_name}' is not installed.")
     if not engine.is_server_running():
         raise RuntimeError(f"Engine '{engine_name}' server is not running.")
     backend_metadata = engine.validate_model_backend(model_name)
@@ -356,7 +359,7 @@ def run_concurrency_profile(
         "chronos_version": VERSION,
         "timestamp": started_at,
         "hardware": hardware,
-        "engine": {"name": engine_name, "version": engine.get_version()},
+        "engine": {"name": engine_name, **version_evidence(engine)},
         "model": {
             "name": model_name,
             "quantization": model_quantization,

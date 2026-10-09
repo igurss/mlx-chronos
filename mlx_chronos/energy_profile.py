@@ -21,7 +21,7 @@ import psutil
 
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.detect import detect_hardware, get_thermal_state
-from mlx_chronos.engines import get_engine
+from mlx_chronos.engines import get_engine, version_evidence
 from mlx_chronos.model_reference import normalize_model_reference_url
 from mlx_chronos.measurements import ThroughputMeasurement, validate_throughput_measurement
 from mlx_chronos.protocol import THROUGHPUT_PROMPTS
@@ -71,6 +71,9 @@ class MacmonPowerSampler:
         self._condition = threading.Condition()
         self._samples: list[tuple[float, float, str]] = []
         self.invalid_samples = 0
+        self.max_samples = 100_000
+        self._failure: str | None = None
+        self._last_source_timestamp: datetime | None = None
 
     def start(self) -> None:
         if self._process is not None:
@@ -86,7 +89,11 @@ class MacmonPowerSampler:
             bufsize=1,
         )
         self._thread = threading.Thread(target=self._read, daemon=True)
-        self._thread.start()
+        try:
+            self._thread.start()
+        except BaseException:
+            self.stop()
+            raise
 
     def _read(self) -> None:
         process = self._process
@@ -117,12 +124,19 @@ class MacmonPowerSampler:
                 parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                 if parsed.tzinfo is None or parsed.utcoffset() is None:
                     raise ValueError("timestamp has no timezone")
+                if self._last_source_timestamp is not None and parsed <= self._last_source_timestamp:
+                    raise ValueError("source timestamp must increase")
+                self._last_source_timestamp = parsed
             except (ValueError, TypeError, KeyError, AttributeError):
                 with self._condition:
                     self.invalid_samples += 1
                     self._condition.notify_all()
                 continue
             with self._condition:
+                if len(self._samples) >= self.max_samples:
+                    self._failure = "macmon power trace exceeded the sample limit"
+                    self._condition.notify_all()
+                    return
                 self._samples.append((received_at, float(watts), timestamp))
                 self._condition.notify_all()
         with self._condition:
@@ -132,6 +146,8 @@ class MacmonPowerSampler:
         deadline = time.monotonic() + timeout
         with self._condition:
             while not self._samples or self._samples[-1][0] <= after:
+                if self._failure:
+                    raise RuntimeError(self._failure)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise RuntimeError("macmon did not produce a valid power sample in time")
@@ -141,6 +157,8 @@ class MacmonPowerSampler:
 
     def samples(self) -> list[tuple[float, float, str]]:
         with self._condition:
+            if self._failure:
+                raise RuntimeError(self._failure)
             return list(self._samples)
 
     def stop(self) -> None:
@@ -153,7 +171,7 @@ class MacmonPowerSampler:
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=2)
-        if self._thread is not None:
+        if self._thread is not None and self._thread.ident is not None:
             self._thread.join(timeout=2)
             if self._thread.is_alive():
                 raise RuntimeError("macmon reader thread did not stop")
@@ -258,8 +276,6 @@ def run_energy_profile(
         model_quantization = normalize_model_quantization(model_quantization)
 
     engine = get_engine(engine_name)
-    if not engine.is_installed():
-        raise RuntimeError(f"Engine '{engine_name}' is not installed")
     if not engine.is_server_running():
         raise RuntimeError(f"Engine '{engine_name}' server is not running")
     backend = engine.validate_model_backend(model_name)
@@ -321,7 +337,7 @@ def run_energy_profile(
         "chronos_version": VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "hardware": hardware,
-        "engine": {"name": engine_name, "version": engine.get_version()},
+        "engine": {"name": engine_name, **version_evidence(engine)},
         "model": {
             "name": model_name, "quantization": model_quantization,
             "reference_url": model_reference_url, "format": backend.get("format"),

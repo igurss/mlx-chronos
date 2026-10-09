@@ -113,6 +113,9 @@ The public leaderboard is available at
 monitoring, and ambiguous submission retries. Standard benchmarks now use
 protocol revision **4**; new public submissions require a new run, while
 archived revision **3** results retain their original data and seals.
+Development source produces protocol **5**. During its release transition,
+submissions still accept **4** from the published CLI, with separate validation
+rules and leaderboard variants. See [protocol revisions](docs/methodology.md#what-does-the-protocol-number-mean).
 The package also declares its interface compatibility with app **0.2.0**.
 The existing local diagnostics and experimental MLX-only LM Studio support
 remain available. Full changes are detailed in the
@@ -131,6 +134,8 @@ Python and an approved compatible CLI with mandatory thermal support; existing
 Python installations are preserved. You can explicitly choose another detected
 installation or source checkout. Inference engines and models are installed
 separately, and running a test does not automatically share its result.
+External CLI installations without thermal support can run local tests;
+continuous Foundation monitoring remains required for new public results.
 
 App and CLI releases are independent. **App 0.2.0, build 4** contains no CLI
 wheel or Python interpreter. It checks compatible CLI updates at launch,
@@ -195,6 +200,9 @@ You need:
 
 `mlx-chronos` talks to an existing OpenAI-compatible local server. It does not
 start, install, or download model weights for the engine.
+The engine may run in a separate environment: its package does not need to be
+installed in Chronos' Python. Server identity, model/backend validation and
+response integrity checks still apply.
 
 ### 2. Install
 
@@ -391,7 +399,7 @@ mlx-chronos run --engine omlx \
 | `mlx-chronos doctor` | Diagnose hardware, engines, server status, model access, and public-submission blockers |
 | `mlx-chronos wizard` | Open an interactive menu for common commands and guided benchmark setup |
 | `mlx-chronos upgrade` | Check PyPI and upgrade the current Python environment if a newer release exists |
-| `mlx-chronos engines` | List supported engines and local installed/running status |
+| `mlx-chronos engines` | List supported engines, client installation and identified server availability |
 | `mlx-chronos models --engine <name>` | List model IDs exposed by a running engine server |
 | `mlx-chronos validate --engine <name> --model <model>` | Validate hardware, engine, server, and optional model access |
 | `mlx-chronos run --engine <name> --model <model>` | Run a benchmark and save local result files |
@@ -468,7 +476,9 @@ mlx-chronos run --config experiment.json --repeat 3
 ```
 
 The file stores explicit defaults and a benchmark-protocol reference. Unknown
-settings, invalid types and incompatible formats/protocols are rejected. Result
+settings, invalid types and incompatible file formats are rejected. A different
+saved protocol produces a notice; fresh measurements use the current CLI's
+method and record its protocol, without changing previous results. Result
 folders and contributor attribution stay local to each invocation. Saved
 settings do not certify equal model files or runtime conditions. See
 [configuration details](docs/methodology.md#reusable-run-configurations).
@@ -489,6 +499,7 @@ Default engine ports:
 | --- | --- |
 | oMLX | `8000` |
 | Rapid-MLX | `8001` |
+| mlx-serve | `11234` |
 | vllm-mlx | `8000` |
 | mlx-lm | `8080` |
 | Ollama | `11434` |
@@ -514,11 +525,13 @@ benchmark method and validation rules**. The number is separate from the CLI
 and app versions; it is not a performance score. `baseline` and `sustained`
 are test profiles and use the same protocol revision.
 
-CLI `0.5.1` uses `4`, while release `0.5.0` uses `3`. Older measurements keep
+Published CLI `0.5.1` uses `4`, while release `0.5.0` uses `3`. The unreleased
+source on `main` uses `5`, preserving raw timing precision and requiring complete
+thermal and server-version evidence. Older measurements keep
 their original labels and seals. A newer protocol requires a new benchmark
 run, never a manual change to an existing JSON. See
 [what each protocol number means](docs/methodology.md#what-does-the-protocol-number-mean)
-for the history of labels `1`–`4`, comparison limits, and submission rules.
+for the history of labels `1`–`5`, comparison limits, and submission rules.
 
 ### Measurement Flow
 
@@ -578,6 +591,11 @@ drop and an observed thermal-state change or non-nominal thermal state. It
 compares early and late progress-window averages, excluding prefill and
 incompatible token-count transitions. This is a conservative warning, not
 proof of thermal throttling or a specific hardware cause.
+
+Some older producers saved inconsistent intermediate timestamps. Those files
+remain readable, but their progress cannot establish a slowdown: reports, the
+leaderboard and the app mark any associated sustained warning as unverified.
+The original files, seals and final trial measurements are preserved.
 
 ### Cooldown Metadata
 

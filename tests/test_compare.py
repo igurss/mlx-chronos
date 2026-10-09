@@ -477,6 +477,22 @@ def test_engine_version_changes_remain_visible_without_a_difference_warning(tmp_
     assert not any(w["field"] == "engine.version" for w in report["warnings"])
 
 
+def test_uncaptured_phase_input_counts_do_not_create_three_spurious_cautions(tmp_path):
+    paths = [write_result(tmp_path / name) for name in ("a.json", "b.json")]
+    warnings = compare_results(paths)["warnings"]
+    assert not any(w["field"].endswith(("warmup.input_tokens", "ttft_cold.input_tokens",
+                                       "ttft_cached.input_tokens")) for w in warnings)
+    assert any(w["field"].endswith("throughput.input_tokens") for w in warnings)
+
+
+def test_local_version_uncertainty_is_reported_once_per_pair(tmp_path):
+    paths = [write_result(tmp_path / name, mutate=lambda data: data["engine"].update(
+        version_source="client_package", client_version=data["engine"]["version"],
+    )) for name in ("a.json", "b.json")]
+    warnings = [w for w in compare_results(paths)["warnings"] if w["field"] == "engine.version_source"]
+    assert len(warnings) == 1
+
+
 def test_omitted_optional_phase_fields_are_not_inferred_as_defaults(tmp_path):
     def mutate(data):
         phase = data["meta"]["benchmark_protocol"]["throughput"]
@@ -549,6 +565,10 @@ def test_api_cache_evidence_is_not_inferred_from_matching_false_flags(tmp_path):
 
 def test_identical_complete_metadata_does_not_need_a_warning(tmp_path):
     def mutate(data):
+        data["meta"]["memory_pressure_warning"] = False
+        data["engine"]["serving_config"] = {
+            "observed": {"batch_size": 1}, "declared": {},
+        }
         data["model"]["format"] = "safetensors"
         data["meta"]["cache_validation"] = {
             "source": "engine_cache_api",
@@ -695,3 +715,29 @@ def test_existing_reference_run_warnings_are_not_lost_when_both_flags_match(
     )
     assert warning["kind"] == "run_warning"
     assert set(warning["metrics"]) == metrics
+
+
+@pytest.mark.parametrize('section,key,value,field', [
+    ('hardware', 'low_power_mode', 'on', 'hardware.low_power_mode'),
+    ('hardware', 'power_source', 'battery', 'hardware.power_source'),
+    ('meta', 'memory_pressure_warning', True, 'meta.memory_pressure_warning'),
+    ('meta', 'system_ram_monitor_errors', 1, 'meta.system_ram_monitor_errors'),
+    ('meta', 'engine_ram_monitor_errors', 1, 'meta.engine_ram_monitor_errors'),
+])
+def test_comparison_preserves_measurement_condition_warnings(tmp_path, section, key, value, field):
+    first = write_result(tmp_path / 'baseline.json')
+    second = write_result(tmp_path / 'changed.json', mutate=lambda data: data[section].update({key: value}))
+    report = compare_results([first, second])
+    assert any(w['field'] == field and w['value'] == value for w in report['warnings'])
+
+
+def test_server_observations_and_declarations_are_compared_separately(tmp_path):
+    first = write_result(tmp_path / 'a.json', mutate=lambda data: data['engine'].update(serving_config={
+        'observed': {'context_length': 8192}, 'declared': {'context_length': 8192},
+    }))
+    second = write_result(tmp_path / 'b.json', mutate=lambda data: data['engine'].update(serving_config={
+        'observed': {'context_length': 8192}, 'declared': {'context_length': 4096},
+    }))
+    warnings = compare_results([first, second])['warnings']
+    assert any(w['field'] == 'engine.serving_config.declared' and w['kind'] == 'difference' for w in warnings)
+    assert not any(w['field'] == 'engine.serving_config.observed' for w in warnings)

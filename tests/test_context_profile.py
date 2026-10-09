@@ -55,7 +55,7 @@ def test_invalid_prompt_arguments_rejected(kwargs):
 
 def _engine(measurements):
     engine = MagicMock()
-    engine.is_installed.return_value = True
+    engine.is_installed.return_value = False
     engine.is_server_running.return_value = True
     engine.validate_model_backend.return_value = {
         "format": "safetensors", "quantization": "4bit",
@@ -82,7 +82,9 @@ def test_profile_keeps_token_counts_aligned_and_mean_only_when_complete():
         TTFTMeasurement(0.3, None, "unavailable"),
         TTFTMeasurement(0.4, 520, "engine"),
     ])
+    engine.version_source = 'process_package'
     report = _run(engine, buckets=["small"], trials_per_bucket=3)
+    assert report['engine']['version_source'] == 'process_package'
     bucket = report["buckets"][0]
     assert bucket["input_tokens_raw"] == [510, None, 520]
     assert bucket["input_tokens_mean"] is None

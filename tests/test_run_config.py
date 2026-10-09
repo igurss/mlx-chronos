@@ -107,15 +107,35 @@ def test_invalid_or_unknown_saved_settings_fail_before_execution(tmp_path, field
 
 @pytest.mark.parametrize("field,value", [
     ("schema_version", "mlx-chronos-run-config-v2"),
-    ("benchmark_protocol_version", "3"), ("unknown_setting", 1),
+    ("unknown_setting", 1),
 ])
-def test_incompatible_format_or_protocol_is_explicit(tmp_path, field, value):
+def test_incompatible_format_or_fields_are_explicit(tmp_path, field, value):
     path = saved_config(tmp_path)
     data = json.loads(path.read_text())
     data[field] = value
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError):
         load_run_configuration(path)
+
+
+@pytest.mark.parametrize("protocol", ["3", "4", "future-method"])
+def test_changed_protocol_reuses_valid_settings_with_explicit_notice(tmp_path, caplog, protocol):
+    path = saved_config(tmp_path, "--repeat", "3", "--max-tokens", "200")
+    data = json.loads(path.read_text())
+    data["benchmark_protocol_version"] = protocol
+    path.write_text(json.dumps(data))
+    original = path.read_bytes()
+
+    settings = resolve_run_settings(parse_cli_args(["run", "--config", str(path)]))
+    assert settings.repeat == 3 and settings.max_tokens == 200
+    assert f"current protocol {BASELINE_PROTOCOL_VERSION!r}" in caplog.text
+    assert "does not reproduce the previous measurement method" in caplog.text
+    assert path.read_bytes() == original
+
+    # Saving a new configuration describes today's method, not the old label.
+    current = tmp_path / "current.json"
+    save_run_configuration(current, settings)
+    assert load_run_configuration(current).benchmark_protocol_version == BASELINE_PROTOCOL_VERSION
 
 
 @pytest.mark.parametrize("text", ['{"run":{},"run":{}}', "[]", "null", "not JSON", "[" * 2000 + "]" * 2000])

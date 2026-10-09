@@ -112,7 +112,7 @@ class RAMTracker:
     def stop(self) -> float:
         """Stop sampling and return the peak RAM in GB."""
         self._stop_event.set()
-        if self._thread:
+        if self._thread and self._thread.ident is not None:
             self._thread.join()
 
         with self._lock:
@@ -201,7 +201,7 @@ class SystemRAMTracker:
 
     def stop(self) -> tuple[float, float]:
         self._stop_event.set()
-        if self._thread:
+        if self._thread and self._thread.ident is not None:
             self._thread.join()
         with self._lock:
             if self.sample_count == 0:
@@ -302,7 +302,7 @@ class ThermalStateTracker:
 
     def stop(self) -> dict:
         self._stop_event.set()
-        if self._thread:
+        if self._thread and self._thread.ident is not None:
             self._thread.join()
         try:
             self._record_sample()
@@ -349,6 +349,7 @@ class ThermalStateTracker:
             ),
             "non_nominal_phases": non_nominal_phases,
             "sampling_errors": self.sample_errors,
+            "sample_span_seconds": samples[-1][2] - samples[0][2] if len(samples) >= 2 else 0.0,
             "max_sample_gap_seconds": max(
                 (right[2] - left[2] for left, right in zip(samples, samples[1:])),
                 default=0.0,

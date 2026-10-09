@@ -573,7 +573,7 @@
       const representatives = representativeRowsByEngine(rows);
       const runTotal = rows.length;
       compareMeta.textContent = runTotal
-        ? `${representatives.length} engine${representatives.length === 1 ? "" : "s"} across ${runTotal} run${runTotal === 1 ? "" : "s"}`
+        ? `Latest run per engine · ${representatives.length} engine${representatives.length === 1 ? "" : "s"} · ${runTotal} submitted run${runTotal === 1 ? "" : "s"}`
         : "No public run matches this selection.";
       resultCount.textContent = `${runTotal} result${runTotal === 1 ? "" : "s"}`;
 
@@ -664,6 +664,12 @@
       if (String(row.engine_version || "").toLowerCase() === "unknown") {
         badges.push(`<span class="badge badge-amber">unknown version</span>`);
       }
+      if (["client_cli", "client_package"].includes(row.engine_version_source)) {
+        badges.push('<span class="badge badge-amber">serving version unverified</span>');
+      }
+      if (row.engine_version_source === "process_package") {
+        badges.push('<span class="badge badge-amber">indirect version evidence</span>');
+      }
       const thermal = row.thermal_worst_state || row.thermal_state;
       if (!thermal || String(thermal).startsWith("unavailable")) {
         badges.push(`<span class="badge badge-gray">thermal unknown</span>`);
@@ -678,7 +684,12 @@
       if (row.cached_ttft_warning) {
         badges.push(`<span class="badge badge-amber">cache benefit unconfirmed</span>`);
       }
-      if (row.sustained_throttling_warning) {
+      if (row.progress_chronology_warning) {
+        badges.push('<span class="badge badge-amber">progress timing inconsistent</span>');
+      }
+      if (row.sustained_warning_unverified || (row.sustained_throttling_warning && row.progress_chronology_warning)) {
+        badges.push('<span class="badge badge-gray">slowdown unverified</span>');
+      } else if (row.sustained_throttling_warning && !row.progress_chronology_warning) {
         badges.push(`<span class="badge badge-amber">sustained slowdown</span>`);
       }
       if (row.memory_pressure_warning) {
@@ -693,6 +704,11 @@
     function detailsPanel(row) {
       const details = [
         ["Engine version", row.engine_version],
+        ["Version evidence", ({server_api: "Server API", runtime_probe: "Runtime probe",
+          process_package: "Server process installation; loaded runtime version unverified",
+          client_cli: "Local CLI; serving version unverified",
+          client_package: "Local package; serving version unverified"})[row.engine_version_source] || "not recorded"],
+        ["Installed client version", row.engine_client_version || "not recorded"],
         ["Server settings", servingConfigSummary(row.engine_serving_config)],
         ["Profile", profileLabel(row.benchmark_profile)],
         ["Chronos version", row.chronos_version],

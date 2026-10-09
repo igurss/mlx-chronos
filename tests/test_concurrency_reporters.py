@@ -11,7 +11,7 @@ def test_local_concurrency_reports_share_a_basename_and_cannot_be_submitted(tmp_
     report = {
         "timestamp": "2026-09-25T12:00:00.123456+00:00",
         "hardware": {"chip": "Apple M4 Max", "memory_gb": 64},
-        "engine": {"name": "vllm-mlx", "version": "1.0"},
+        "engine": {"name": "vllm-mlx", "version": "1.0", "version_source": "process_package"},
         "model": {"name": "Example|Model\n<script>alert(1)</script>"},
         "request_max_tokens": 60,
         "levels": [{
@@ -30,6 +30,7 @@ def test_local_concurrency_reports_share_a_basename_and_cannot_be_submitted(tmp_
     assert json_path.stem == markdown_path.stem
     markdown = markdown_path.read_text(encoding="utf-8")
     assert "Example\\|Model" in markdown
+    assert "Server process installation; loaded runtime version unverified" in markdown
     assert "<script>" not in markdown
     assert "## Cautions" in markdown
     assert "cache_clear_confirmed" in json_path.read_text(encoding="utf-8")

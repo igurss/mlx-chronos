@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 import threading
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from packaging.version import InvalidVersion, Version
 
 from mlx_chronos import __version__ as VERSION
 from mlx_chronos.numeric import require_finite_positive
@@ -21,7 +22,6 @@ DEFAULT_UPDATE_CHECK_TIMEOUT = 1.5
 DISABLE_UPDATE_CHECK_ENV = "MLX_CHRONOS_DISABLE_UPDATE_CHECK"
 
 _TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
-_NUMERIC_VERSION_PREFIX_RE = re.compile(r"^\s*v?(\d+(?:\.\d+)*)")
 
 
 @dataclass(frozen=True)
@@ -47,27 +47,12 @@ def update_check_disabled(environ: dict[str, str] | None = None) -> bool:
     )
 
 
-def _release_tuple(version: str) -> tuple[int, ...] | None:
-    match = _NUMERIC_VERSION_PREFIX_RE.match(version)
-    if match is None:
-        return None
-    try:
-        return tuple(int(part) for part in match.group(1).split("."))
-    except ValueError:
-        return None
-
-
 def is_newer_version(latest_version: str, current_version: str) -> bool:
-    """Compare standard release versions without adding a packaging dependency."""
-    latest = _release_tuple(latest_version)
-    current = _release_tuple(current_version)
-    if latest is None or current is None:
+    """Compare PEP 440 releases, including pre-, dev-, and post-releases."""
+    try:
+        return Version(latest_version) > Version(current_version)
+    except InvalidVersion:
         return False
-
-    width = max(len(latest), len(current))
-    latest_padded = latest + (0,) * (width - len(latest))
-    current_padded = current + (0,) * (width - len(current))
-    return latest_padded > current_padded
 
 
 def fetch_latest_version(

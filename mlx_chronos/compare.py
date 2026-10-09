@@ -134,18 +134,18 @@ def _pair_warnings(
         kind: Literal["difference", "incomplete", "run_warning"],
         message: str,
     ) -> None:
-        warnings.append(
-            {
-                "baseline_index": 0,
-                "result_index": index,
-                "metrics": metrics,
-                "kind": kind,
-                "field": field,
-                "baseline_value": left,
-                "value": right,
-                "message": message,
-            }
-        )
+        warning: ComparisonWarning = {
+            "baseline_index": 0,
+            "result_index": index,
+            "metrics": metrics,
+            "kind": kind,
+            "field": field,
+            "baseline_value": left,
+            "value": right,
+            "message": message,
+        }
+        if warning not in warnings:
+            warnings.append(warning)
 
     def check(
         field: str,
@@ -224,6 +224,52 @@ def _pair_warnings(
             result.engine.version,
             category="engine version",
         )
+    for field in ("power_source", "low_power_mode"):
+        check(f"hardware.{field}", getattr(baseline.hardware, field),
+              getattr(result.hardware, field), category="power conditions")
+        left, right = getattr(baseline.hardware, field), getattr(result.hardware, field)
+        concerning = "battery" if field == "power_source" else "on"
+        if concerning in (left, right):
+            add(f"hardware.{field}", left, right, ALL_METRICS, "run_warning",
+                f"measurement conditions include {field}={concerning}")
+    for section in ("observed", "declared"):
+        values = [getattr(item.engine.serving_config, section, None) for item in (baseline, result)]
+        if section == "declared":
+            # No manual claims is known absence, not missing observation.
+            values = [value or {} for value in values]
+        else:
+            values = [value or None for value in values]
+        check(f"engine.serving_config.{section}", values[0], values[1],
+              category=f"server configuration ({section})")
+    progress_invalid = any(
+        item.progress_chronology_issue(index)
+        for item in (baseline, result) for index in range(item.trials.count)
+    )
+    for item in (baseline, result):
+        if item.engine.version_source in {"client_cli", "client_package"}:
+            add("engine.version_source", baseline.engine.version_source, result.engine.version_source,
+                ALL_METRICS, "incomplete", "engine version detected locally; serving version is unverified")
+        elif item.engine.version_source == "process_package":
+            add("engine.version_source", baseline.engine.version_source, result.engine.version_source,
+                ALL_METRICS, "incomplete", "version read from the server process installation; the loaded runtime did not report its version")
+    if progress_invalid:
+        add("trials.throughput_progress_samples_raw", None, None,
+            THROUGHPUT_METRICS, "run_warning",
+            "legacy progress has inconsistent chronology; do not use it to interpret within-trial trends or throttling")
+    for field in ("source", "worst_state", "non_nominal_phases", "sampling_errors"):
+        values = [getattr(item.meta.thermal_monitor, field)
+                  if field in item.meta.thermal_monitor.model_fields_set else None
+                  for item in (baseline, result)]
+        check(f"meta.thermal_monitor.{field}", values[0], values[1], category="thermal conditions")
+    for item in (baseline, result):
+        monitor = item.meta.thermal_monitor
+        if (monitor.non_nominal_observed or monitor.sampling_errors
+                or monitor.sample_span_seconds is None):
+            add("meta.thermal_monitor", baseline.meta.thermal_monitor.model_dump(),
+                result.meta.thermal_monitor.model_dump(), ALL_METRICS,
+                "run_warning" if monitor.non_nominal_observed or monitor.sampling_errors else "incomplete",
+                "thermal pressure, sampling errors, or undocumented thermal coverage")
+            break
     check(
         "metrics.token_count_source",
         baseline.metrics.token_count_source,
@@ -278,7 +324,11 @@ def _pair_warnings(
                 ),
             )
         left_tokens, right_tokens = left_phase.input_tokens, right_phase.input_tokens
-        if (
+        if phase != "throughput" and left_tokens is None and right_tokens is None:
+            # Standard warmup/TTFT requests do not collect input usage. Its
+            # absence on both sides is expected, not a failed observation.
+            pass
+        elif (
             left_tokens is None or right_tokens is None
             or (None not in left_tokens and None not in right_tokens)
         ):
@@ -368,8 +418,18 @@ def _pair_warnings(
                 "incomplete",
                 "incomplete information: cached prefix hit is not API-verified in both results",
             )
+    for field in ("system_ram_monitor_errors", "engine_ram_monitor_errors", "memory_pressure_warning"):
+        if any(field not in item.meta.model_fields_set for item in (baseline, result)):
+            add(f"meta.{field}",
+                getattr(baseline.meta, field) if field in baseline.meta.model_fields_set else None,
+                getattr(result.meta, field) if field in result.meta.model_fields_set else None,
+                ALL_METRICS if field == "memory_pressure_warning" else RAM_METRICS,
+                "incomplete", f"incomplete information: {field}")
     for field, metrics, message in (
         ("warmup_failures", ALL_METRICS, "warmup calls failed before measurement"),
+        ("memory_pressure_warning", ALL_METRICS, "system-wide swap grew during measurement"),
+        ("system_ram_monitor_errors", RAM_METRICS, "system RAM monitoring was incomplete"),
+        ("engine_ram_monitor_errors", RAM_METRICS, "engine RAM monitoring was incomplete"),
         ("cached_ttft_warning", (TTFT_CACHED,), "cached TTFT is close to cold TTFT"),
         (
             "sustained_throttling_warning",
@@ -382,6 +442,8 @@ def _pair_warnings(
             getattr(result.meta, field),
         )
         if left_value or right_value:
+            if field == "sustained_throttling_warning" and progress_invalid:
+                message = "recorded sustained warning is unverified because legacy progress chronology is inconsistent"
             add(
                 f"meta.{field}",
                 left_value,

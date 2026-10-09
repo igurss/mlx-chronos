@@ -8,11 +8,12 @@ from typing import TypeGuard
 
 def is_finite_number(value: object) -> TypeGuard[int | float]:
     """Return whether ``value`` is a finite, non-boolean built-in number."""
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def require_finite_positive(value: object, *, name: str) -> None:

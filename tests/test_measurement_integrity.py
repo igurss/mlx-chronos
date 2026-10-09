@@ -18,6 +18,8 @@ from mlx_chronos.stats import compute_stats
 from mlx_chronos.submit import SubmissionError, submit_result_file, validate_publishable_result
 from mlx_chronos.trackers import RAMTracker, SystemRAMTracker, ThermalStateTracker
 from mlx_chronos.wizard import RunWizardConfig, build_run_command, validate_run_config
+from mlx_chronos.compare import compare_results
+from mlx_chronos.reporters import MarkdownReporter
 
 
 def test_unavailable_thermal_samples_are_errors_and_not_valid_samples():
@@ -142,7 +144,7 @@ def test_index_retains_worst_thermal_state_and_quality():
     assert row["thermal_state"] == "nominal"
     assert row["thermal_worst_state"] == "serious"
     assert row["thermal_non_nominal_phases"] == ["throughput"]
-    assert row["protocol_version"] == "4"
+    assert row["protocol_version"] == "5"
 
 
 def test_archived_protocol_loads_but_cannot_be_submitted_as_current(tmp_path):
@@ -171,3 +173,126 @@ def test_legacy_missing_thermal_error_counter_stays_unknown_in_index():
     data["meta"]["thermal_monitor"].pop("sampling_errors")
     row = _index_row(BenchmarkResult.model_validate(data))
     assert row["thermal_sampling_errors"] is None
+
+
+@pytest.mark.parametrize('span,samples', [(1.0, 2), (38.0, 2), (None, 40)])
+def test_public_thermal_trace_must_cover_measured_phases(span, samples):
+    data = deepcopy(EXAMPLE_RESULT)
+    data['meta']['thermal_monitor'].update(sample_span_seconds=span, samples=samples)
+    with pytest.raises(SubmissionError, match='thermal sampling covering'):
+        validate_publishable_result(BenchmarkResult.model_validate(data))
+
+
+@pytest.mark.parametrize('count', ['100', 100.0, True])
+def test_exact_completion_counts_are_strict_in_saved_results(count):
+    data = deepcopy(EXAMPLE_RESULT)
+    data['trials']['completion_tokens_raw'][0] = count
+    with pytest.raises(ValueError, match='completion_tokens_raw'):
+        BenchmarkResult.model_validate(data)
+
+
+def test_progress_cannot_escape_or_reverse_trial_time():
+    data = deepcopy(EXAMPLE_RESULT)
+    elapsed = data['trials']['throughput_elapsed_seconds_raw'][0]
+    data['trials']['throughput_progress_samples_raw'] = [[
+        {'completion_tokens': 50, 'elapsed_seconds': 50., 'tokens_per_second': 1., 'token_count_source': 'word_fallback'},
+        {'completion_tokens': 100, 'elapsed_seconds': elapsed, 'tokens_per_second': round(100 / elapsed, 2), 'token_count_source': 'usage.completion_tokens'},
+    ], [], [], [], []]
+    with pytest.raises(ValueError, match='exceeds trial duration'):
+        BenchmarkResult.model_validate(data)
+
+
+@pytest.mark.parametrize('version', ['3', '4'])
+def test_legacy_progress_anomaly_stays_readable_without_changing_sealed_data(tmp_path, version):
+    import json
+    # Old timing could produce [t1, t3, t2] when the terminal event also
+    # crossed a progress threshold. The final observation itself is correct.
+    data = deepcopy(EXAMPLE_RESULT)
+    data['meta']['benchmark_protocol']['version'] = version
+    data['meta']['sustained_throttling_warning'] = True
+    elapsed = data['trials']['throughput_elapsed_seconds_raw'][0]
+    data['trials']['throughput_progress_samples_raw'] = [[
+        {'completion_tokens': 50, 'elapsed_seconds': elapsed + .01,
+         'tokens_per_second': round(50 / (elapsed + .01), 2), 'token_count_source': 'word_fallback'},
+        {'completion_tokens': 100, 'elapsed_seconds': elapsed,
+         'tokens_per_second': round(100 / elapsed, 2), 'token_count_source': 'usage.completion_tokens'},
+    ], [], [], [], []]
+    data = seal_result(data)
+    original = json.dumps(data)
+    path = tmp_path / 'historical.json'
+    path.write_text(original)
+    parsed = BenchmarkResult.model_validate(data)
+    assert parsed.progress_chronology_issue(0) is not None
+    reference = tmp_path / 'reference.json'
+    reference.write_text(json.dumps(seal_result(deepcopy(EXAMPLE_RESULT))))
+    report = compare_results([reference, path])
+    assert any(w['field'] == 'trials.throughput_progress_samples_raw' for w in report['warnings'])
+    markdown = MarkdownReporter().save(data, tmp_path).read_text()
+    assert 'legacy progress has inconsistent chronology' in markdown
+    assert 'Raw samples remain in JSON' in markdown
+    assert 'recorded sustained warning is unverified' in markdown
+    assert 'degradation with a thermal-state signal' not in markdown
+    row = _index_row(parsed)
+    assert row['sustained_throttling_warning'] is False
+    assert row['progress_chronology_warning'] is True
+    assert row['sustained_warning_unverified'] is True
+    assert parsed.meta.sustained_throttling_warning is True
+    assert path.read_text() == original
+
+
+def test_published_protocol_four_remains_eligible_during_transition(tmp_path):
+    import json
+    from mlx_chronos.submit import load_publishable_result
+    data = deepcopy(EXAMPLE_RESULT)
+    data['meta']['benchmark_protocol']['version'] = '4'
+    data['engine'].pop('version_source')
+    data['engine'].pop('client_version', None)
+    data['meta']['thermal_monitor'].pop('sample_span_seconds')
+    data = seal_result(data)
+    path = tmp_path / 'published.json'
+    path.write_text(json.dumps(data))
+    raw, result = load_publishable_result(path)
+    assert result.meta.benchmark_protocol.version == '4'
+    assert json.loads(raw) == data
+    data['meta']['benchmark_protocol']['throughput']['prompts'][0] = 'changed method'
+    with pytest.raises(SubmissionError, match='protocol exactly'):
+        validate_publishable_result(BenchmarkResult.model_validate(seal_result(data)))
+
+
+@pytest.mark.parametrize('source', ['client_cli', 'client_package'])
+def test_client_version_remains_readable_but_cannot_establish_serving_version(tmp_path, source):
+    import json
+    data = deepcopy(EXAMPLE_RESULT)
+    data['engine'].update(version_source=source, client_version=data['engine']['version'])
+    data = seal_result(data)
+    result = BenchmarkResult.model_validate(data)
+    with pytest.raises(SubmissionError, match='client installation alone is insufficient'):
+        validate_publishable_result(result)
+    row = _index_row(result)
+    assert row['engine_version_source'] == source
+    assert row['engine_client_version'] == result.engine.version
+    assert 'serving version is unverified' in MarkdownReporter().save(data, tmp_path).read_text()
+    path = tmp_path / 'local-version.json'
+    path.write_text(json.dumps(data))
+    reference = tmp_path / 'reference.json'
+    reference.write_text(json.dumps(seal_result(deepcopy(EXAMPLE_RESULT))))
+    assert any(w['field'] == 'engine.version_source' for w in compare_results([reference, path])['warnings'])
+    data['engine']['client_version'] = 'different'
+    with pytest.raises(SubmissionError, match='client installation alone is insufficient'):
+        validate_publishable_result(BenchmarkResult.model_validate(data))
+
+
+def test_process_installation_is_publishable_with_explicit_indirect_evidence(tmp_path):
+    import json
+    data = deepcopy(EXAMPLE_RESULT)
+    data['engine'].update(version_source='process_package', client_version='9.8.7')
+    data = seal_result(data)
+    result = BenchmarkResult.model_validate(data)
+    validate_publishable_result(result)
+    assert _index_row(result)['engine_version_source'] == 'process_package'
+    path = tmp_path / 'process-version.json'
+    path.write_text(json.dumps(data))
+    reference = tmp_path / 'reference.json'
+    reference.write_text(json.dumps(seal_result(deepcopy(EXAMPLE_RESULT))))
+    assert any(w['field'] == 'engine.version_source' for w in compare_results([reference, path])['warnings'])
+    assert 'loaded runtime did not report its version' in MarkdownReporter().save(data, tmp_path).read_text()

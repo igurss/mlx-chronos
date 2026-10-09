@@ -97,15 +97,15 @@ def test_markdown_reporter_save(tmp_path):
     assert "**Engine:** omlx" in content
     assert (
         "**Model reference:** "
-        "https://huggingface.co/mlx-community/Qwen3.5-4B-OptiQ-4bit"
+        r"https://huggingface\.co/mlx\-community/Qwen3\.5\-4B\-OptiQ\-4bit"
     ) in content
     assert f"**Timestamp:** {EXAMPLE_RESULT['meta']['timestamp']}" in content
-    assert f"**Chronos version:** {EXAMPLE_RESULT['meta']['chronos_version']}" in content
+    assert "**Chronos version:** " + EXAMPLE_RESULT["meta"]["chronos_version"].replace(".", r"\.") in content
     assert "**Profile:** baseline" in content
     assert "**Trials:** 5" in content
     assert "**Token count source:** usage.completion_tokens" in content
     assert "**Integrity:** mlx-chronos-integrity-v1" in content
-    assert "**Protocol label:** baseline 4" in content
+    assert "**Protocol label:** baseline 5" in content
     assert "**Throughput token bounds:** max 100, min none" in content
     assert "**HTTP connection mode:** persistent" in content
     assert "**Throughput input tokens:** unknown (source: unavailable)" in content
@@ -152,8 +152,7 @@ def test_markdown_reporter_handles_missing_ram_fields(tmp_path):
 
     content = output_path.read_text()
     assert (
-        "**Post-warmup engine RSS diagnostic fallback "
-        "(system RAM):** unknown GB"
+        "**Engine RSS unavailable; whole-run system RAM fallback:** unknown GB"
     ) in content
     assert "**Peak system RAM:** unknown GB (unknown%)" in content
 
@@ -172,3 +171,17 @@ def test_markdown_reporter_handles_partial_phase_timings(tmp_path):
     assert "## Phase Timings" in content
     assert "**Warmup:** 10.512 s" in content
     assert "**Throughput:** 27.104 s" in content
+
+
+def test_markdown_metadata_is_literal_and_keeps_server_and_pressure_context(tmp_path):
+    from copy import deepcopy
+    result = deepcopy(EXAMPLE_RESULT)
+    result['model']['name'] = '*model* [link](bad) <script>'
+    result['engine']['serving_config'] = {'observed': {'context_length': 8192}, 'declared': {'context_length': 4096}}
+    result['meta']['memory_pressure_warning'] = True
+    output = MarkdownReporter().save(result, tmp_path).read_text()
+    assert r'\*model\* \[link\]\(bad\) &lt;script&gt;' in output
+    assert 'Server setting (observed)' in output and '8192' in output
+    assert 'Server setting (declared)' in output and '4096' in output
+    assert 'system-wide swap grew' in output
+    assert result['model']['name'] == '*model* [link](bad) <script>'
