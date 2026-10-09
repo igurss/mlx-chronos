@@ -225,9 +225,34 @@ final class RuntimeManager {
         defer { try? fm.removeItem(at: wheelDirectory) }
         let namedWheel = wheelDirectory.appendingPathComponent(release.url.lastPathComponent)
         try fm.moveItem(at: wheel, to: namedWheel)
+        var constraints: [String] = []
+        // Repairs of this exact release reuse the previously resolved dependency
+        // versions. Upgrades resolve a new graph and save a separate snapshot.
+        if let active, active.release.sha256 == release.sha256 {
+            let oldEnvironment = runtimes.appendingPathComponent(active.environment)
+            try rejectSymbolicLink(oldEnvironment)
+            let snapshotURL = oldEnvironment.appendingPathComponent("resolved-dependencies.json")
+            if fm.fileExists(atPath: snapshotURL.path) {
+                try rejectSymbolicLink(snapshotURL)
+                guard (try snapshotURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= 1_000_000 else {
+                    throw CommandError.invalid("Saved dependency snapshot exceeded the size limit.")
+                }
+                let snapshot = try JSONDecoder().decode(RuntimeDependencySnapshot.self, from: Data(contentsOf: snapshotURL))
+                if snapshot.pythonVersion == catalog.python.version {
+                    let path = environment.appendingPathComponent("repair-constraints.txt")
+                    try snapshot.validatedRequirements().write(to: path, atomically: true, encoding: .utf8)
+                    constraints = ["--constraint", path.path]
+                }
+            }
+        }
         _ = try await command(candidate.pythonPath, ["-I", "-B", bridge.path, "pip", "install", "--index-url", "https://pypi.org/simple",
-            "--disable-pip-version-check", namedWheel.path + "[thermal]"], log: log)
+            "--disable-pip-version-check"] + constraints + [namedWheel.path + "[thermal]"], log: log)
         _ = try await command(candidate.pythonPath, ["-I", "-B", bridge.path, "pip", "check"], log: log)
+        let dependencies = try await command(candidate.pythonPath,
+            ["-I", "-B", bridge.path, "pip", "list", "--format=freeze", "--exclude", "mlx-chronos", "--disable-pip-version-check"], log: { _ in })
+        let snapshot = RuntimeDependencySnapshot(pythonVersion: catalog.python.version, requirements: dependencies.stdout)
+        _ = try snapshot.validatedRequirements()
+        try JSONEncoder().encode(snapshot).write(to: environment.appendingPathComponent("resolved-dependencies.json"), options: .atomic)
         status("Verifying CLI compatibility and thermal support")
         let verified = try await probe(candidate, bridge: bridge, log: log)
         try AppRuntimePolicy.validate(verified, release: release, expectedPrefix: environment.path)
@@ -286,7 +311,7 @@ final class RuntimeManager {
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
         request.setValue("MLXChronos/" + AppRuntimePolicy.appVersion, forHTTPHeaderField: "User-Agent")
-        let (file, response) = try await session.download(for: request)
+        let (file, response) = try await session.download(for: request, delegate: BoundedDownloadDelegate(limit: 2_000_000))
         defer { try? FileManager.default.removeItem(at: file) }
         guard (response as? HTTPURLResponse)?.statusCode == 200,
               (try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= 2_000_000 else {
@@ -295,7 +320,7 @@ final class RuntimeManager {
         return try Data(contentsOf: file)
     }
     private func artifact(_ url: URL, digest: String) async throws -> URL {
-        let (file, response) = try await session.download(from: url)
+        let (file, response) = try await session.download(from: url, delegate: BoundedDownloadDelegate(limit: 200_000_000))
         do {
             guard (response as? HTTPURLResponse)?.statusCode == 200,
                   (try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= 200_000_000 else {
@@ -397,4 +422,31 @@ private final class RuntimeFileLock {
     }
     func close() { if descriptor >= 0 { Darwin.close(descriptor); descriptor = -1 } }
     deinit { close() }
+}
+
+/// Enforce transfer limits even when Content-Length is absent or dishonest.
+final class BoundedDownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let limit: Int64
+    init(limit: Int64) { self.limit = limit }
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        if totalBytesWritten > limit || totalBytesExpectedToWrite > limit { downloadTask.cancel() }
+    }
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {}
+}
+
+struct RuntimeDependencySnapshot: Codable {
+    var pythonVersion: String
+    var requirements: String
+
+    func validatedRequirements() throws -> String {
+        let lines = requirements.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        guard !lines.isEmpty, lines.count <= 1000,
+              lines.allSatisfy({ $0.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]*==[A-Za-z0-9][A-Za-z0-9.!+_-]*$"#, options: .regularExpression) != nil }) else {
+            throw CommandError.invalid("Saved dependency versions are invalid; the active copy was kept.")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
 }

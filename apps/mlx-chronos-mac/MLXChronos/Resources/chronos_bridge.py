@@ -232,6 +232,20 @@ def snapshot():
         except Exception as exc:
             version = "unknown"
             error = str(exc)
+        version_source = getattr(engine, "version_source", None)
+        if version_source not in {"server_api", "runtime_probe", "process_package", "client_cli", "client_package", "unavailable"}:
+            version_source = None  # Older compatible CLIs did not report provenance.
+        elif version == "unknown":
+            version_source = "unavailable"
+        client_version = None
+        client_version_reader = getattr(engine, "get_client_version", None)
+        if callable(client_version_reader):
+            try:
+                value = client_version_reader()
+                if isinstance(value, str) and value.strip():
+                    client_version = value
+            except Exception:
+                pass
         models = []
         loaded = None
         if running:
@@ -262,6 +276,7 @@ def snapshot():
                 pass
         return {"name": name, "installed": installed, "running": running,
                 "version": version, "endpoint": engine.base_url(), "port": engine.port,
+                "client_version": client_version, "version_source": version_source,
                 "models": models, "loaded_models": loaded, "error": error,
                 "application_version": application_version}
 

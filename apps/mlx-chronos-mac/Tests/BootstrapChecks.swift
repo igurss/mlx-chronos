@@ -19,7 +19,16 @@ struct BootstrapChecks {
             }
             let second = try await manager.synchronize(bridge: bridge)
             guard second.candidate == candidate else { throw CommandError.invalid("Unchanged CLI was reinstalled") }
+            func dependencySnapshot(_ name: String) throws -> RuntimeDependencySnapshot {
+                let url = root.appendingPathComponent("managed-runtimes/\(name)/resolved-dependencies.json")
+                return try JSONDecoder().decode(RuntimeDependencySnapshot.self, from: Data(contentsOf: url))
+            }
+            let originalDependencies = try dependencySnapshot(active.environment)
             _ = try await manager.synchronize(bridge: bridge, force: true)
+            guard let replacement = ActiveRuntime.read(at: root),
+                  try dependencySnapshot(replacement.environment).validatedRequirements() == originalDependencies.validatedRequirements() else {
+                throw CommandError.invalid("Repair changed the resolved dependency versions")
+            }
             let restored = try await manager.rollback(bridge: bridge)
             guard restored == candidate else { throw CommandError.invalid("Rollback did not restore the previous environment") }
             // An altered Python checksum must fail before activation and keep

@@ -5,6 +5,31 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+- Allow local tests with external CLI installations lacking Foundation thermal
+  observations. Keep thermal support in verified app-managed installations and
+  public-result requirements; energy still requires macmon.
+- Validate and pass only the server ports used by a command. File comparisons,
+  history and submission checks are independent of unused port fields; full
+  environment/engine inventories still check every configured server port.
+- Show protocol-change notices when loading valid saved configurations. New
+  measurements use the selected CLI's current method; no test starts on load.
+  Label similar cold/cached timings as a cache observation.
+- Separate serving/runtime version evidence from locally detected client versions
+  in Environment. Keep older CLI snapshots compatible, label unavailable
+  provenance, and never substitute packages from another Python for a server version.
+  Label server-process package metadata as indirect installation evidence.
+- Diagnose inconsistent historical progress when displaying saved trial charts;
+  mark an associated sustained warning as unverified while preserving saved
+  trial values and means. Carry indirect/client-only version cautions into this view.
+
+- Preserve process termination escalation when Stop races with launch, and ignore
+  stale timeout callbacks after the runner has moved on to another process.
+- Enforce catalog/artifact byte limits during transfer. Save resolved dependency
+  versions after installation and reuse them for repairs of the same approved
+  release on the same Python version. New releases resolve a separate environment.
+- Respect boolean defaults from the CLI contract and report when a true-default
+  flag cannot be turned off through the exposed command interface.
+
 - Show trial charts below a single selected standard benchmark in **Results**:
   cold/cached TTFT in milliseconds and request/decode throughput in tok/s.
   Read the saved samples and optional means locally, preserve trial order,
@@ -17,7 +42,7 @@ with the first public app baseline; private prototypes are not earlier releases.
   tests when supported by the selected CLI. Resolve and validate files through
   that CLI; save/load never start inference or require thermal support. Show
   loaded values before an explicit test start, preserve local result paths and
-  contributor attribution, and reject incompatible settings/protocols. Older
+  contributor attribution, and reject incompatible settings/file formats. Older
   CLIs retain the existing form without these optional actions.
 - Show the selected CLI's expanded repeat summaries and optional two-series
   comparison through the existing command form. Label and validate the number

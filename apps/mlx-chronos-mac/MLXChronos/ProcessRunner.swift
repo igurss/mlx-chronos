@@ -17,6 +17,12 @@ final class ProcessRunner: @unchecked Sendable {
     private var process: Process?
     private var cancelled = false
     private var timedOut = false
+    private var terminatingProcess: Process?
+    private let launch: @Sendable (Process) throws -> Void
+
+    init(launch: @escaping @Sendable (Process) throws -> Void = { try $0.run() }) {
+        self.launch = launch
+    }
 
     func run(
         executable: String, arguments: [String], directory: URL,
@@ -41,18 +47,19 @@ final class ProcessRunner: @unchecked Sendable {
                 let wasCancelled = self.cancelled
                 self.lock.unlock()
                 if wasCancelled {
+                    self.lock.lock(); self.process = nil; self.lock.unlock()
                     continuation.resume(returning: ProcessResult(exitCode: -1, stdout: "", stderr: "Cancelled", cancelled: true, timedOut: false, outputTruncated: false))
                     return
                 }
                 do {
-                    try child.run()
+                    try self.launch(child)
                 } catch {
                     self.lock.lock(); self.process = nil; self.lock.unlock()
                     continuation.resume(returning: ProcessResult(exitCode: -1, stdout: "", stderr: error.localizedDescription, cancelled: false, timedOut: false, outputTruncated: false))
                     return
                 }
                 self.lock.lock(); let cancelAfterLaunch = self.cancelled; self.lock.unlock()
-                if cancelAfterLaunch { self.signal(child, SIGINT) }
+                if cancelAfterLaunch { self.beginTermination(child) }
                 for (pipe, isError) in [(out, false), (err, true)] {
                     readers.enter()
                     // The user-initiated waiter depends on these readers.
@@ -88,7 +95,7 @@ final class ProcessRunner: @unchecked Sendable {
                         readers.leave()
                     }
                 }
-                let deadline = timeout.map { _ in DispatchWorkItem { self.stop(dueToTimeout: true) } }
+                let deadline = timeout.map { _ in DispatchWorkItem { self.stop(dueToTimeout: true, expectedProcess: child) } }
                 if let timeout, let deadline {
                     DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
                 }
@@ -103,6 +110,7 @@ final class ProcessRunner: @unchecked Sendable {
                 self.lock.lock()
                 let cancelled = self.cancelled, timedOut = self.timedOut
                 self.process = nil
+                self.terminatingProcess = nil
                 self.lock.unlock()
                 let values = capture.snapshot()
                 continuation.resume(returning: ProcessResult(
@@ -113,12 +121,23 @@ final class ProcessRunner: @unchecked Sendable {
         }
     }
 
-    func stop(dueToTimeout: Bool = false) {
+    func stop(dueToTimeout: Bool = false, expectedProcess: Process? = nil) {
         lock.lock()
+        if let expectedProcess, process !== expectedProcess { lock.unlock(); return }
         if dueToTimeout { timedOut = true } else { cancelled = true }
         let child = process
         lock.unlock()
-        guard let child, child.isRunning else { return }
+        guard let child else { return }
+        beginTermination(child)
+    }
+
+    private func beginTermination(_ child: Process) {
+        lock.lock()
+        guard process === child, child.isRunning, terminatingProcess !== child else {
+            lock.unlock(); return
+        }
+        terminatingProcess = child
+        lock.unlock()
         signal(child, SIGINT)
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
             guard child.isRunning else { return }

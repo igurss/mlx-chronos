@@ -9,7 +9,7 @@ enum CommandBuilder {
     static func initialValues(_ command: CLICommand, outputRoot: URL) -> [String: String] {
         var values: [String: String] = [:]
         for option in command.options {
-            if option.kind == "boolean" { values[option.name] = "false" }
+            if option.kind == "boolean" { values[option.name] = option.defaultValue?.lowercased() == "true" ? "true" : "false" }
             else if !option.choices.isEmpty { values[option.name] = option.defaultValue ?? "" }
         }
         if command.options.contains(where: { $0.name == "output_dir" }) {
@@ -26,6 +26,9 @@ enum CommandBuilder {
         for option in command.options {
             let value = (values[option.name] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if option.kind == "boolean" {
+                if option.defaultValue?.lowercased() == "true", value == "false" {
+                    throw CommandError.invalid("This CLI does not expose an off switch for \(OptionPresentation.title(option.name)).")
+                }
                 if value == "true", let flag = option.flag { arguments.append(flag) }
                 continue
             }
@@ -86,6 +89,37 @@ enum CommandBuilder {
         // Preserve a user-selected network timeout rather than clipping it at
         // the app's general utility limit. Stop remains available at all times.
         return max(minimum, requested + 60)
+    }
+
+    static func serverPorts(_ command: CLICommand, values: [String: String],
+                            configured: [String: String]) throws -> [String: String] {
+        var names = command.name == "engines" ? Set(configured.keys) : Set<String>()
+        if let option = command.options.first(where: { $0.name == "engine" }) {
+            let requested = (values["engine"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let engine = requested.isEmpty ? (option.defaultValue ?? "") : requested
+            // An engine-less doctor inspects every supported server.
+            names = engine.isEmpty ? Set(configured.keys) : [engine]
+        }
+        if command.options.contains(where: { $0.name == "engine_model" }) {
+            names.formUnion(lines(values["engine_model"]).map {
+                String($0.split(separator: "=", maxSplits: 1).first ?? "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            })
+        }
+        return try validatedPorts(configured.filter { names.contains($0.key) })
+    }
+
+    static func validatedPorts(_ configured: [String: String]) throws -> [String: String] {
+        var selected: [String: String] = [:]
+        for name in configured.keys.sorted() {
+            let raw = configured[name] ?? ""
+            if raw.isEmpty { continue }
+            guard let port = Int(raw), (1...65535).contains(port) else {
+                throw CommandError.invalid("The port for \(name) must be between 1 and 65535.")
+            }
+            selected[name] = raw
+        }
+        return selected
     }
 
     static func resultDirectory(_ command: CLICommand, values: [String: String],

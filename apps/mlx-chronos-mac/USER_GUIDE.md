@@ -76,6 +76,11 @@ and location, and verified thermal support. Changing installations resets form
 drafts. An unavailable selected installation is reported rather than silently
 replaced.
 
+An external CLI without Foundation thermal support can run local tests; missing
+thermal observations are reported by the CLI and saved as unavailable. New
+public results still require continuous thermal monitoring. The app-managed
+installation retains verified thermal support, and energy requires macmon.
+
 - **Check and update the app-managed CLI at launch** is enabled by default.
   Checks run at each launch and install only approved compatible releases.
   Unsupported or unknown releases are skipped with a visible explanation.
@@ -102,6 +107,10 @@ IDs. Refresh does not run inference or load models. Installed, reachable and
 model-loaded are different states; loaded status is shown only when verified
 by the server API. A port override tells Chronos where to connect; it does not
 reconfigure or start the server.
+Tests require a reachable, identified server rather than its package in the
+selected Python. Commands validate only the ports they use; file-only commands
+are independent of unused engine ports. Environment refresh and engine inventory
+inspect all configured ports.
 
 Supported engines: oMLX, Rapid-MLX, vllm-mlx, mlx-lm, Ollama with MLX, and
 experimental MLX-only LM Studio. For LM Studio, both the model's compatibility
@@ -122,6 +131,19 @@ MLX GGUF, llama.cpp/ds4 and remote models are rejected before loading or
 inference. See the [mlx-serve gate](../../docs/methodology.md#mlx-serve-local-mlx-gate).
 
 ### Checks and maintenance
+
+Environment refresh labels the version's evidence: serving/runtime API, indirect
+server installation evidence, or unavailable provenance from an older compatible
+CLI. Older client-only fallbacks are explicitly labelled as local versions.
+The installed client version is shown separately. A package found in another
+Python installation is installation evidence; it never replaces a server version.
+Refresh performs no inference, so mlx-lm's serving fingerprint is verified only
+by a model check or benchmark, not by this screen.
+
+Saved trial charts flag inconsistent historical progress timing. If that file
+also records a sustained warning, the warning is shown as unverified; the saved
+trial measurements and means are preserved. This does not imply that every old
+result is affected or that the viewer has validated the file's seal.
 
 | Action / CLI command | Purpose and options |
 | --- | --- |
@@ -188,8 +210,10 @@ values, then choose **Start test** to begin. Loading never starts a benchmark.
 
 The current result folder and contributor attribution are preserved. Changing
 the CLI later does not replace numeric values saved in a configuration.
-Unsupported file formats, options or benchmark protocols are reported without
-replacing the current form. Configurations are editable settings, not benchmark
+Unsupported file formats or options are reported without replacing the current
+form. A different saved protocol loads valid settings with a visible notice;
+new tests use and record the selected CLI's current method. Configurations are
+editable settings, not benchmark
 results or leaderboard submissions. See the [file-format and protocol
 explanation](../../docs/methodology.md#reusable-run-configurations).
 

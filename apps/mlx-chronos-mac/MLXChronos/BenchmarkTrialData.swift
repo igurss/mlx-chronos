@@ -106,9 +106,19 @@ struct BenchmarkTrialData: Equatable {
         } ?? "Protocol not recorded"
         let engineLabel = [engine["name"] as? String, engine["version"] as? String]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+        var warnings = recordedWarnings(meta, progressInvalid: progressIsInconsistent(trials, count: count))
+        if let source = engine["version_source"] as? String {
+            if source == "process_package" {
+                warnings.append(RecordedBenchmarkWarning(id: "engine_version_indirect", title: "Indirect version evidence",
+                    explanation: "The version identifies the server process installation. The loaded runtime did not report its version."))
+            } else if ["client_cli", "client_package"].contains(source) {
+                warnings.append(RecordedBenchmarkWarning(id: "engine_version_indirect", title: "Serving version unverified",
+                    explanation: "This file records a client installation version. It does not establish the running server's version."))
+            }
+        }
         return Self(model: model["name"] as? String ?? "Unknown model", engine: engineLabel,
             conditions: conditions.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "),
-            protocolLabel: protocolLabel, count: count, series: series, warnings: recordedWarnings(meta))
+            protocolLabel: protocolLabel, count: count, series: series, warnings: warnings)
     }
 
     private static func number(_ value: Any?) -> Double? {
@@ -126,22 +136,51 @@ struct BenchmarkTrialData: Equatable {
         }
         return displayed
     }
-    private static func recordedWarnings(_ meta: [String: Any]) -> [RecordedBenchmarkWarning] {
+    /// Mirror the CLI's chronology checks without rewriting historical samples.
+    /// Missing progress is not itself evidence of an anomaly.
+    private static func progressIsInconsistent(_ trials: [String: Any], count: Int) -> Bool {
+        guard let raw = trials["throughput_progress_samples_raw"], !(raw is NSNull) else { return false }
+        guard let progress = raw as? [[Any]], progress.count == count,
+              let durations = trials["throughput_elapsed_seconds_raw"] as? [Any], durations.count == count else { return true }
+        for (index, samples) in progress.enumerated() {
+            guard let duration = number(durations[index]), duration >= 0 else { return true }
+            var previous: (time: Double, tokens: Double, source: String)?
+            for rawSample in samples {
+                guard let sample = rawSample as? [String: Any],
+                      let time = number(sample["elapsed_seconds"]), time > 0, time <= duration + 0.001,
+                      let tokens = number(sample["completion_tokens"]), tokens > 0, tokens.rounded() == tokens,
+                      let source = sample["token_count_source"] as? String,
+                      ["usage.completion_tokens", "word_fallback"].contains(source) else { return true }
+                if let previous, time < previous.time || (source == previous.source && tokens < previous.tokens) { return true }
+                previous = (time, tokens, source)
+            }
+        }
+        return false
+    }
+    private static func recordedWarnings(_ meta: [String: Any], progressInvalid: Bool) -> [RecordedBenchmarkWarning] {
         let definitions = [
-            RecordedBenchmarkWarning(id: "cached_ttft_warning", title: "Cached TTFT warning",
+            RecordedBenchmarkWarning(id: "cached_ttft_warning", title: "Cache timing observation",
                 explanation: "The test recorded cached TTFT close to cold TTFT. These timings alone do not establish a cache miss; review the recorded cache evidence."),
             RecordedBenchmarkWarning(id: "word_fallback_warning", title: "Estimated token counts",
                 explanation: "The test recorded word-based token estimates. Throughput should not be treated as an exact token measurement."),
             RecordedBenchmarkWarning(id: "engine_version_warning", title: "Engine version unavailable",
                 explanation: "The engine version was not verified for this test. Version differences may limit comparisons."),
-            RecordedBenchmarkWarning(id: "sustained_throttling_warning", title: "Sustained performance warning",
-                explanation: "The test recorded a late throughput drop alongside a changed or non-nominal thermal state. This observation does not isolate its cause."),
+            RecordedBenchmarkWarning(id: "sustained_throttling_warning",
+                title: progressInvalid ? "Unverified sustained warning" : "Sustained performance warning",
+                explanation: progressInvalid
+                    ? "The file contains a sustained warning, but inconsistent progress timing prevents confirming a late throughput drop. The original measurements are preserved."
+                    : "The test recorded a late throughput drop alongside a changed or non-nominal thermal state. This observation does not isolate its cause."),
             RecordedBenchmarkWarning(id: "memory_pressure_warning", title: "System memory pressure warning",
                 explanation: "The test recorded increased system-wide swap use. Other processes can contribute; this is not the model's own memory usage.")
         ]
-        return definitions.filter {
+        var warnings = definitions.filter {
             guard let flag = meta[$0.id] as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID() else { return false }
             return flag.boolValue
         }
+        if progressInvalid {
+            warnings.append(RecordedBenchmarkWarning(id: "progress_chronology_warning", title: "Inconsistent progress timing",
+                explanation: "Intermediate progress samples are inconsistent with trial timing or token-count order. They cannot support slowdown analysis; the saved trial values and means are unchanged."))
+        }
+        return warnings
     }
 }

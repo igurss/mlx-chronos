@@ -26,7 +26,8 @@ struct EnginesView: View {
                         }
                         if let engine = store.engineStatuses.first(where: { $0.name == name }) {
                             InfoLine(title: "Installation", value: engine.installed ? "Detected" : "Not detected")
-                            InfoLine(title: "Reported engine / runtime version", value: engine.version)
+                            InfoLine(title: engine.versionLabel, value: engine.version)
+                            InfoLine(title: "Installed client version", value: engine.clientVersion ?? "unknown")
                             if let version = engine.applicationVersion { InfoLine(title: "Application version", value: version) }
                             InfoLine(title: "Server", value: engine.running ? "Responding · \(engine.endpoint)" : "Not detected at \(engine.endpoint)")
                             if let path = engine.installationEvidence {

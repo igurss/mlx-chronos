@@ -163,7 +163,6 @@ final class ChronosStore: ObservableObject {
         guard let runtime = selectedRuntime, runtime.probe?.ready == true else {
             throw CommandError.invalid("Prepare the app-managed installation or select a working mlx-chronos installation.")
         }
-        try validatePorts()
         let result = try await execute(runtime.candidate, action: "snapshot", timeout: 75, stream: false)
         guard let data = result.stdout.data(using: .utf8),
               let snapshot = try? JSONDecoder().decode(EnvironmentSnapshot.self, from: data) else {
@@ -178,7 +177,9 @@ final class ChronosStore: ObservableObject {
                 if let found = evidence.first {
                     status.installed = true
                     status.installationEvidence = found.candidate.pythonPath
-                    if status.version == "unknown" { status.version = found.probe?.enginePackages[status.name] ?? "unknown" }
+                    if status.clientVersion == nil || status.clientVersion == "unknown" {
+                        status.clientVersion = found.probe?.enginePackages[status.name]
+                    }
                 }
             }
             return status
@@ -329,6 +330,8 @@ final class ChronosStore: ObservableObject {
                 current: self.values(for: command))
             self.drafts[command.name] = values
             self.runConfigurationNotice = "Loaded \(url.lastPathComponent). Review the settings, then choose Start test."
+            let notice = response.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !notice.isEmpty { self.runConfigurationNotice? += "\n" + notice }
         }
     }
 
@@ -377,17 +380,15 @@ final class ChronosStore: ObservableObject {
             guard let runtime = selectedRuntime, runtime.probe?.ready == true else {
                 throw CommandError.invalid("Choose a working mlx-chronos installation in Environment.")
             }
-            if command.section == .benchmark && runtime.probe?.thermalAvailable != true {
-                throw CommandError.invalid("This Python cannot read thermal state through Foundation. Install thermal support in Environment before measuring.")
-            }
             if command.name == "energy" && !macmonAvailable {
                 throw CommandError.invalid("Energy requires macmon on PATH. Install macmon, then refresh Environment.")
             }
             let timeout = CommandBuilder.timeout(command, values: values)
             let resultDirectory = CommandBuilder.resultDirectory(command, values: values,
                 workingDirectory: FileManager.default.temporaryDirectory)
+            let commandPorts = try CommandBuilder.serverPorts(command, values: values, configured: ports)
             let action = { self.executeCommand(command, arguments: arguments, candidate: runtime.candidate,
-                timeout: timeout, resultDirectory: resultDirectory) }
+                timeout: timeout, resultDirectory: resultDirectory, portOverrides: commandPorts) }
             if command.name == "submit" && values["dry_run"] != "true" {
                 pendingAction = PendingAction(title: "Send this result?",
                     message: "The CLI validates and sends the full result JSON to:\n\(values["endpoint"].flatMap { $0.isEmpty ? nil : $0 } ?? "the mlx-chronos project inbox")\n\nFile: \(values["file"] ?? "")\nContact: \(values["email"].flatMap { $0.isEmpty ? nil : $0 } ?? "anonymous")",
@@ -397,7 +398,7 @@ final class ChronosStore: ObservableObject {
     }
 
     private func executeCommand(_ command: CLICommand, arguments: [String], candidate: RuntimeCandidate,
-                                timeout: TimeInterval?, resultDirectory: URL?) {
+                                timeout: TimeInterval?, resultDirectory: URL?, portOverrides: [String: String]) {
         start(command.title) {
             // Partial results and failed-matrix manifests are useful too. Refresh
             // on success, failure or Stop, without changing future test defaults.
@@ -406,7 +407,7 @@ final class ChronosStore: ObservableObject {
                 else { self.loadResults() }
             }
             let response = try await self.execute(candidate, action: "cli", arguments: arguments,
-                timeout: timeout, requireSuccess: false)
+                timeout: timeout, requireSuccess: false, portOverrides: portOverrides)
             self.outcome = CommandOutcome(title: command.title,
                 output: String((response.stdout + response.stderr).suffix(120_000)), succeeded: response.succeeded)
             if !response.succeeded { throw CommandError.invalid(self.failure(response)) }
@@ -426,9 +427,10 @@ final class ChronosStore: ObservableObject {
     }
 
     private func execute(_ candidate: RuntimeCandidate, action: String, arguments: [String] = [],
-                         timeout: TimeInterval?, stream: Bool = true, requireSuccess: Bool = true) async throws -> ProcessResult {
+                         timeout: TimeInterval?, stream: Bool = true, requireSuccess: Bool = true,
+                         portOverrides: [String: String] = [:]) async throws -> ProcessResult {
         try Task.checkCancellation()
-        if action == "cli" || action == "snapshot" { try validatePorts() }
+        let operationPorts = action == "snapshot" ? try CommandBuilder.validatedPorts(ports) : portOverrides
         let bridge = try bridgeURL(), runner = ProcessRunner()
         runners.append(runner)
         defer { runners.removeAll { $0 === runner } }
@@ -438,20 +440,12 @@ final class ChronosStore: ObservableObject {
         let result = await runner.run(executable: candidate.pythonPath,
             arguments: RuntimeDiscovery.bridgeArguments(candidate, bridge: bridge, action: action, arguments: arguments),
             directory: FileManager.default.temporaryDirectory,
-            environment: RuntimeDiscovery.environment(extraBinPaths: bins, ports: ports), timeout: timeout,
+            environment: RuntimeDiscovery.environment(extraBinPaths: bins, ports: operationPorts), timeout: timeout,
             onOutput: { text in if stream { Task { @MainActor in logger.append(text) } } })
         if !stream && !result.succeeded { log.append(result.stderr + "\n") }
         if result.cancelled || Task.isCancelled { throw CancellationError() }
         if requireSuccess && !result.succeeded { throw CommandError.invalid(failure(result)) }
         return result
-    }
-
-    private func validatePorts() throws {
-        for (name, raw) in ports where !raw.isEmpty {
-            guard let port = Int(raw), (1...65535).contains(port) else {
-                throw CommandError.invalid("The port for \(name) must be between 1 and 65535.")
-            }
-        }
     }
 
     private func failure(_ result: ProcessResult) -> String {

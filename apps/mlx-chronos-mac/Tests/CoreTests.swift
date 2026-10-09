@@ -32,6 +32,23 @@ struct CoreTests {
         let python = CommandLine.arguments[1]
         let bridge = URL(fileURLWithPath: CommandLine.arguments[2])
         let runner = ProcessRunner()
+        let legacyEngine = try JSONDecoder().decode(EngineStatus.self, from: Data("""
+            {"name":"mlx-lm","installed":false,"running":true,"version":"unknown",
+             "endpoint":"http://localhost:8080/v1","port":8080,"models":[]}
+            """.utf8))
+        try expect(legacyEngine.clientVersion == nil && legacyEngine.versionSource == nil,
+            "Older compatible CLI snapshots must decode without version provenance")
+        try expect(legacyEngine.versionLabel == "Reported version (source unavailable)",
+            "Legacy version must not be labelled verified serving evidence")
+        var localVersion = legacyEngine
+        localVersion.versionSource = "client_package"
+        localVersion.clientVersion = "0.31.2"
+        try expect(localVersion.version == "unknown" && localVersion.versionLabel == "Locally detected engine version",
+            "Installed client evidence must not overwrite the serving version")
+        localVersion.versionSource = "server_api"
+        try expect(localVersion.versionLabel == "Serving engine / runtime version", "Server version label lost")
+        localVersion.versionSource = "process_package"
+        try expect(localVersion.versionLabel == "Server installation version (indirect)", "Process evidence must remain indirect")
         let probeResult = await runner.run(executable: python, arguments: ["-I", "-B", bridge.path, "probe"],
             directory: FileManager.default.temporaryDirectory, environment: RuntimeDiscovery.environment(), timeout: 20)
         try expect(probeResult.succeeded, "probe failed: \(probeResult.stderr)")
@@ -40,12 +57,60 @@ struct CoreTests {
         try expect(probe.commands.count == 14, "all commands must decode")
         try expect(RuntimeDiscovery.environment(ports: ["mlx-serve": "11235"])["MLX_CHRONOS_MLX_SERVE_PORT"] == "11235",
             "mlx-serve port override was lost")
+        let configuredPorts = ["omlx": "8000", "mlx-lm": "invalid", "mlx-serve": "11235"]
+        for name in ["compare", "history", "submit"] {
+            let command = probe.commands.first { $0.name == name }!
+            let selected = try CommandBuilder.serverPorts(command, values: [:], configured: configuredPorts)
+            try expect(selected.isEmpty, "A file operation was blocked by unrelated server ports")
+        }
+        for name in ["run", "models", "validate", "doctor", "context", "concurrency", "energy"] {
+            let command = probe.commands.first { $0.name == name }!
+            let selected = try CommandBuilder.serverPorts(command, values: ["engine": "omlx"], configured: configuredPorts)
+            try expect(selected == ["omlx": "8000"], "An unused engine port blocked the selected server")
+            try rejects { _ = try CommandBuilder.serverPorts(command, values: ["engine": "mlx-lm"], configured: configuredPorts) }
+        }
+        let matrixCommand = probe.commands.first { $0.name == "matrix" }!
+        let runCommand = probe.commands.first { $0.name == "run" }!
+        let defaultPorts = try CommandBuilder.serverPorts(runCommand, values: ["engine": ""], configured: configuredPorts)
+        try expect(defaultPorts == ["omlx": "8000"], "Blank engine should delegate to the CLI default")
+        let matrixPorts = try CommandBuilder.serverPorts(matrixCommand,
+            values: ["engine_model": "omlx=a\nmlx-serve=b"], configured: configuredPorts)
+        try expect(matrixPorts == ["omlx": "8000", "mlx-serve": "11235"], "Matrix validated unrelated ports")
+        let doctorCommand = probe.commands.first { $0.name == "doctor" }!
+        try rejects { _ = try CommandBuilder.serverPorts(doctorCommand, values: [:], configured: configuredPorts) }
+        let enginesCommand = probe.commands.first { $0.name == "engines" }!
+        try rejects { _ = try CommandBuilder.serverPorts(enginesCommand, values: [:], configured: configuredPorts) }
+        let allPorts = try CommandBuilder.serverPorts(enginesCommand, values: [:], configured: ["omlx": "8000"])
+        try expect(allPorts == ["omlx": "8000"], "Engine inventory lost its port overrides")
+        try rejects { _ = try CommandBuilder.validatedPorts(configuredPorts) }
         try expect(OptionPresentation.compareGuidance.contains("Invalid schemas or seals are rejected")
             && OptionPresentation.compareGuidance.contains("warnings, not a block"),
             "Compare guidance no longer distinguishes invalid files from comparability warnings")
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("chronos-core-tests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
+
+        let enabledCommand = CLICommand(name: "future", help: "", options: [
+            CLIOption(name: "enabled", flag: "--enabled", kind: "boolean", required: false,
+                      multiple: false, choices: [], defaultValue: "True", help: "")
+        ])
+        let enabledValues = CommandBuilder.initialValues(enabledCommand, outputRoot: root)
+        try expect(enabledValues["enabled"] == "true", "boolean contract default was lost")
+        try rejects { _ = try CommandBuilder.arguments(enabledCommand, values: ["enabled": "false"]) }
+        let dependencies = RuntimeDependencySnapshot(pythonVersion: "3.13.16", requirements: "httpx==0.28.1\npsutil==7.2.2\n")
+        let validatedDependencies = try dependencies.validatedRequirements()
+        try expect(validatedDependencies == dependencies.requirements, "dependency versions changed")
+        try rejects { _ = try RuntimeDependencySnapshot(pythonVersion: "3.13.16", requirements: "--index-url https://untrusted.invalid\n").validatedRequirements() }
+        let transferSession = URLSession(configuration: .ephemeral)
+        defer { transferSession.invalidateAndCancel() }
+        let transfer = transferSession.downloadTask(with: URL(string: "https://example.invalid/never-started")!)
+        let limit = BoundedDownloadDelegate(limit: 100)
+        limit.urlSession(transferSession, downloadTask: transfer, didWriteData: 100,
+                         totalBytesWritten: 100, totalBytesExpectedToWrite: -1)
+        try expect(transfer.state == .suspended, "bounded transfer rejected its exact limit")
+        limit.urlSession(transferSession, downloadTask: transfer, didWriteData: 1,
+                         totalBytesWritten: 101, totalBytesExpectedToWrite: -1)
+        try expect(transfer.state == .canceling || transfer.state == .completed, "unknown-length download exceeded limit")
 
         for command in probe.commands where command.name != "wizard" {
             var values = CommandBuilder.initialValues(command, outputRoot: root)
@@ -138,6 +203,7 @@ struct CoreTests {
         try expect(!pipx.canUninstall, "pipx metadata can be corrupted by direct pip removal")
         var unknownThermal = probe; unknownThermal.thermalState = "unavailable_foundation_unknown_state_9"
         try expect(!unknownThermal.thermalAvailable, "unknown Foundation thermal state was accepted as verified")
+        try expect(unknownThermal.ready, "Missing thermal observations should not invalidate an external CLI")
 
         let result = root.appendingPathComponent("result.json")
         try Data(#"{"engine":{"name":"test"},"model":{"name":"model"},"meta":{"timestamp":"2026-09-30T10:00:00Z"},"metrics":{"request_tokens_per_second":{"mean":12.5},"ttft_cold":{"mean":true}}}"#.utf8).write(to: result)
@@ -206,6 +272,40 @@ struct CoreTests {
         let cancelled = await cancelledRunner.run(executable: python, arguments: ["-V"], directory: root,
             environment: RuntimeDiscovery.environment(), timeout: 10)
         try expect(cancelled.cancelled, "cancel-before-launch was ignored")
+        // Cancel after the runner has selected the child but before it launches.
+        // Wait for the child to install SIGINT handling before returning from launch.
+        let enteredLaunch = DispatchSemaphore(value: 0)
+        let resumeLaunch = DispatchSemaphore(value: 0)
+        let ready = root.appendingPathComponent("child-ready")
+        let racingRunner = ProcessRunner(launch: { child in
+            enteredLaunch.signal()
+            guard resumeLaunch.wait(timeout: .now() + 5) == .success else {
+                throw TestFailure.failed("launch barrier timed out")
+            }
+            try child.run()
+            let deadline = Date().addingTimeInterval(5)
+            while !FileManager.default.fileExists(atPath: ready.path), Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        })
+        let raceStart = Date()
+        let racing = Task {
+            await racingRunner.run(executable: python,
+                arguments: ["-I", "-c", "import signal,time,pathlib,sys; signal.signal(signal.SIGINT,signal.SIG_IGN); pathlib.Path(sys.argv[1]).touch(); time.sleep(30)", ready.path],
+                directory: root, environment: RuntimeDiscovery.environment(), timeout: 9)
+        }
+        // Avoid blocking the cooperative executor that starts the task above.
+        let entered: Bool = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                continuation.resume(returning: enteredLaunch.wait(timeout: .now() + 5) == .success)
+            }
+        }
+        racingRunner.stop()
+        resumeLaunch.signal()
+        let raced = await racing.value
+        try expect(entered && FileManager.default.fileExists(atPath: ready.path), "race fixture never reached launch")
+        try expect(raced.cancelled && !raced.timedOut && Date().timeIntervalSince(raceStart) < 8,
+            "cancellation during launch lost termination escalation")
         print("Core checks passed: CLI parity, exact arguments, defaults, validation, removal policy, result parsing/trial charts, pipes, timeout and cancellation.")
     }
     static func checkRuntimePolicy(_ probe: RuntimeProbe) throws {
@@ -222,6 +322,9 @@ struct CoreTests {
         let release = RuntimeRelease(version: probe.packageVersion!, url: URL(string: "https://files.pythonhosted.org/test.whl")!,
             sha256: String(repeating: "a", count: 64), contract: contract, allowLegacyBridge: true)
         try AppRuntimePolicy.validate(probe, release: release)
+        var withoutThermal = probe; withoutThermal.thermalState = "unavailable_no_foundation"
+        try expect(withoutThermal.ready, "Missing thermal observations blocked a valid external CLI")
+        try rejects { try AppRuntimePolicy.validate(withoutThermal, release: release) }
         try rejects { try AppRuntimePolicy.validate(probe, release: release, expectedPrefix: "/wrong/environment") }
         let strict = RuntimeRelease(version: release.version, url: release.url, sha256: release.sha256,
             contract: contract, allowLegacyBridge: false)
@@ -263,6 +366,36 @@ struct CoreTests {
             "The viewer recalculated a saved mean or preferred the legacy throughput alias")
         try expect(parsed.warnings.map(\.id) == ["cached_ttft_warning"] && parsed.protocolLabel == "baseline 4"
             && parsed.conditions == "Apple M4 · 32 GB RAM · 4bit · baseline", "Recorded context or warnings were lost")
+        for source in ["process_package", "client_cli", "client_package"] {
+            var changed = original
+            changed["engine"] = ["name": "omlx", "version": "1.2", "version_source": source]
+            let displayed = try parse(changed)
+            try expect(displayed.warnings.contains { $0.id == "engine_version_indirect" }, "Saved version evidence lost its uncertainty")
+        }
+        let progressCases: [(Double, Int, String, Bool)] = [
+            (1.0, 50, "word_fallback", false),
+            (2.01, 50, "word_fallback", true),
+            (1.5, 150, "usage.completion_tokens", true),
+            (1.5, 150, "word_fallback", false)
+        ]
+        for (time, tokens, source, invalid) in progressCases {
+            var changed = original
+            var trials = changed["trials"] as! [String: Any]
+            trials["throughput_elapsed_seconds_raw"] = [2.0, 2.0]
+            trials["throughput_progress_samples_raw"] = [[
+                ["elapsed_seconds": time, "completion_tokens": tokens, "token_count_source": source],
+                ["elapsed_seconds": 2.0, "completion_tokens": 100, "token_count_source": "usage.completion_tokens"]
+            ], []]
+            changed["trials"] = trials
+            changed["meta"] = ["sustained_throttling_warning": true]
+            let displayed = try parse(changed)
+            try expect(displayed.series == parsed.series, "Progress diagnosis altered saved trial values or means")
+            try expect(displayed.warnings.contains { $0.id == "progress_chronology_warning" } == invalid,
+                "Chronology diagnosis did not distinguish valid and invalid progress")
+            let warning = displayed.warnings.first { $0.id == "sustained_throttling_warning" }
+            try expect(warning?.title == (invalid ? "Unverified sustained warning" : "Sustained performance warning"),
+                "Invalid progress was used to confirm sustained slowdown")
+        }
         for engine in ["omlx", "vllm-mlx", "mlx-lm", "rapid-mlx", "lmstudio", "ollama", "mlx-serve"] {
             var changed = original; changed["engine"] = ["name": engine]
             let engineData = try parse(changed)

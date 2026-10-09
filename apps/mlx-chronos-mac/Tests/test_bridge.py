@@ -88,6 +88,22 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(result["commands"])
         self.assertEqual(result["executable"], sys.executable)
 
+    @unittest.skipUnless(HAS_RUN_CONFIG, "Requires CLI run configuration support")
+    def test_prior_protocol_configuration_keeps_json_stdout_and_explains_current_method(self):
+        with tempfile.TemporaryDirectory(prefix="chronos-config-") as root:
+            path = Path(root) / "settings.json"
+            bridge.run_configuration("config-save", [str(path), "run", "--model", "org/model"])
+            data = json.loads(path.read_text())
+            data["benchmark_protocol_version"] = "earlier-method"
+            path.write_text(json.dumps(data))
+            original = path.read_bytes()
+            response = subprocess.run([sys.executable, "-I", "-B", str(BRIDGE), "config-read", str(path)],
+                                      capture_output=True, text=True, timeout=20)
+            self.assertEqual(response.returncode, 0, response.stderr)
+            self.assertEqual(json.loads(response.stdout)["values"]["model"], "org/model")
+            self.assertIn("current protocol", response.stderr)
+            self.assertEqual(path.read_bytes(), original)
+
     def test_working_directory_cannot_shadow_installed_cli(self):
         with tempfile.TemporaryDirectory(prefix="chronos-shadow-") as root:
             fake = Path(root) / "mlx_chronos"
@@ -300,6 +316,27 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(result["engines"][0]["loaded_models"], ["loaded-instance"])
         self.assertEqual(result["engines"][1]["error"], "detection failed")
         self.assertFalse(result["engines"][1]["running"])
+
+    def test_snapshot_separates_client_and_serving_version_without_inference(self):
+        class Engine:
+            port = 8080
+            version_source = "server_api"
+            def base_url(self): return "http://localhost:8080/v1"
+            def is_installed(self): return True
+            def is_server_running(self): return True
+            def get_version(self): return "0.31.2"
+            def get_client_version(self): return "9.8.7"
+            def list_model_ids(self): return []
+            def validate_completion_request(self, *args): raise AssertionError("inference forbidden")
+        with patch("mlx_chronos.engines.ENGINES", {"mlx-lm": None}), \
+             patch("mlx_chronos.engines.get_engine", return_value=Engine()), \
+             patch("mlx_chronos.detect.detect_hardware", return_value={}):
+            for source in ('server_api', 'process_package', 'unavailable'):
+                Engine.version_source = source
+                result = bridge.snapshot()['engines'][0]
+                self.assertEqual(result['version'], '0.31.2')
+                self.assertEqual(result['client_version'], '9.8.7')
+                self.assertEqual(result['version_source'], source)
 
     def test_missing_loaded_field_is_unknown_not_zero(self):
         class Engine:

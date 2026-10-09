@@ -133,15 +133,26 @@ struct EngineStatus: Decodable, Identifiable, Equatable {
     var error: String?
     var installationEvidence: String?
     var applicationVersion: String?
+    var clientVersion: String? = nil
+    var versionSource: String? = nil
     var id: String { name }
     var displayName: String {
         ["omlx": "oMLX", "rapid-mlx": "Rapid-MLX", "vllm-mlx": "vLLM-MLX",
          "mlx-lm": "mlx-lm", "mlx-serve": "mlx-serve", "ollama": "Ollama", "lmstudio": "LM Studio"][name] ?? name
     }
+    var versionLabel: String {
+        switch versionSource {
+        case "server_api", "runtime_probe", "unavailable": return "Serving engine / runtime version"
+        case "client_cli", "client_package": return "Locally detected engine version"
+        case "process_package": return "Server installation version (indirect)"
+        default: return "Reported version (source unavailable)"
+        }
+    }
     enum CodingKeys: String, CodingKey {
         case name, installed, running, version, endpoint, port, models, error
         case loadedModels = "loaded_models", installationEvidence = "installation_evidence"
         case applicationVersion = "application_version"
+        case clientVersion = "client_version", versionSource = "version_source"
     }
 }
 
