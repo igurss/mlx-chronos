@@ -6,6 +6,7 @@
   whether their package is installed in Chronos' Python environment.
 - Discard indirect serving-version evidence when package metadata changes after
   server startup, including copied metadata with preserved modification times.
+  Align Linux process and file timestamps at the kernel's process-clock resolution.
 - Allow switching an existing wizard configuration between public and local
   runs while preserving custom settings. Render commands, metadata and errors
   literally so brackets cannot alter text or interrupt the wizard.

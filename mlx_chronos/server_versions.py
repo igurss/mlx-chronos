@@ -2,13 +2,16 @@
 
 This identifies an installation, not the modules already loaded into memory.
 Only explicit, isolated virtual environments are supported; ambiguous launchers,
-editable installs and metadata changed after process startup stay unknown.
+editable installs and metadata newer than the process-start time window stay unknown.
 """
 from email.parser import Parser
 import json
+import os
 from pathlib import Path
 import re
 import shlex
+import sys
+import time
 
 from packaging.version import Version
 import psutil
@@ -143,12 +146,23 @@ def _environment_version(python: Path, name: str, started: float) -> str | None:
 def process_package_version(pid: int, name: str) -> str | None:
     """Return indirect evidence only while the same identified process is alive."""
     try:
+        # Refresh the epoch origin before Process also for psutil versions that
+        # cache Linux boot time when reconstructing process creation timestamps.
+        booted = psutil.boot_time() if sys.platform.startswith('linux') else None
         process = psutil.Process(pid)
         started, command = process.create_time(), process.cmdline()
         python = _interpreter(command, name)
         if python is None or not _matches_executable(python, process.exe()):
             return None
-        version = _environment_version(python, name, started)
+        metadata_started = started
+        if booted is not None:
+            # Linux combines whole-second boot time with a start counter rounded
+            # down to clock ticks. Align that counter with the file's epoch clock
+            # and compare against the upper edge of its one-tick uncertainty.
+            uptime = time.clock_gettime(getattr(time, 'CLOCK_BOOTTIME'))
+            epoch = time.time()
+            metadata_started = started - booted + (epoch - uptime) + 1 / os.sysconf('SC_CLK_TCK')
+        version = _environment_version(python, name, metadata_started)
         if (not process.is_running() or process.create_time() != started
                 or process.cmdline() != command):
             return None

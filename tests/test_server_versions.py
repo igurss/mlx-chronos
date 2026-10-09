@@ -5,11 +5,13 @@ import select
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import psutil
 import pytest
 
+from mlx_chronos import server_versions
 from mlx_chronos.server_versions import process_package_version
 
 
@@ -43,6 +45,9 @@ def process(monkeypatch, installation):
     process.exe.return_value = str(Path(sys.executable).resolve())
     process.is_running.return_value = True
     monkeypatch.setattr('mlx_chronos.server_versions.psutil.Process', lambda _: process)
+    # This mock reports exact epoch timestamps; Linux clock conversion is
+    # exercised separately below and by the real child-process test.
+    monkeypatch.setattr(server_versions, 'sys', SimpleNamespace(platform='darwin'))
     return process
 
 
@@ -130,6 +135,43 @@ def test_replaced_metadata_with_preserved_mtime_is_not_server_version(installati
     os.utime(metadata, (original_mtime, original_mtime))
     assert metadata.stat().st_mtime < process.create_time.return_value
     assert metadata.stat().st_ctime > process.create_time.return_value
+    assert process_package_version(42, 'vllm-mlx') is None
+
+
+@pytest.mark.parametrize('boot_fraction', [0.001, 0.5, 0.999])
+@pytest.mark.parametrize('metadata_offset,expected', [(0.005, '1.2.3'), (0.025, None)])
+@pytest.mark.parametrize('preserved_mtime', [True, False])
+def test_linux_version_evidence_uses_the_process_clock_resolution(
+    installation, process, monkeypatch, boot_fraction, metadata_offset, expected, preserved_mtime,
+):
+    _, _, distribution = installation
+    metadata = distribution / 'METADATA'
+    if not preserved_mtime:
+        os.utime(metadata, None)
+    # The file's ctime cannot be backdated. Model a process start rounded down
+    # to a clock tick and an epoch reconstructed from a whole-second boot time.
+    newest = max(metadata.stat().st_mtime, metadata.stat().st_ctime)
+    tick_start = newest - metadata_offset
+    process.create_time.return_value = tick_start - boot_fraction
+    boot_second = 1_700_000_000.0
+    observed = tick_start + 2
+    monkeypatch.setattr(server_versions, 'sys', SimpleNamespace(platform='linux'))
+    monkeypatch.setattr(server_versions.psutil, 'boot_time', lambda: boot_second)
+    monkeypatch.setattr(server_versions, 'os', SimpleNamespace(sysconf=lambda _: 100))
+    monkeypatch.setattr(server_versions, 'time', SimpleNamespace(
+        CLOCK_BOOTTIME=7,
+        clock_gettime=lambda _: observed - (boot_second + boot_fraction),
+        time=lambda: observed,
+    ))
+    assert newest > process.create_time.return_value
+    if preserved_mtime:
+        assert metadata.stat().st_mtime < process.create_time.return_value
+    assert process_package_version(42, 'vllm-mlx') == expected
+
+
+def test_precise_process_clock_rejects_recent_metadata_changes(installation, process):
+    _, _, distribution = installation
+    process.create_time.return_value = (distribution / 'METADATA').stat().st_ctime - 0.005
     assert process_package_version(42, 'vllm-mlx') is None
 
 
