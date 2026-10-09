@@ -224,12 +224,14 @@ private struct TrialChartView: View {
     private func nearestPoint(_ location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) -> String? {
         guard let anchor = proxy.plotFrame else { return nil }
         let frame = geometry[anchor]
-        guard frame.contains(location) else { return nil }
+        // A zero sample sits on the axis; include the visible symbol's edge.
+        guard frame.insetBy(dx: -8, dy: -8).contains(location) else { return nil }
         let local = CGPoint(x: location.x - frame.minX, y: location.y - frame.minY)
-        var closest: (id: String, distance: Double)?
+        var closest: (id: String, distance: CGFloat)?
         for point in points {
             guard let x = proxy.position(forX: point.trial), let y = proxy.position(forY: point.value) else { continue }
-            let distance = pow(local.x - x, 2) + pow(local.y - y, 2)
+            let dx = local.x - x, dy = local.y - y
+            let distance = dx * dx + dy * dy
             if distance <= 24 * 24 && distance < (closest?.distance ?? .infinity) { closest = (point.id, distance) }
         }
         return closest?.id
