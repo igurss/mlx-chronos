@@ -511,8 +511,8 @@ turn off the corresponding checkbox before running. Save an edited copy using
 `--config OLD --save-config NEW`; this also does not start a benchmark.
 
 `schema_version: mlx-chronos-run-config-v1` identifies the **configuration file
-format**, separately from `benchmark_protocol_version` (currently `5` in
-source and `4` in published CLI `0.5.1`), which identifies
+format**, separately from `benchmark_protocol_version` (`5` in CLI `0.6.0`
+and `4` in CLI `0.5.1`), which identifies
 the measurement method. `chronos_version` records the saving CLI, without
 requiring that same software version on replay. Unknown/missing fields,
 duplicate JSON keys, invalid types/bounds and files over 1 MB are rejected.
@@ -1164,12 +1164,11 @@ Public validation also requires at least two thermal samples and no excessive
 sampling gaps. Label `3` reused the client object but could leave response
 bodies unread, preventing connection reuse.
 
-**CLI `0.5.1` uses `4`; release `0.5.0` uses `3`.** Revision `4` is included in
-[release 0.5.1](../CHANGELOG.md#051--2026-10-04), available through the normal
-PyPI installation. The unreleased source on `main` produces `5`. During the
-transition, public submissions accept both `4` and `5`, each with its own rules;
-protocol `3` is archive-only. Acceptance of `4` will be retired only after the
-replacement CLI is publicly available. Archived `3` and `4` remain readable with their
+**CLI `0.6.0` uses `5`, CLI `0.5.1` uses `4`, and release `0.5.0` uses `3`.**
+Revision `5` is included in [release 0.6.0](../CHANGELOG.md#060--2026-10-11),
+available through the normal PyPI installation. During migration, public
+submissions accept both `4` and `5`, each with its own rules; protocol `3` is
+archive-only. Archived `3` and `4` remain readable with their
 original data and seals; the leaderboard keeps protocol variants separate,
 and local comparison warns about differing protocol metadata.
 

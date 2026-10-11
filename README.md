@@ -21,9 +21,9 @@
 Choose your interface:
 
 - **macOS app:** configure tests, inspect your environment and work with results
-  without assembling terminal commands. [Download app **0.2.0**](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.2.0).
+  without assembling terminal commands. [Download app **0.3.0**](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.3.0).
   It downloads private Python and the newest approved compatible CLI, starting
-  with **0.5.1**. See the
+  with **0.6.0**. See the
   [app user guide](https://github.com/igurss/mlx-chronos/blob/main/apps/mlx-chronos-mac/USER_GUIDE.md) and
   [build instructions](https://github.com/igurss/mlx-chronos/blob/main/CONTRIBUTING.md#macos-app-development).
   The free DMG is **not Apple-notarized**; follow the guide's first-launch
@@ -109,14 +109,14 @@ The public leaderboard is available at
 
 ### Current Release
 
-`0.5.1` fixes completion-stream handling, measurement validation, thermal/RSS
-monitoring, and ambiguous submission retries. Standard benchmarks now use
-protocol revision **4**; new public submissions require a new run, while
-archived revision **3** results retain their original data and seals.
-Development source produces protocol **5**. During its release transition,
-submissions still accept **4** from the published CLI, with separate validation
-rules and leaderboard variants. See [protocol revisions](docs/methodology.md#what-does-the-protocol-number-mean).
-The package also declares its interface compatibility with app **0.2.0**.
+`0.6.0` adds reusable run configurations, richer repeated-session summaries,
+two-series comparisons and local MLX safetensors support for mlx-serve.
+Standard benchmarks use protocol revision **5**, retaining raw timing precision
+and recording thermal coverage and serving-version provenance. Protocol **4**
+from CLI 0.5.1 remains accepted during migration, with separate validation rules
+and leaderboard variants. Archived results retain their original data and seals.
+See [protocol revisions](docs/methodology.md#what-does-the-protocol-number-mean).
+The CLI interface remains compatible with app **0.2.0** and newer.
 The existing local diagnostics and experimental MLX-only LM Studio support
 remain available. Full changes are detailed in the
 [changelog](https://github.com/igurss/mlx-chronos/blob/main/CHANGELOG.md).
@@ -137,14 +137,15 @@ separately, and running a test does not automatically share its result.
 External CLI installations without thermal support can run local tests;
 continuous Foundation monitoring remains required for new public results.
 
-App and CLI releases are independent. **App 0.2.0, build 4** contains no CLI
+App and CLI releases are independent. **App 0.3.0, build 5** adds saved
+configurations and per-trial result charts. It contains no CLI
 wheel or Python interpreter. It checks compatible CLI updates at launch,
 retaining the prior copy until verification passes and supporting rollback.
 CLI bug fixes can be delivered without rebuilding its DMG; incompatible
 interfaces require an app update. App updates are checked separately and link
 to the official download for manual replacement. See the
 [user guide](apps/mlx-chronos-mac/USER_GUIDE.md) for setup and options.
-[Download app 0.2.0](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.2.0).
+[Download app 0.3.0](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.3.0).
 The DMG has a local/ad-hoc signature, not Developer ID signing or Apple
 notarization; macOS may require explicit first-launch authorization.
 
@@ -159,7 +160,7 @@ notarization; macOS may require explicit first-launch authorization.
 | Rapid-MLX | [raullenchai/Rapid-MLX](https://github.com/raullenchai/Rapid-MLX) | OpenAI-compatible server |
 | vllm-mlx | [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx) | OpenAI-compatible server |
 | mlx-lm | [ml-explore/mlx-lm](https://github.com/ml-explore/mlx-lm) | Apple MLX |
-| mlx-serve | [ddalcu/mlx-serve](https://github.com/ddalcu/mlx-serve) | Local MLX safetensors only; available from `main` |
+| mlx-serve | [ddalcu/mlx-serve](https://github.com/ddalcu/mlx-serve) | Local MLX safetensors only |
 | LM Studio | [lmstudio.ai](https://lmstudio.ai) | Experimental; MLX runtime only — see note below |
 
 > **Note**
@@ -178,8 +179,7 @@ notarization; macOS may require explicit first-launch authorization.
 > an MLX runtime name. See the [two-stage gate](https://github.com/igurss/mlx-chronos/blob/main/docs/methodology.md#lm-studio-mlx-only-gate)
 > for API details and the distinction between application and runtime version.
 
-mlx-serve support currently requires the
-[development installation](#development-version-from-main). Use an exact ID
+mlx-serve support is included in CLI **0.6.0**. Use an exact ID
 from `mlx-chronos models --engine mlx-serve`. Chronos confirms the loaded
 `mlx` safetensors backend before measurement. All GGUF paths, including
 upstream's native MLX GGUF reader, llama.cpp/ds4 and remote models are rejected.
@@ -425,7 +425,7 @@ no throughput percentage (`n/a`); TTFT and RAM deltas remain independent of that
 restriction. Differences in hardware or model still allow descriptive deltas.
 See [local comparison rules](docs/methodology.md#local-comparison-and-history).
 
-With the Unreleased CLI changes, `--repeat` also reports median, quartiles,
+With CLI 0.6.0 and newer, `--repeat` also reports median, quartiles,
 MAD and available session counts for throughput, TTFT and system RAM.
 `compare --series-a-size N` uses the first N files as series A and the rest
 as B, comparing their medians. Each complete session counts once; copied
@@ -462,7 +462,7 @@ exports are index data, not sealed result files.
 
 ### Reusable run configurations
 
-Available from `main` with the Unreleased CLI changes:
+Available in CLI 0.6.0 and newer:
 
 ```bash
 # Save resolved settings only; no engine or benchmark is started.
@@ -525,8 +525,8 @@ benchmark method and validation rules**. The number is separate from the CLI
 and app versions; it is not a performance score. `baseline` and `sustained`
 are test profiles and use the same protocol revision.
 
-Published CLI `0.5.1` uses `4`, while release `0.5.0` uses `3`. The unreleased
-source on `main` uses `5`, preserving raw timing precision and requiring complete
+CLI `0.6.0` uses `5`, CLI `0.5.1` uses `4`, and release `0.5.0` uses `3`.
+Revision `5` preserves raw timing precision and requires complete
 thermal and server-version evidence. Older measurements keep
 their original labels and seals. A newer protocol requires a new benchmark
 run, never a manual change to an existing JSON. See

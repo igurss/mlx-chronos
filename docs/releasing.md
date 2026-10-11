@@ -89,15 +89,15 @@ seals intact; do not reject the currently published producer early.
 
 App releases use `app-vX.Y.Z`; they do not trigger CLI publication. Update the
 app's `MARKETING_VERSION`, increasing `CURRENT_PROJECT_VERSION`, separate
-changelog, user guide and README download link. App 0.2.0, build 4 downloads
+changelog, user guide and README download link. App 0.3.0, build 5 downloads
 private Python and an approved compatible CLI instead of embedding a wheel.
 
 1. Publish and verify any accompanying CLI release first. Register its exact
    published wheel with
    `python3 apps/mlx-chronos-mac/scripts/register_runtime_release.py X.Y.Z`.
    Review the artifact checksum and interface contract; keep existing approved
-   entries unchanged. CLI 0.5.1 includes the app compatibility declaration and
-   benchmark protocol revision 4.
+   entries unchanged. CLI 0.6.0 preserves the app compatibility declaration and
+   produces benchmark protocol revision 5.
 2. Run the app's bridge/Swift checks against that published CLI and the
    standalone bootstrap checks with the updated catalog. Commit and push the
    catalog, then verify Pages serves the approved entry and the macOS App

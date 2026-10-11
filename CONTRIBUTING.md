@@ -243,8 +243,8 @@ method and validation rules, independently of the CLI and app versions. See
 [what the protocol number means](docs/methodology.md#what-does-the-protocol-number-mean)
 for the history of labels `1`–`5` and their effect on comparisons.
 
-Published CLI `0.5.1` uses label `4`, which records fully drained and validated
-completion streams plus thermal sampling coverage. Current source records label
+CLI `0.5.1` uses label `4`, which records fully drained and validated
+completion streams plus thermal sampling coverage. CLI `0.6.0` records label
 `5`, adding full clock precision, thermal coverage across measured phases and
 engine-version provenance. Both labels are accepted during the release transition.
 Archived label `3` results retain their original data and seals; they do not satisfy the
@@ -395,7 +395,7 @@ Create a separate Python environment with the approved published CLI:
 
 ```bash
 python3 -m venv .venv-app
-.venv-app/bin/python -m pip install "mlx-chronos[thermal]==0.5.1"
+.venv-app/bin/python -m pip install "mlx-chronos[thermal]==0.6.0"
 bash apps/mlx-chronos-mac/scripts/check.sh "$PWD/.venv-app/bin/python"
 ```
 
@@ -489,7 +489,7 @@ upstream notices when changing redistributed resources.
 App `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` are manual, independent
 of the CLI version. Assign a unique increasing build number to each distributed
 candidate; compiling or committing does not increment it automatically.
-The current app release is **0.2.0, build 4**. Reserve **`app-vX.Y.Z`** for app
+The current app release is **0.3.0, build 5**. Reserve **`app-vX.Y.Z`** for app
 release tags:
 CLI tags are `vX.Y.Z` and trigger the separate PyPI publication workflow.
 Do not create either tag merely to record a local build.

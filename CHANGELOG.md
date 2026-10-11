@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## [0.6.0] — 2026-10-11
+
+Minor release adding reusable run configurations, richer repeated-session and
+series comparisons, and local MLX safetensors support for mlx-serve. Standard
+benchmarks use protocol revision **5**, preserving raw timing precision and
+recording stronger thermal coverage and serving-version evidence. Protocol-4
+submissions remain accepted during migration; archived results retain their
+original data and seals. The app interface remains compatible with app 0.2.0.
+
 - Report identified external servers as running in `engines`, independently of
   whether their package is installed in Chronos' Python environment.
 - Discard indirect serving-version evidence when package metadata changes after
@@ -22,7 +31,7 @@
   deduplicate identical cautions, and group incomplete evidence as informational
   comparison limits. Keep concrete differences and measurement warnings visible;
   explain cache timing without inferring a cache miss. Emit run warnings once.
-- Introduce benchmark protocol **5** on `main`: retain clock precision in raw
+- Introduce benchmark protocol **5**: retain clock precision in raw
   timings, rates and baseline/sustained summaries; require thermal sample spans
   covering all measured phases and explicit engine-version provenance. Preserve
   protocol-4 submissions during the release transition and historical files/seals;

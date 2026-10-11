@@ -5,6 +5,13 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+## [0.3.0] — 2026-10-11
+
+**App 0.3.0, build 5** adds reusable run configurations and per-trial result
+charts, with clearer serving-version evidence and more reliable runtime repair
+and process cancellation. The accompanying approved CLI is **0.6.0**; app and
+CLI versions remain independent.
+
 - Allow local tests with external CLI installations lacking Foundation thermal
   observations. Keep thermal support in verified app-managed installations and
   public-result requirements; energy still requires macmon.
@@ -49,17 +56,16 @@ with the first public app baseline; private prototypes are not earlier releases.
   of A files; keep **Compare selected** in ordinary per-file mode. The optional
   integer flag and positional files also fit app 0.2.0's existing dynamic form.
   Statistics remain in the CLI; no duplicated calculation or interface-version
-  bump. Requires a CLI containing these Unreleased changes.
+  bump. Requires CLI 0.6.0 or newer.
 - Explain pairwise, metric-specific comparison cautions, incomplete metadata
   and estimated/unavailable percentages. Use the selected CLI's comparison
-  logic; the refined behavior requires a CLI containing the Unreleased changes.
-- Support `ddalcu/mlx-serve` through a CLI containing the new adapter. Keep
+  logic; the refined behavior requires CLI 0.6.0 or newer.
+- Support `ddalcu/mlx-serve` through CLI 0.6.0 or newer. Keep
   engine choices and all test commands driven by the selected CLI; read local
   loaded-model inventory without inference and show the separate desktop app
   version when available. Tests accept only local MLX safetensors; all GGUF
   paths and llama.cpp/ds4 are rejected through the shared CLI validation.
-  The approved CLI 0.5.1 remains unchanged until a new
-  compatible release is published and approved.
+  CLI 0.6.0 is registered independently in the approved runtime catalog.
 
 ## [0.2.0] — 2026-10-04
 
@@ -171,5 +177,6 @@ than reimplementing them. For the CLI's full change history and the separate
 web leaderboard (including exports/charts), see the
 [CLI changelog](../../CHANGELOG.md). Web features are not bundled app controls.
 
+[0.3.0]: https://github.com/igurss/mlx-chronos/releases/tag/app-v0.3.0
 [0.2.0]: https://github.com/igurss/mlx-chronos/releases/tag/app-v0.2.0
 [0.1.0]: https://github.com/igurss/mlx-chronos/releases/tag/app-v0.1.0

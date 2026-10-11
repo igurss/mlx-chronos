@@ -1,9 +1,9 @@
 # MLX Chronos for macOS — User guide
 
-App version: **0.2.0, build 4**. Python and mlx-chronos are downloaded independently.
-The initial approved CLI is **0.5.1**; future approved compatible releases can
+App version: **0.3.0, build 5**. Python and mlx-chronos are downloaded independently.
+The accompanying approved CLI is **0.6.0**; future approved compatible releases can
 be installed without replacing the app. The older 0.1.0 app retains its
-original bundled setup; this guide describes 0.2.0.
+original bundled setup; this guide describes 0.3.0.
 
 The app configures and runs the Python CLI. It does not implement a separate
 measurement method. Available options and defaults come from the selected CLI installation.
@@ -13,7 +13,7 @@ measurement method. Available options and defaults come from the selected CLI in
 ### Install and authorize the app
 
 Download the DMG and its matching `.sha256` file from the
-[official app 0.2.0 release](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.2.0).
+[official app 0.3.0 release](https://github.com/igurss/mlx-chronos/releases/tag/app-v0.3.0).
 Open the DMG, drag `MLXChronos.app` to Applications, and launch the installed
 copy. Eject the DMG after installation.
 
@@ -30,7 +30,7 @@ verify the package rather than ignoring the warning.
 Optional checksum verification from the folder containing both downloads:
 
 ```bash
-shasum -a 256 -c MLXChronos-0.2.0-arm64.dmg.sha256
+shasum -a 256 -c MLXChronos-0.3.0-arm64.dmg.sha256
 ```
 
 This detects an altered download relative to the published checksum; it is not
@@ -118,11 +118,9 @@ and the runtime answering a probe must confirm MLX. GGUF/llama.cpp is rejected;
 `safetensors` alone does not prove the runtime. See the
 [LM Studio gate](../../docs/methodology.md#lm-studio-mlx-only-gate).
 
-Development builds also support [ddalcu/mlx-serve](https://github.com/ddalcu/mlx-serve)
-when the selected CLI contains its adapter. Engine choices come from that CLI;
-the approved published CLI 0.5.1 does not yet include mlx-serve. Use an explicit
-source checkout or development installation until a compatible CLI release is
-approved. The default port is **11234**. Refresh reports server version, available
+CLI 0.6.0 and newer also support [ddalcu/mlx-serve](https://github.com/ddalcu/mlx-serve).
+Engine choices come from the selected CLI; older CLIs omit this engine.
+The default port is **11234**. Refresh reports server version, available
 IDs and local loaded-model IDs; it can also read the separate MLX-Serve/MLX Core
 application version when installed. Refresh never loads a model. Loaded inventory
 alone does not certify MLX: validation/tests require an exact ID and confirm
@@ -201,9 +199,8 @@ the app.
 
 ### Standard benchmark — `run`
 
-With an app build and selected CLI containing the Unreleased configuration
-support, **Save configuration…** saves the current settings as JSON without
-starting a test. Blank overrides are resolved to the CLI's actual defaults and
+With app 0.3.0 and CLI 0.6.0 or newer, **Save configuration…** saves the current
+settings as JSON without starting a test. Blank overrides are resolved to the CLI's actual defaults and
 shown in the form. **Load configuration…** validates a saved file through the
 selected CLI and fills the form, including additional settings. Review/edit the
 values, then choose **Start test** to begin. Loading never starts a benchmark.
@@ -354,16 +351,15 @@ Sharing options: `--file` (required), `--dry-run` (validation-only), optional
 and endpoint variables are cleared so the app uses the explicit form choices.
 
 Comparison output comes directly from the selected CLI. The refined comparison
-in the CLI's **Unreleased** changes marks percentages based on two word-count
+in CLI **0.6.0** and newer marks percentages based on two word-count
 estimates with `~`; exact-versus-estimated or mixed counts have no throughput
 percentage (`n/a`, with a reason). Missing values and a zero reference also have
 no percentage. TTFT and RAM percentages are independent of completion-count
 provenance. RAM peak/rise are whole-system diagnostics, and even a comparison
-without cautions does not certify equivalent conditions. The published CLI
-0.5.1 retains its earlier output until a newer compatible CLI is released and
-selected; the app shares CLI logic rather than implementing separate rules.
+without cautions does not certify equivalent conditions. Older CLIs retain
+their earlier output; the app shares CLI logic rather than implementing separate rules.
 
-With a CLI containing the Unreleased series changes, repeat output also shows
+With CLI 0.6.0 or newer, repeat output also shows
 available session counts, median, quartiles, MAD and sample SD for throughput,
 TTFT and system RAM. Each complete session counts once; the summary retains
 extreme values. Dispersion is unavailable with fewer than two measurements.
@@ -375,8 +371,8 @@ sessions against two sessions. The CLI compares medians, skips copies within
 a series and rejects the same result on both sides. Leave this field blank for
 ordinary per-file comparison; **Compare selected** clears it automatically.
 No confidence intervals or automatic superiority verdicts are generated.
-App 0.2.0 can pass the optional integer through its existing dynamic form; the
-source app adds the friendlier label and validation. See
+App 0.2.0 can pass the optional integer through its existing dynamic form;
+app 0.3.0 adds the friendlier label and validation. See
 [the statistical interpretation](../../docs/methodology.md#repeating-a-run).
 
 Email and contributor attribution are separate; omitting email does not remove

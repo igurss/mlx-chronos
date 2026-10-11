@@ -33,7 +33,7 @@ struct AppRuntimeContract: Codable, Equatable {
 }
 
 enum AppRuntimePolicy {
-    static var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0" }
+    static var appVersion: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.3.0" }
     static let capabilities: Set<String> = ["cli-options-v1", "snapshot-v1", "benchmark-json-v1", "thermal-foundation-v1", "command-safety-v1"]
     static let commands: Set<String> = ["run", "matrix", "context", "concurrency", "energy", "doctor", "validate", "models", "engines", "history", "compare", "submit", "upgrade", "wizard"]
     static func issue(_ contract: AppRuntimeContract, appVersion: String = appVersion) -> String? {
