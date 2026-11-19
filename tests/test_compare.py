@@ -97,6 +97,16 @@ def test_load_result_for_compare_rejects_invalid_json(tmp_path):
         load_result_for_compare(path)
 
 
+def test_duplicate_keys_are_rejected_even_when_the_last_value_matches_the_seal(tmp_path):
+    path = write_result(tmp_path / "duplicate.json")
+    payload = path.read_bytes()
+    path.write_bytes(payload.replace(b'"notes":', b'"notes":"extra","notes":', 1))
+    assert path.read_bytes() != payload
+
+    with pytest.raises(CompareError, match="duplicate result key"):
+        load_result_for_compare(path)
+
+
 def test_load_result_for_compare_rejects_non_utf8_file(tmp_path):
     path = tmp_path / "non-utf8.json"
     path.write_bytes(b"\xff\xfe")

@@ -102,6 +102,9 @@ def load_archive_results(results_dir: Path) -> list[ArchiveResult]:
         for name in names if name.endswith(".json")
     ]
     for path in sorted(paths):
+        if path.is_symlink():
+            errors.append(f"{path}: submitted results must be regular files")
+            continue
         try:
             _, result = load_publishable_result(
                 path,

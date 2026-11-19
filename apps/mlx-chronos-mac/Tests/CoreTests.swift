@@ -191,6 +191,7 @@ struct CoreTests {
         }
 
         let normal = RuntimeInstallation(candidate: RuntimeCandidate(pythonPath: python), probe: probe)
+        try await checkStoreSettings(normal, root: root)
         var builtIn = normal; builtIn.isBuiltIn = true
         try expect(!builtIn.canUninstall, "app-managed runtime can be uninstalled")
         var source = normal; source.candidate.sourcePath = "/tmp/source"
@@ -206,6 +207,8 @@ struct CoreTests {
         try expect(unknownThermal.ready, "Missing thermal observations should not invalidate an external CLI")
 
         let result = root.appendingPathComponent("result.json")
+        let missingFolder = try ResultRepository.scan(root.appendingPathComponent("not-created-yet"))
+        try expect(missingFolder.results.isEmpty && missingFolder.notice == nil, "a new results folder produced an error")
         try Data(#"{"engine":{"name":"test"},"model":{"name":"model"},"meta":{"timestamp":"2026-09-30T10:00:00Z"},"metrics":{"request_tokens_per_second":{"mean":12.5},"ttft_cold":{"mean":true}}}"#.utf8).write(to: result)
         let summaries = ResultRepository.load(root)
         try expect(summaries.count == 1 && summaries[0].throughput == 12.5 && summaries[0].coldTTFT == nil, "numeric result parsing is not strict")
@@ -306,7 +309,7 @@ struct CoreTests {
         try expect(entered && FileManager.default.fileExists(atPath: ready.path), "race fixture never reached launch")
         try expect(raced.cancelled && !raced.timedOut && Date().timeIntervalSince(raceStart) < 8,
             "cancellation during launch lost termination escalation")
-        print("Core checks passed: CLI parity, exact arguments, defaults, validation, removal policy, result parsing/trial charts, pipes, timeout and cancellation.")
+        print("Core checks passed: CLI parity, exact arguments, defaults, store settings, validation, removal policy, result parsing/trial charts, pipes, timeout and cancellation.")
     }
     static func checkRuntimePolicy(_ probe: RuntimeProbe) throws {
         let contract = AppRuntimeContract(apiVersion: 1, minimumAppVersion: "0.2.0",
@@ -462,6 +465,53 @@ struct CoreTests {
                 "Historical trial alignment was lost: \(file.lastPathComponent)")
         }
     }
+    @MainActor
+    static func checkStoreSettings(_ runtime: RuntimeInstallation, root: URL) throws {
+        let defaults = UserDefaults.standard
+        let keys = ["MLXChronos.automaticRuntimeUpdates", "MLXChronos.selectedRuntime",
+                    "MLXChronos.outputDirectoryPath", "MLXChronos.resultsDirectoryPath"]
+        let previous = keys.map { ($0, defaults.object(forKey: $0)) }
+        defer {
+            for (key, value) in previous {
+                if let value { defaults.set(value, forKey: key) }
+                else { defaults.removeObject(forKey: key) }
+            }
+        }
+        let original = root.appendingPathComponent("original-output", isDirectory: true)
+        let replacement = root.appendingPathComponent("changed-output", isDirectory: true)
+        let custom = root.appendingPathComponent("custom-output", isDirectory: true)
+        defaults.set(false, forKey: "MLXChronos.automaticRuntimeUpdates")
+        defaults.set(runtime.id, forKey: "MLXChronos.selectedRuntime")
+        defaults.set(original.path, forKey: "MLXChronos.outputDirectoryPath")
+        defaults.set(original.path, forKey: "MLXChronos.resultsDirectoryPath")
+        let store = ChronosStore()
+        try expect(!store.automaticRuntimeUpdates, "A saved false update preference was ignored")
+        store.runtimes = [runtime]
+        store.drafts = [
+            "run": ["model": "test-model", "output_dir": original.path],
+            "context": ["model": "context-model", "output_dir": custom.path],
+            "history": ["output_dir": original.path],
+        ]
+        store.outputDirectory = replacement
+        try expect(store.drafts["run"] == ["model": "test-model", "output_dir": replacement.path],
+            "Changing the default output directory lost the run draft")
+        try expect(store.drafts["context"] == ["model": "context-model", "output_dir": custom.path],
+            "Changing the default output directory overwrote an explicit destination")
+        try expect(store.drafts["history"]?["output_dir"] == replacement.path,
+            "The history command did not follow the result browser")
+        store.macmonAvailable = true
+        store.runConfigurationNotice = "Loaded"
+        store.selectedRuntimeID = runtime.id
+        try expect(store.macmonAvailable && store.runConfigurationNotice == "Loaded",
+            "Selecting the same runtime cleared its current state")
+        store.selectedRuntimeID = "another-installation"
+        try expect(!store.macmonAvailable && store.runConfigurationNotice == nil,
+            "Changing runtime kept stale capability or configuration information")
+        store.automaticRuntimeUpdates = true
+        try expect(defaults.bool(forKey: "MLXChronos.automaticRuntimeUpdates"),
+            "The new automatic update preference was not persisted")
+    }
+
     static func checkResultListing(_ root: URL) throws {
         let fm = FileManager.default
         let archive = root.appendingPathComponent("many-results")

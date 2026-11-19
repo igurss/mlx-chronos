@@ -77,6 +77,18 @@ def test_list_history_skips_invalid_files_without_hiding_the_valid_ones(tmp_path
     assert "not valid JSON" in skipped[0][1]
 
 
+def test_list_history_reports_excessive_json_nesting_without_aborting(tmp_path):
+    write_result(tmp_path / "good.json", tps=20.0)
+    nested = tmp_path / "nested.json"
+    nested.write_text("[" * 2000 + "]" * 2000, encoding="utf-8")
+
+    entries, skipped = list_history(tmp_path)
+
+    assert len(entries) == 1
+    assert skipped[0][0] == nested
+    assert "nested too deeply" in skipped[0][1] or "result must be a JSON object" in skipped[0][1]
+
+
 def test_list_history_skips_non_utf8_files_without_hiding_valid_results(tmp_path):
     write_result(tmp_path / "good.json", tps=20.0)
     (tmp_path / "non-utf8.json").write_bytes(b"\xff\xfe")

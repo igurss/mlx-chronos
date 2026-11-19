@@ -1,5 +1,7 @@
 import math
 import statistics
+from decimal import Context, Decimal, localcontext
+from fractions import Fraction
 
 from mlx_chronos.constants import P95_MIN_TRIALS
 
@@ -35,7 +37,11 @@ def compute_series_stats(values: list[float | None]) -> dict:
     remain unrounded until presentation, and missing observations stay counted.
     """
     available = [value for value in values if value is not None]
-    if any(not math.isfinite(value) for value in available):
+    try:
+        finite = all(math.isfinite(value) for value in available)
+    except OverflowError as exc:
+        raise ValueError("series observations must fit finite floating-point values") from exc
+    if not finite:
         raise ValueError("series observations must be finite")
     count = len(available)
     result: dict = dict.fromkeys(
@@ -44,19 +50,29 @@ def compute_series_stats(values: list[float | None]) -> dict:
     result.update(count=count, missing=len(values) - count)
     if not count:
         return result
-    median = statistics.median(available)
+    # Exact interpolation avoids overflow without scaling small observations away.
+    exact = [Fraction(value) for value in available]
+    median = statistics.median(exact)
     result.update(
         mean=statistics.mean(available),
-        median=median,
+        median=float(median),
         min=min(available),
         max=max(available),
     )
     if count > 1:
-        quartiles = statistics.quantiles(available, n=4, method="inclusive")
+        quartiles = statistics.quantiles(exact, n=4, method="inclusive")
+        try:
+            stddev = statistics.stdev(available)
+        except OverflowError:
+            # Python 3.10 can overflow the variance even when its root fits a float.
+            with localcontext(Context(prec=50)):
+                stddev = float(statistics.stdev([Decimal(value) for value in available]))
+        if not math.isfinite(stddev):
+            raise ValueError("series standard deviation exceeds floating-point range")
         result.update(
-            stddev=statistics.stdev(available),
-            q1=quartiles[0],
-            q3=quartiles[2],
-            mad=statistics.median(abs(value - median) for value in available),
+            stddev=stddev,
+            q1=float(quartiles[0]),
+            q3=float(quartiles[2]),
+            mad=float(statistics.median(abs(value - median) for value in exact)),
         )
     return result

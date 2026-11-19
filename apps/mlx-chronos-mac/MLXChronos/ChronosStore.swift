@@ -7,13 +7,24 @@ final class ChronosStore: ObservableObject {
     @Published var runtimes: [RuntimeInstallation] = []
     @Published var selectedRuntimeID: String {
         didSet {
+            guard selectedRuntimeID != oldValue else { return }
             UserDefaults.standard.set(selectedRuntimeID, forKey: "MLXChronos.selectedRuntime")
-            hardware = nil; engineStatuses = []; outcome = nil
+            hardware = nil; engineStatuses = []; macmonAvailable = false; outcome = nil
+            runConfigurationNotice = nil
         }
     }
     @Published var outputDirectory: URL {
         didSet {
+            guard outputDirectory != oldValue else { return }
             UserDefaults.standard.set(outputDirectory.path, forKey: "MLXChronos.outputDirectoryPath")
+            for command in commands where command.section == .benchmark {
+                guard var draft = drafts[command.name] else { continue }
+                let previous = CommandBuilder.initialValues(command, outputRoot: oldValue)["output_dir"]
+                if draft["output_dir"] == previous {
+                    draft["output_dir"] = CommandBuilder.initialValues(command, outputRoot: outputDirectory)["output_dir"]
+                    drafts[command.name] = draft
+                }
+            }
             browseResults(at: outputDirectory)
         }
     }
@@ -50,9 +61,10 @@ final class ChronosStore: ObservableObject {
     @Published private(set) var runtimeUpdateNotice = "Updates have not been checked yet."
     @Published private(set) var appReleaseURL: URL?
     @Published private(set) var appReleaseVersion: String?
-    @Published var automaticRuntimeUpdates = UserDefaults.standard.object(forKey: "MLXChronos.automaticRuntimeUpdates") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(automaticRuntimeUpdates, forKey: "MLXChronos.automaticRuntimeUpdates") }
+    @Published var automaticRuntimeUpdates: Bool {
+        didSet { UserDefaults.standard.set(automaticRuntimeUpdates, forKey: Self.automaticUpdatesKey) }
     }
+    private static let automaticUpdatesKey = "MLXChronos.automaticRuntimeUpdates"
 
     var isRunning: Bool { operation != nil }
     var selectedRuntime: RuntimeInstallation? { runtimes.first { $0.id == selectedRuntimeID } }
@@ -61,6 +73,8 @@ final class ChronosStore: ObservableObject {
 
     init() {
         let defaults = UserDefaults.standard
+        defaults.register(defaults: [Self.automaticUpdatesKey: true])
+        automaticRuntimeUpdates = defaults.bool(forKey: Self.automaticUpdatesKey)
         selectedRuntimeID = defaults.string(forKey: "MLXChronos.selectedRuntime") ?? RuntimeDiscovery.managedCandidate.id
         let initialOutput = defaults.string(forKey: "MLXChronos.outputDirectoryPath").map(URL.init(fileURLWithPath:))
             ?? RuntimeDiscovery.applicationDirectory.appendingPathComponent("results", isDirectory: true)
@@ -84,10 +98,11 @@ final class ChronosStore: ObservableObject {
         hasScanned = true
         start("Detecting installations and checking updates") {
             try await self.scanInstallations()
-            if self.automaticRuntimeUpdates { await self.synchronizeManagedRuntime() }
+            if self.automaticRuntimeUpdates { try await self.synchronizeManagedRuntime() }
             if let release = await self.runtimeManager.checkAppRelease() {
                 self.appReleaseVersion = release.0; self.appReleaseURL = release.1
             }
+            try Task.checkCancellation()
             if self.selectedReady { try await self.readEnvironment() }
         }
     }
@@ -231,28 +246,32 @@ final class ChronosStore: ObservableObject {
 
     func prepareManagedRuntime(force: Bool = false) {
         start("Checking app-managed runtime") {
-            await self.synchronizeManagedRuntime(force: force, select: true)
+            try await self.synchronizeManagedRuntime(force: force, select: true)
             if self.selectedReady { try await self.readEnvironment() }
         }
     }
 
-    private func synchronizeManagedRuntime(force: Bool = false, select: Bool = false) async {
+    private func synchronizeManagedRuntime(force: Bool = false, select: Bool = false) async throws {
         let wasManaged = selectedRuntime.map { RuntimeDiscovery.isManaged($0.candidate) } ?? true
         let logger = log
+        let result: RuntimeSyncResult
         do {
-            let result = try await runtimeManager.synchronize(bridge: bridgeURL(), force: force,
+            result = try await runtimeManager.synchronize(bridge: bridgeURL(), force: force,
                 status: { self.operation = $0 }, log: { text in Task { @MainActor in logger.append(text) } })
-            runtimeUpdateNotice = result.notice
-            try await scanInstallations()
-            if let candidate = result.candidate, wasManaged || select {
-                selectedRuntimeID = candidate.id; drafts = [:]
-            }
-        } catch is CancellationError {
-            runtimeUpdateNotice = "Runtime setup stopped. The previous copy was kept."
         } catch {
+            if Task.isCancelled || error is CancellationError {
+                runtimeUpdateNotice = "Runtime setup stopped. The previous copy was kept."
+                throw CancellationError()
+            }
             runtimeUpdateNotice = "Could not prepare or check updates: " + error.localizedDescription
             log.append(runtimeUpdateNotice + "\n")
+            return
         }
+        runtimeUpdateNotice = result.notice
+        if let candidate = result.candidate, (wasManaged || select), selectedRuntimeID != candidate.id {
+            selectedRuntimeID = candidate.id; drafts = [:]
+        }
+        try await scanInstallations()
     }
 
     func rollbackManagedRuntime() {
@@ -368,7 +387,7 @@ final class ChronosStore: ObservableObject {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         panel.directoryURL = resultsDirectory
-        if panel.runModal() == .OK, let url = panel.url { outputDirectory = url; drafts = [:] }
+        if panel.runModal() == .OK, let url = panel.url { outputDirectory = url }
     }
 
     func run(_ command: CLICommand) {

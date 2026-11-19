@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="MLX Chronos logo">
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#526f8f"/>
+      <stop offset=".5" stop-color="#8ba9c5"/>
+      <stop offset="1" stop-color="#526f8f"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#075fe0"/>
+      <stop offset=".5" stop-color="#27b1f1"/>
+      <stop offset="1" stop-color="#075fe0"/>
+    </linearGradient>
+    <linearGradient id="gray" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9faab6"/>
+      <stop offset="1" stop-color="#667382"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0 -25)">
+    <path fill="url(#frame)" d="M916 190H390C247 190 136 306 136 449v176c0 143 111 259 254 259h526q10 0 0-12l-43-86q-5-8-16-8H390c-94 0-150-64-150-153V449c0-89 56-153 150-153h467q11 0 16-8l43-86q10-12 0-12Z"/>
+    <path fill="url(#blue)" d="M311 355h93q13 0 22 9l137 128q9 9 0 18l-42 37 42 39q9 9 0 18L426 730q-9 9-22 9h-93q-12 0-12-12v-38q0-9 8-16l151-125q8-7 17 0l15 13 16-14-199-131q-8-7-8-17v-32q0-12 12-12Z"/>
+    <path fill="url(#gray)" d="m585 499 168-136q11-9 24-9h88q16 0 16 16v354q0 16-15 14-8-1-16-9l-73-64q-11-9-11-21V519q0-14-12-3L615 624q-12 9-22-2l-14-12q-8-9 2-19l52-45-52-30q-10-8 4-17Z"/>
+  </g>
+</svg>

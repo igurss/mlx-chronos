@@ -198,7 +198,7 @@ final class RuntimeManager {
             if !force, let installed = ReleaseVersion(active.release.version), installed >= ReleaseVersion(release.version)! {
                 try rejectSymbolicLink(root.appendingPathComponent("managed-runtimes/\(active.environment)"))
                 do {
-                    let probe = try await probe(active.candidate(at: root), bridge: bridge, log: log)
+                    let probe = try await probe(active.candidate(at: root), bridge: bridge)
                     try AppRuntimePolicy.validate(probe, release: active.release, expectedPrefix: root.appendingPathComponent("managed-runtimes/\(active.environment)").path)
                     let notice = active.release.version == release.version ? latestNotice
                         : "Keeping installed compatible CLI \(active.release.version). " + latestNotice
@@ -234,13 +234,21 @@ final class RuntimeManager {
             let snapshotURL = oldEnvironment.appendingPathComponent("resolved-dependencies.json")
             if fm.fileExists(atPath: snapshotURL.path) {
                 try rejectSymbolicLink(snapshotURL)
-                guard (try snapshotURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max) <= 1_000_000 else {
-                    throw CommandError.invalid("Saved dependency snapshot exceeded the size limit.")
+                let requirements: String?
+                do {
+                    let values = try snapshotURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                    guard values.isRegularFile == true, (values.fileSize ?? Int.max) <= 1_000_000 else {
+                        throw CommandError.invalid("Saved dependency snapshot is not a regular file within the size limit.")
+                    }
+                    let snapshot = try JSONDecoder().decode(RuntimeDependencySnapshot.self, from: Data(contentsOf: snapshotURL))
+                    requirements = try snapshot.pythonVersion == catalog.python.version ? snapshot.validatedRequirements() : nil
+                } catch {
+                    log("Saved dependency versions could not be read. Resolving dependencies for the replacement CLI.\n")
+                    requirements = nil
                 }
-                let snapshot = try JSONDecoder().decode(RuntimeDependencySnapshot.self, from: Data(contentsOf: snapshotURL))
-                if snapshot.pythonVersion == catalog.python.version {
+                if let requirements {
                     let path = environment.appendingPathComponent("repair-constraints.txt")
-                    try snapshot.validatedRequirements().write(to: path, atomically: true, encoding: .utf8)
+                    try requirements.write(to: path, atomically: true, encoding: .utf8)
                     constraints = ["--constraint", path.path]
                 }
             }
@@ -254,7 +262,7 @@ final class RuntimeManager {
         _ = try snapshot.validatedRequirements()
         try JSONEncoder().encode(snapshot).write(to: environment.appendingPathComponent("resolved-dependencies.json"), options: .atomic)
         status("Verifying CLI compatibility and thermal support")
-        let verified = try await probe(candidate, bridge: bridge, log: log)
+        let verified = try await probe(candidate, bridge: bridge)
         try AppRuntimePolicy.validate(verified, release: release, expectedPrefix: environment.path)
         try Task.checkCancellation()
         try JSONEncoder().encode(release).write(to: environment.appendingPathComponent("release.json"), options: .atomic)
@@ -279,8 +287,9 @@ final class RuntimeManager {
         guard FileManager.default.isExecutableFile(atPath: restored.candidate(at: root).pythonPath) else {
             throw CommandError.invalid("The previous environment is no longer available.")
         }
-        let verified = try await probe(restored.candidate(at: root), bridge: bridge, log: { _ in })
+        let verified = try await probe(restored.candidate(at: root), bridge: bridge)
         try AppRuntimePolicy.validate(verified, release: release, expectedPrefix: root.appendingPathComponent("managed-runtimes/\(previous)").path)
+        try Task.checkCancellation()
         try JSONEncoder().encode(restored).write(to: root.appendingPathComponent("active-runtime.json"), options: .atomic)
         return restored.candidate(at: root)
     }
@@ -343,16 +352,14 @@ final class RuntimeManager {
     private func preparePython(_ artifact: RuntimeArtifact, status: (String) -> Void,
                                log: @escaping @Sendable (String) -> Void) async throws -> String {
         let parent = root.appendingPathComponent("python", isDirectory: true)
+        let fm = FileManager.default
         try ensureDirectory(parent)
         let directory = parent.appendingPathComponent(artifact.version + "-" + artifact.sha256.prefix(16), isDirectory: true)
         let python = directory.appendingPathComponent("python/bin/python3").path
         try rejectSymbolicLink(directory)
-        if FileManager.default.isExecutableFile(atPath: python) {
+        if fm.isExecutableFile(atPath: python) {
             try await verifyPython(python, version: artifact.version, log: log)
             return python
-        }
-        if FileManager.default.fileExists(atPath: directory.path) {
-            throw CommandError.invalid("Private Python is incomplete. Remove that incomplete runtime folder before trying again.")
         }
         status("Downloading private Python \(artifact.version)")
         let archive = try await self.artifact(artifact.url, digest: artifact.sha256)
@@ -362,12 +369,18 @@ final class RuntimeManager {
         guard !names.isEmpty, names.allSatisfy({ $0.hasPrefix("python/") && !$0.split(separator: "/").contains("..") }) else {
             throw CommandError.invalid("Python archive contains unexpected paths.")
         }
-        try ensureDirectory(directory)
-        var complete = false
-        defer { if !complete { try? FileManager.default.removeItem(at: directory) } }
-        _ = try await command("/usr/bin/tar", ["-xzf", archive.path, "-C", directory.path], log: { _ in })
-        try await verifyPython(python, version: artifact.version, log: log)
-        complete = true
+        let staging = parent.appendingPathComponent(".staging-" + UUID().uuidString, isDirectory: true)
+        try ensureDirectory(staging)
+        defer { try? fm.removeItem(at: staging) }
+        _ = try await command("/usr/bin/tar", ["-xzf", archive.path, "-C", staging.path], log: { _ in })
+        try await verifyPython(staging.appendingPathComponent("python/bin/python3").path, version: artifact.version, log: log)
+        try Task.checkCancellation()
+        if fm.fileExists(atPath: directory.path) {
+            let incomplete = parent.appendingPathComponent(".incomplete-" + UUID().uuidString)
+            try fm.moveItem(at: directory, to: incomplete)
+            log("An incomplete private Python installation was moved aside.\n")
+        }
+        try fm.moveItem(at: staging, to: directory)
         return python
     }
     private func verifyPython(_ python: String, version: String, log: @escaping @Sendable (String) -> Void) async throws {
@@ -376,7 +389,7 @@ final class RuntimeManager {
             throw CommandError.invalid("Private Python failed version or architecture verification.")
         }
     }
-    private func probe(_ candidate: RuntimeCandidate, bridge: URL, log: @escaping @Sendable (String) -> Void) async throws -> RuntimeProbe {
+    private func probe(_ candidate: RuntimeCandidate, bridge: URL) async throws -> RuntimeProbe {
         let response = try await command(candidate.pythonPath, ["-I", "-B", bridge.path, "probe"], log: { _ in })
         return try JSONDecoder().decode(RuntimeProbe.self, from: Data(response.stdout.utf8))
     }

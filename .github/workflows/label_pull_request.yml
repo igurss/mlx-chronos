@@ -6,8 +6,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  issues: write
+  pull-requests: write
 
 jobs:
   label:
@@ -41,7 +40,9 @@ jobs:
               pull_number: issue_number,
               per_page: 100
             });
-            const changedPaths = files.map((file) => file.filename);
+            const changedPaths = files.flatMap((file) =>
+              file.previous_filename ? [file.previous_filename, file.filename] : [file.filename]
+            );
             if (changedPaths.length === 0) {
               core.info("No changed files found; skipping category label.");
               return;

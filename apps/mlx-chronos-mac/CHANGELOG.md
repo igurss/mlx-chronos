@@ -5,6 +5,14 @@ with the first public app baseline; private prototypes are not earlier releases.
 
 ## Unreleased
 
+- Recover interrupted private Python extraction and unreadable dependency
+  snapshots during runtime setup, and respect cancellation before activation.
+- Preserve benchmark draft fields and explicit destinations when changing the
+  default result directory. Respect saved automatic-update preferences and
+  display a new result directory as empty until a report is saved.
+- Keep runtime capability information current and prevent cancelled log
+  flushes from changing newly scheduled updates.
+
 ## [0.3.0] — 2026-10-11
 
 **App 0.3.0, build 5** adds reusable run configurations and per-trial result

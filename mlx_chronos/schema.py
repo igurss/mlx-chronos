@@ -440,9 +440,7 @@ class Metrics(ChronosBaseModel):
                 raise ValueError(
                     "decode_timing_source must be unavailable when decode throughput is missing"
                 )
-        elif self.decode_timing_source not in {
-            DECODE_TIMING_CLIENT_STREAM,
-        }:
+        elif self.decode_timing_source != DECODE_TIMING_CLIENT_STREAM:
             raise ValueError(
                 "decode_timing_source must describe provided decode throughput"
             )

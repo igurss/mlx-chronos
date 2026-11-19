@@ -50,7 +50,12 @@ from mlx_chronos.energy_profile import (
     save_energy_report,
 )
 from mlx_chronos.engines import ENGINES, get_engine
-from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
+from mlx_chronos.integrity import (
+    IntegrityError,
+    decode_result_json,
+    read_result_bytes,
+    validate_integrity_seal,
+)
 from mlx_chronos.matrix import (
     parse_engine_models,
     rotation_schedule,
@@ -182,17 +187,17 @@ def _parse_timestamp(value: object) -> datetime | None:
         return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
+        if parsed.tzinfo is not None:
+            return parsed.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
         return None
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        return None
-    return parsed.astimezone(timezone.utc)
+    return None
 
 
 def _result_timestamp(path: Path) -> datetime | None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+        data = decode_result_json(read_result_bytes(path))
+    except (OSError, ValueError):
         data = None
     if isinstance(data, dict):
         meta = data.get("meta")
@@ -202,19 +207,18 @@ def _result_timestamp(path: Path) -> datetime | None:
 
     try:
         return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-    except OSError:
+    except (OSError, OverflowError, ValueError):
         return None
 
 
 def _latest_result_timestamp(results_dir: Path) -> datetime | None:
     if not results_dir.exists():
         return None
-    timestamps = [
+    return max((
         timestamp
-        for path in results_dir.glob("*.json")
+        for path in results_dir.glob("*.json") if path.is_file()
         if (timestamp := _result_timestamp(path)) is not None
-    ]
-    return max(timestamps) if timestamps else None
+    ), default=None)
 
 
 def _elapsed_since_last_result(results_dir: Path) -> float | None:
@@ -1576,8 +1580,8 @@ def cmd_history(args):
 
     if skipped:
         logger.info("\nSkipped %d file(s) that could not be validated:", len(skipped))
-        for path, reason in skipped:
-            logger.info("  %s: %s", path, reason)
+        for _, reason in skipped:
+            logger.info("  %s", reason)
     logger.info("")
 
 

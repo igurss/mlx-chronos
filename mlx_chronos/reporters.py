@@ -27,7 +27,7 @@ def _write_text_atomic(output_path: Path, content: str) -> None:
             tmp_file.flush()
             os.fsync(tmp_file.fileno())
         os.replace(tmp_path, output_path)
-    except Exception:
+    except BaseException:
         if tmp_path is not None:
             try:
                 tmp_path.unlink()
@@ -41,7 +41,6 @@ class BaseReporter(ABC):
     @abstractmethod
     def save(self, result: dict, results_dir: Path) -> Path:
         """Save the benchmark result to the specified directory."""
-        pass
 
     def _generate_base_filename(self, result: dict) -> str:
         chip_slug = self._slug(result["hardware"]["chip"])

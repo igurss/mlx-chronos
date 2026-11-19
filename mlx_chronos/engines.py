@@ -103,10 +103,11 @@ class BaseEngine(ABC):
         return f"http://localhost:{self.port}"
 
     def http_client(self, *, max_keepalive_connections: int | None = None) -> httpx.Client:
-        """Return a reusable HTTP client for benchmark request loops."""
+        """Reuse connections to local engines without inheriting proxy settings."""
         if max_keepalive_connections is None:
-            return httpx.Client()
+            return httpx.Client(trust_env=False)
         return httpx.Client(
+            trust_env=False,
             limits=httpx.Limits(
                 max_connections=max(100, max_keepalive_connections),
                 max_keepalive_connections=max_keepalive_connections,
@@ -122,7 +123,7 @@ class BaseEngine(ABC):
         log_retries: bool = True,
     ) -> httpx.Response:
         return request_with_retry(
-            lambda: httpx.get(url, timeout=timeout),
+            lambda: httpx.get(url, timeout=timeout, trust_env=False),
             action=f"{self.name} {action}",
             logger=logger if log_retries else None,
         )
@@ -136,7 +137,7 @@ class BaseEngine(ABC):
         action: str,
     ) -> httpx.Response:
         return request_with_retry(
-            lambda: httpx.post(url, json=json_payload, timeout=timeout),
+            lambda: httpx.post(url, json=json_payload, timeout=timeout, trust_env=False),
             action=f"{self.name} {action}",
             logger=logger,
         )
@@ -627,9 +628,7 @@ class BaseEngine(ABC):
         done = False
         terminal = False
         for line in completion_lines(response, deadline=deadline, context=context, clock=time.monotonic):
-            if isinstance(line, bytes):
-                line = line.decode("utf-8", errors="strict")
-            if not line or not line.startswith("data:"):
+            if not line.startswith("data:"):
                 continue
             raw = line.removeprefix("data:").strip()
             if not raw:
@@ -803,7 +802,7 @@ class BaseEngine(ABC):
             lambda: (
                 client.stream(method, url, **kwargs)
                 if client is not None
-                else httpx.stream(method, url, **kwargs)
+                else httpx.stream(method, url, trust_env=False, **kwargs)
             ),
             action=f"{self.name} stream {method} {url}",
             attempts=1,
@@ -902,11 +901,9 @@ class BaseEngine(ABC):
                             or self._stream_chunk_has_terminal_token(chunk)
                         ):
                             ttft = time.perf_counter() - started
-                        usage = chunk.get("usage")
-                        if isinstance(usage, dict):
-                            count = usage.get("prompt_tokens")
-                            if isinstance(count, int) and not isinstance(count, bool) and count > 0:
-                                input_tokens = count
+                        count = self._extract_stream_input_tokens(chunk)
+                        if count is not None:
+                            input_tokens = count
             except httpx.HTTPError as exc:
                 if include_usage and self._should_retry_without_stream_usage(exc):
                     continue
@@ -953,12 +950,6 @@ class BaseEngine(ABC):
                 raise ValueError(f"{name} must be a positive integer")
         if min_tokens is not None and min_tokens > max_tokens:
             raise ValueError("min_tokens must not exceed max_tokens")
-        if (
-            progress_sample_interval_tokens is not None
-            and progress_sample_interval_tokens <= 0
-        ):
-            raise ValueError("progress_sample_interval_tokens must be greater than 0")
-
         base_payload = self.build_payload(
             prompt=prompt,
             model=model,
@@ -982,7 +973,6 @@ class BaseEngine(ABC):
             start = time.perf_counter()
             first_token_at = None
             stream_finished_at = None
-            completion_text_parts: list[str] = []
             estimated_words = 0
             in_word = False
             terminal_at = None
@@ -1033,24 +1023,19 @@ class BaseEngine(ABC):
                                 first_token_at = received_at
                             text = self._extract_stream_text(chunk)
                             if text:
-                                if next_progress_sample_at is None:
-                                    completion_text_parts.append(text)
-                                else:
-                                    words = text.split()
-                                    estimated_words += len(words) - int(bool(words) and in_word and not text[0].isspace())
-                                    in_word = not text[-1].isspace()
-                                    estimated_tokens = estimated_words
-                                    while estimated_tokens >= next_progress_sample_at:
-                                        assert progress_sample_interval_tokens is not None
-                                        self._append_progress_sample(
-                                            progress_samples,
-                                            next_progress_sample_at,
-                                            received_at - start,
-                                            TOKEN_COUNT_SOURCE_WORD_FALLBACK,
-                                        )
-                                        next_progress_sample_at += (
-                                            progress_sample_interval_tokens
-                                        )
+                                estimated_words += len(text.split()) - int(in_word and not text[0].isspace())
+                                in_word = not text[-1].isspace()
+                                if next_progress_sample_at is not None and estimated_words >= next_progress_sample_at:
+                                    assert progress_sample_interval_tokens is not None
+                                    # One event has one arrival time. Keep only the
+                                    # last threshold crossed by a burst of text.
+                                    interval = progress_sample_interval_tokens
+                                    crossed = estimated_words - estimated_words % interval
+                                    self._append_progress_sample(
+                                        progress_samples, crossed, received_at - start,
+                                        TOKEN_COUNT_SOURCE_WORD_FALLBACK,
+                                    )
+                                    next_progress_sample_at = crossed + interval
                 break
             except httpx.HTTPError as exc:
                 if (
@@ -1090,8 +1075,6 @@ class BaseEngine(ABC):
         if completion_tokens is not None:
             token_count_source = TOKEN_COUNT_SOURCE_USAGE
         else:
-            if progress_sample_interval_tokens is None:
-                estimated_words = len("".join(completion_text_parts).split())
             completion_tokens = max(1, estimated_words)
             token_count_source = TOKEN_COUNT_SOURCE_WORD_FALLBACK
 

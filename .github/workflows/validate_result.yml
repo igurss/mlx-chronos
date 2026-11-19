@@ -25,11 +25,11 @@ jobs:
       - name: Check pull request scope
         id: scope
         env:
-          TARGET_BRANCH: origin/${{ github.base_ref }}
+          TARGET_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
 
-          git diff --name-only "$TARGET_BRANCH" HEAD > changed_files.txt
+          git diff --no-renames --name-only "$TARGET_BASE" HEAD -- > changed_files.txt
 
           unexpected=0
           while IFS= read -r path; do
@@ -50,9 +50,9 @@ jobs:
           missing=0
           while IFS= read -r path; do
             [ -n "$path" ] || continue
-            if [ ! -f "$path" ]; then
+            if [ ! -f "$path" ] || [ -L "$path" ]; then
               if [ "$missing" -eq 0 ]; then
-                echo "Benchmark result submission PRs must not delete submitted result files:"
+                  echo "Each changed submission must be a regular JSON file:"
               fi
               echo "- $path"
               missing=1

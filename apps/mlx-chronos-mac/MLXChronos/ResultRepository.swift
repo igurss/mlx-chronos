@@ -50,7 +50,12 @@ enum ResultRepository {
         precondition(limit > 0)
         let fm = FileManager.default
         try checkCancellation()
-        let children = try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+        let children: [URL]
+        do {
+            children = try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            return ResultListing(results: [], total: 0, skippedDirectories: 0)
+        }
         let directories = [root] + children.filter {
             (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
         }.sorted { $0.path < $1.path }

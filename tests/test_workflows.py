@@ -79,8 +79,8 @@ def test_validate_result_workflow_rejects_mixed_or_deleted_submission_prs():
 
     assert "must only change JSON files " in text
     assert "under results/submitted/:" in text
-    assert "must not delete submitted " in text
-    assert "result files:" in text
+    assert "Each changed submission must be a regular JSON file:" in text
+    assert "git diff --no-renames --name-only" in text
     assert "load_publishable_result(path)" in text
     assert "load_archive_results" in text
     assert '"results/submitted",' not in text
@@ -98,6 +98,15 @@ def test_validate_result_workflow_checks_scope_before_running_pr_code():
     assert scope_step < install_step < validate_step
     assert "if: steps.scope.outputs.changed_count != '0'" in text
     assert "changed_count=${count}" in text
+
+
+def test_label_workflow_has_pr_write_access_and_checks_renamed_paths():
+    text = workflow_text("label_pull_request.yml")
+    assert "pull_request_target:" in text
+    assert "pull-requests: write" in text
+    assert "issues: write" not in text
+    assert "actions/checkout@" not in text
+    assert "file.previous_filename" in text
 
 
 def test_leaderboard_html_has_a_description_and_og_tags():
@@ -368,7 +377,7 @@ def test_json_only_submission_passes_both_ci_policies(tmp_path):
     workflow = workflow_text('validate_result.yml')
     scope = workflow.split('      - name: Check pull request scope', 1)[1]
     script = textwrap.dedent(scope.split('        run: |\n', 1)[1].split('\n      - name:', 1)[0])
-    env = dict(os.environ, TARGET_BRANCH=base, GITHUB_OUTPUT=str(tmp_path / 'output'), INDEX_BASE_SHA=base)
+    env = dict(os.environ, TARGET_BASE=base, GITHUB_OUTPUT=str(tmp_path / 'output'), INDEX_BASE_SHA=base)
     scope_result = subprocess.run(['bash', '-c', script], cwd=tmp_path, env=env, capture_output=True, text=True)
     assert scope_result.returncode == 0, scope_result.stderr + scope_result.stdout
     quality_script = ROOT / '.github/scripts/check_leaderboard.py'
@@ -379,6 +388,22 @@ def test_json_only_submission_passes_both_ci_policies(tmp_path):
     (tmp_path / 'source.py').write_text('# changed code')
     git('add', 'source.py')
     git('commit', '-qm', 'code change')
+    quality = subprocess.run([sys.executable, str(quality_script)], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert quality.returncode != 0 and 'stale' in quality.stderr
+
+    # Detect both sides of a rename into the archive, even when Git would
+    # normally report only the destination in its name-only output.
+    third = deepcopy(EXAMPLE_RESULT)
+    third['meta']['timestamp'] = '2026-10-04T10:00:00Z'
+    (tmp_path / 'outside.json').write_text(json.dumps(seal_result(third)))
+    git('add', 'outside.json')
+    git('commit', '-qm', 'outside result')
+    rename_base = git('rev-parse', 'HEAD')
+    git('mv', 'outside.json', 'results/submitted/three.json')
+    git('commit', '-qm', 'move result into archive')
+    env.update(TARGET_BASE=rename_base, INDEX_BASE_SHA=rename_base)
+    scope_result = subprocess.run(['bash', '-c', script], cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert scope_result.returncode != 0 and 'outside.json' in scope_result.stdout
     quality = subprocess.run([sys.executable, str(quality_script)], cwd=tmp_path, env=env, capture_output=True, text=True)
     assert quality.returncode != 0 and 'stale' in quality.stderr
 

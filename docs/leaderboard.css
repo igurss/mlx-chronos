@@ -217,6 +217,8 @@ tbody tr:not(.details-row):hover td { background: var(--surface-muted); }
 .engine-vllm-mlx { background: #79acc4; }
 .engine-mlx-lm { background: #7182ab; }
 .engine-ollama { background: #4a617b; }
+.engine-lmstudio { background: #5c9290; }
+.engine-mlx-serve { background: #8a6f9e; }
 .metric-strong { color: var(--blue-hot); font-weight: 750; font-variant-numeric: tabular-nums; }
 .ram-cell { display: flex; flex-direction: column; line-height: 1.28; }
 .ram-cell .muted { font-size: 0.82em; }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mlx-Chronos Leaderboard</title>
-  <meta name="description" content="Community-driven benchmark suite and public leaderboard for MLX inference on Apple Silicon: Ollama, oMLX, Rapid-MLX, mlx-lm, vllm-mlx, and experimental LM Studio MLX support." />
+  <meta name="description" content="Community-driven benchmark suite and public leaderboard for MLX inference on Apple Silicon: Ollama, oMLX, Rapid-MLX, mlx-lm, vllm-mlx, mlx-serve, and experimental LM Studio MLX support." />
   <meta property="og:title" content="mlx-Chronos Leaderboard" />
   <meta property="og:description" content="Community-driven benchmark suite and public leaderboard comparing MLX inference engines on Apple Silicon." />
   <meta property="og:type" content="website" />
@@ -628,24 +628,27 @@
     }
 
     function representativeRowsByEngine(rows) {
-      const groups = new Map();
-      rows.forEach(row => {
-        if (!groups.has(row.engine)) groups.set(row.engine, []);
-        groups.get(row.engine).push(row);
-      });
+      const representatives = new Map();
+      for (const row of rows) {
+        const previous = representatives.get(row.engine);
+        if (!previous || compareRunRecency(row, previous) < 0) {
+          representatives.set(row.engine, row);
+        }
+      }
 
-      return [...groups.values()]
-        .map(group => group.slice().sort(compareRunRecency)[0])
+      return [...representatives.values()]
         .sort((a, b) => numericSortValue(b.tps) - numericSortValue(a.tps));
     }
 
     function compareRunRecency(a, b) {
-      const dateDiff = (
-        Date.parse(b.timestamp || b.date || 0) -
-        Date.parse(a.timestamp || a.date || 0)
-      );
-      if (dateDiff !== 0) return dateDiff;
-      return numericSortValue(b.tps) - numericSortValue(a.tps);
+      const dateDiff = numericSortValue(Date.parse(b.timestamp || b.date)) -
+        numericSortValue(Date.parse(a.timestamp || a.date));
+      if (dateDiff) return dateDiff;
+      // Date.parse only keeps milliseconds, but the result records microseconds.
+      const subMillisecond = row => (row.timestamp || "").match(/\.\d{3}(\d{1,3})/)?.[1]?.padEnd(3, "0") || "000";
+      const fractionDiff = Number(subMillisecond(b)) - Number(subMillisecond(a));
+      if (fractionDiff) return fractionDiff;
+      return numericSortValue(b.tps) - numericSortValue(a.tps) || 0;
     }
 
     function runSummaryCell(row, allMatchingRows) {
@@ -815,7 +818,7 @@
         return;
       }
 
-      const rows = rawRows().slice().sort(compareRawRows);
+      const rows = sortedRawRows();
 
       rawHead.innerHTML = rawHeadHtml(columns);
 
@@ -846,25 +849,20 @@
       }).join("");
     }
 
-    function compareRawRows(a, b) {
-      const column = [...BASE_RAW_COLUMNS, ...OPTIONAL_RAW_COLUMNS]
-        .find(item => item.sortKey === rawSortKey);
-      const av = valueForSort(a, rawSortKey);
-      const bv = valueForSort(b, rawSortKey);
-      let cmp;
-      if (column?.numeric) {
-        cmp = numericSortValue(av) - numericSortValue(bv);
-      } else {
-        cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, {
-          numeric: true,
-          sensitivity: "base",
-        });
-      }
-      return rawSortAsc ? cmp : -cmp;
+    function sortedRawRows() {
+      const column = visibleRawColumns().find(item => item.sortKey === rawSortKey);
+      return rawRows().sort((a, b) => compareRawValues(column, a[rawSortKey], b[rawSortKey], rawSortAsc));
     }
 
-    function valueForSort(row, key) {
-      return row[key];
+    function compareRawValues(column, left, right, ascending) {
+      const numeric = column?.numeric === true;
+      const leftMissing = left == null || left === "" || (numeric && !Number.isFinite(Number(left)));
+      const rightMissing = right == null || right === "" || (numeric && !Number.isFinite(Number(right)));
+      if (leftMissing || rightMissing) return Number(leftMissing) - Number(rightMissing);
+      const cmp = numeric
+        ? Number(left) - Number(right)
+        : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+      return ascending ? cmp : -cmp;
     }
 
     // column.value() renders HTML (badges, links, bold tags) for the table
@@ -956,12 +954,12 @@
     }
 
     function exportFilteredRowsAsCsv() {
-      const csv = buildCsvExport(visibleRawColumns(), rawRows().slice().sort(compareRawRows));
+      const csv = buildCsvExport(visibleRawColumns(), sortedRawRows());
       downloadTextFile(csv, "mlx-chronos-leaderboard.csv", "text/csv");
     }
 
     function exportFilteredRowsAsJson() {
-      const json = buildJsonExport(rawRows().slice().sort(compareRawRows));
+      const json = buildJsonExport(sortedRawRows());
       downloadTextFile(json, "mlx-chronos-leaderboard.json", "application/json");
     }
 
@@ -1170,6 +1168,10 @@
         visibleOptionalColumns.add(input.value);
       } else {
         visibleOptionalColumns.delete(input.value);
+        if (!visibleRawColumns().some(column => column.sortKey === rawSortKey)) {
+          rawSortKey = "tps";
+          rawSortAsc = false;
+        }
       }
       renderRaw();
     });

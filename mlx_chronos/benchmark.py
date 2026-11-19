@@ -509,6 +509,7 @@ def run_benchmark(
     cache_hits_before_cached_trials = None
     warmup_calls = 2
     warmup_failures = 0
+    last_warmup_error: Exception | None = None
 
     peak_ram_gb = None
     system_ram_peak_gb = None
@@ -549,11 +550,13 @@ def run_benchmark(
                         )
                     except Exception as exc:
                         warmup_failures += 1
-                        logger.warning(f"  Warmup call failed and was skipped: {exc}")
+                        last_warmup_error = exc
+                        logger.warning("  Warmup call failed and was skipped: %s", exc)
                 if warmup_failures == warmup_calls:
                     raise RuntimeError(
-                        "all warmup calls failed; benchmark did not reach a warmed state"
-                    )
+                        "all warmup calls failed; benchmark did not reach a warmed state: "
+                        f"{last_warmup_error}"
+                    ) from last_warmup_error
                 logger.info("  Done.\n")
 
             logger.info(

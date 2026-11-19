@@ -76,6 +76,16 @@ def test_persistent_measurements_reuse_the_tcp_connection(method):
         assert server.connections == 1
 
 
+@pytest.mark.parametrize("persistent", [False, True])
+def test_local_engine_requests_ignore_environment_proxies(monkeypatch, persistent):
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("NO_PROXY", "")
+    with keepalive_server() as (server, engine):
+        with engine.http_client() if persistent else nullcontext() as client:
+            assert engine.measure_ttft("normal", model="fake", client=client) > 0
+        assert server.requests == 1
+
+
 def test_context_usage_fallback_reads_the_open_http_error_body():
     with keepalive_server() as (server, engine), engine.http_client() as client:
         value = engine.measure_ttft_with_input_tokens("reject usage", model="fake", client=client)
@@ -139,11 +149,12 @@ def test_stream_deadline_bounds_continuous_heartbeats():
             engine.measure_ttft("fake")
 
 
-def test_estimated_words_preserve_boundaries_between_chunks():
+@pytest.mark.parametrize("interval", [None, 2])
+def test_estimated_words_preserve_boundaries_between_chunks(interval):
     fragments = ["hel", "lo\tworld", "\u2003", "next", " word\n", "last"]
     lines = [json.dumps({"choices": [{"delta": {"content": text}}]}) for text in fragments]
     with stream_client([*lines, "[DONE]"]) as client:
-        value = OMLXEngine().measure_throughput("fake", client=client, progress_sample_interval_tokens=2)
+        value = OMLXEngine().measure_throughput("fake", client=client, progress_sample_interval_tokens=interval)
     assert value.completion_tokens == len("".join(fragments).split()) == 5
     assert value.token_count_source == "word_fallback"
 
@@ -219,6 +230,17 @@ def test_estimated_progress_ends_at_delayed_done():
     assert result.elapsed_seconds == 1.0
     assert result.progress_samples[-1]['elapsed_seconds'] == result.elapsed_seconds
     assert result.progress_samples[-1]['tokens_per_second'] == 100.0
+
+
+def test_burst_records_the_last_threshold_once_at_its_arrival_time():
+    content = json.dumps({'choices': [{'delta': {'content': 'word ' * 103}}]})
+    with stream_client([content, '[DONE]']) as client, patch('mlx_chronos.engines.time') as clock:
+        clock.monotonic.return_value = 0.
+        clock.perf_counter.side_effect = [0.0, 0.2, 1.0]
+        result = OMLXEngine().measure_throughput('fake', client=client, progress_sample_interval_tokens=10)
+    assert [(sample['completion_tokens'], sample['elapsed_seconds']) for sample in result.progress_samples] == [
+        (100, 0.2), (103, 1.0),
+    ]
 
 
 @pytest.mark.parametrize('prior_content', [False, True])

@@ -5,7 +5,10 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
+import os
+import stat
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 
@@ -20,19 +23,49 @@ class IntegrityError(ValueError):
     """Raised when a benchmark result integrity seal is missing or invalid."""
 
 
-def unsigned_result(data: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a deep copy of result data without the top-level integrity seal."""
+def read_result_bytes(path: Path) -> bytes:
+    """Read a regular file without blocking if the path points to a FIFO."""
+    def open_non_blocking(name: str, flags: int) -> int:
+        return os.open(name, flags | getattr(os, "O_NONBLOCK", 0))
+
+    with open(path, "rb", opener=open_non_blocking) as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise OSError("not a file")
+        return handle.read()
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate result key: {key!r}")
+        result[key] = value
+    return result
+
+
+def decode_result_json(raw: bytes) -> Any:
+    """Decode the unambiguous UTF-8 representation used by result seals."""
+    try:
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
+    except RecursionError as exc:
+        raise ValueError("result JSON is nested too deeply") from exc
+
+
+def _without_seal(data: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(data, Mapping):
         raise IntegrityError("result must be a JSON object")
-    result = deepcopy(dict(data))
-    result.pop("integrity", None)
-    return result
+    return {key: value for key, value in data.items() if key != "integrity"}
+
+
+def unsigned_result(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a deep copy of result data without the top-level integrity seal."""
+    return deepcopy(_without_seal(data))
 
 
 def canonical_result_bytes(data: Mapping[str, Any]) -> bytes:
     """Serialize result JSON deterministically for integrity hashing."""
     return json.dumps(
-        unsigned_result(data),
+        _without_seal(data),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -108,7 +141,7 @@ def validate_integrity_seal(data: Mapping[str, Any]) -> None:
 
     try:
         expected_digest = result_digest(data)
-    except (ValueError, TypeError) as exc:
+    except (ValueError, TypeError, RecursionError) as exc:
         raise IntegrityError(f"result content is not canonical JSON: {exc}") from exc
     if digest != expected_digest:
         raise IntegrityError("result integrity digest does not match result content")

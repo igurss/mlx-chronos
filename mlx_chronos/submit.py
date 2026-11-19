@@ -1,4 +1,3 @@
-import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -23,7 +22,12 @@ from mlx_chronos.constants import (
     SUSTAINED_TRIALS,
     TOKEN_COUNT_SOURCE_USAGE,
 )
-from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
+from mlx_chronos.integrity import (
+    IntegrityError,
+    decode_result_json,
+    read_result_bytes,
+    validate_integrity_seal,
+)
 from mlx_chronos.http_retry import request_with_retry
 from mlx_chronos.numeric import require_finite_positive
 from mlx_chronos.protocol import (
@@ -431,15 +435,15 @@ def load_publishable_result(
 ) -> tuple[bytes, BenchmarkResult]:
     """Load, validate, and check whether a result can be submitted publicly."""
     try:
-        raw = path.read_bytes()
+        raw = read_result_bytes(path)
     except OSError as exc:
         raise SubmissionError(f"could not read result file: {path}") from exc
 
     try:
-        data = json.loads(raw.decode("utf-8"))
+        data = decode_result_json(raw)
     except UnicodeDecodeError as exc:
         raise SubmissionError("result file must be UTF-8 encoded JSON") from exc
-    except json.JSONDecodeError as exc:
+    except ValueError as exc:
         raise SubmissionError(f"result file is not valid JSON: {exc}") from exc
 
     try:

@@ -19,12 +19,12 @@ def submission_only(base: str, *, root: Path = Path('.')) -> bool:
     ).returncode != 0:
         return False
     paths = subprocess.check_output(
-        ['git', 'diff', '--name-only', '-z', base, 'HEAD', '--'], cwd=root,
+        ['git', 'diff', '--no-renames', '--name-only', '-z', base, 'HEAD', '--'], cwd=root,
     ).decode('utf-8').split('\0')
     changed = [Path(path) for path in paths if path]
     return bool(changed) and all(
         path.parts[:2] == ('results', 'submitted') and path.suffix == '.json'
-        and (root / path).is_file() for path in changed
+        and (root / path).is_file() and not (root / path).is_symlink() for path in changed
     )
 
 

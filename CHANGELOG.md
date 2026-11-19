@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Avoid intermediate overflow in repeated-session median, quartile and MAD
+  calculations, retaining small observations alongside extreme finite values.
+  Handle unrepresentable integers as numeric errors and keep sample deviation
+  usable on Python 3.10 when only the intermediate variance exceeds float range.
+- Identify Basin as the third-party submission inbox receiving result JSON and
+  optional contact email. Add distinct leaderboard colors for LM Studio and
+  mlx-serve, and include mlx-serve in the page description.
+- Count fallback words incrementally across streamed chunks, coalesce progress
+  thresholds received in the same event, and keep local engine traffic independent
+  of environment proxies. Include the underlying error when all warmups fail.
+- Reject ambiguous JSON result keys and non-regular input files, avoid deep
+  copies when hashing result seals, and clean up interrupted report writes.
+- Preserve microsecond run ordering in the leaderboard and place missing
+  measurements last in sortable tables and exports.
+- Check both sides of file renames in submission workflows and grant the
+  PR-labeling workflow the pull-request permission used by its API calls.
+
 ## [0.6.0] — 2026-10-11
 
 Minor release adding reusable run configurations, richer repeated-session and

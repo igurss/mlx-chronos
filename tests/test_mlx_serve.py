@@ -4,6 +4,7 @@ Model/load/version shapes follow upstream server.zig at
 0f01d299d3d7759a7222b2117567053b6d350b89. No inference is needed for discovery.
 """
 from copy import deepcopy
+from functools import partial
 import json
 from subprocess import CompletedProcess
 from unittest.mock import patch
@@ -312,9 +313,13 @@ def mlx_serve_contract_transport():
                                   + "data: [DONE]\n\n", headers={"Content-Type": "text/event-stream"})
         return httpx.Response(404)
 
+    def local_request(method, url, *, trust_env, **kwargs):
+        assert trust_env is False
+        return client.request(method, url, **kwargs)
+
     with httpx.Client(transport=httpx.MockTransport(handle)) as client, \
-         patch("mlx_chronos.engines.httpx.get", side_effect=client.get), \
-         patch("mlx_chronos.engines.httpx.post", side_effect=client.post):
+         patch("mlx_chronos.engines.httpx.get", side_effect=partial(local_request, "GET")), \
+         patch("mlx_chronos.engines.httpx.post", side_effect=partial(local_request, "POST")):
         yield engine, client, state["requests"]
 
 

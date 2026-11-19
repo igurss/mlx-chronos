@@ -28,6 +28,16 @@ def test_archive_rejects_duplicate_digest(tmp_path):
         load_archive_results(tmp_path)
 
 
+def test_archive_rejects_a_link_to_a_valid_result(tmp_path):
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    original = write_result(tmp_path / "outside.json", EXAMPLE_RESULT)
+    (archive / "linked.json").symlink_to(original)
+
+    with pytest.raises(ValueError, match="submitted results must be regular files"):
+        load_archive_results(archive)
+
+
 def test_archive_rejects_resealed_duplicate_run_identity(tmp_path):
     first = copy.deepcopy(EXAMPLE_RESULT)
     second = copy.deepcopy(EXAMPLE_RESULT)

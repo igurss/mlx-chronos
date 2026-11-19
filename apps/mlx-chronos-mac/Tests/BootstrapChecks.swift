@@ -11,11 +11,20 @@ struct BootstrapChecks {
             let catalogURL = URL(fileURLWithPath: CommandLine.arguments[1])
             let bridge = URL(fileURLWithPath: CommandLine.arguments[2])
             let manager = RuntimeManager(root: root, catalogURL: catalogURL)
+            let catalog = try JSONDecoder().decode(RuntimeCatalog.self, from: Data(contentsOf: catalogURL))
+            let pythonDirectory = root.appendingPathComponent("python/\(catalog.python.version)-\(catalog.python.sha256.prefix(16))")
+            try FileManager.default.createDirectory(at: pythonDirectory, withIntermediateDirectories: true)
+            try Data("interrupted extraction".utf8).write(to: pythonDirectory.appendingPathComponent("partial"))
             let first = try await manager.synchronize(bridge: bridge, status: { print($0) })
             guard let candidate = first.candidate, let active = ActiveRuntime.read(at: root),
                   candidate.pythonPath.hasPrefix(root.path),
                   FileManager.default.fileExists(atPath: root.appendingPathComponent("python").path) else {
                 throw CommandError.invalid("Fresh private Python bootstrap failed")
+            }
+            let pythonEntries = try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("python").path)
+            guard pythonEntries.contains(where: { $0.hasPrefix(".incomplete-") }),
+                  !pythonEntries.contains(where: { $0.hasPrefix(".staging-") }) else {
+                throw CommandError.invalid("Python recovery did not preserve the incomplete copy and promote the verified copy")
             }
             let second = try await manager.synchronize(bridge: bridge)
             guard second.candidate == candidate else { throw CommandError.invalid("Unchanged CLI was reinstalled") }
@@ -62,6 +71,8 @@ struct BootstrapChecks {
             }
             try Data("raise RuntimeError('simulated broken package')\n".utf8)
                 .write(to: URL(fileURLWithPath: package).appendingPathComponent("__init__.py"))
+            let snapshot = root.appendingPathComponent("managed-runtimes/\(active.environment)/resolved-dependencies.json")
+            try Data("invalid snapshot".utf8).write(to: snapshot)
             let repaired = try await manager.synchronize(bridge: bridge)
             guard repaired.candidate != nil, repaired.candidate != candidate, let working = ActiveRuntime.read(at: root) else {
                 throw CommandError.invalid("Launch checks failed to repair the broken private CLI")
@@ -75,7 +86,7 @@ struct BootstrapChecks {
             guard ActiveRuntime.read(at: root)?.environment == working.environment else {
                 throw CommandError.invalid("Rejected rollback replaced the working CLI")
             }
-            print("Fresh standalone bootstrap, reuse, repair, verified rollback, checksum failure and broken-copy recovery passed.")
+            print("Private Python bootstrap, interrupted extraction, repair, verified rollback, checksum failure and broken-copy recovery passed.")
         } catch {
             fputs("Bootstrap failed: \(error.localizedDescription)\n", stderr)
             exit(1)

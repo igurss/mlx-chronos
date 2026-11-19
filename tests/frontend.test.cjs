@@ -80,6 +80,20 @@ test("engine comparison always ranks by request throughput", () => {
   assert.equal(context.representativeRowsByEngine(rows)[0].engine, "mlx-lm");
 });
 
+test("latest representative uses the recorded microseconds before throughput", () => {
+  const recent = { engine: "omlx", timestamp: "2026-01-01T00:00:00.123456Z", tps: 10 };
+  const older = { engine: "omlx", timestamp: "2026-01-01T01:00:00.123450+01:00", tps: 50 };
+  assert.equal(context.representativeRowsByEngine([older, recent])[0], recent);
+});
+
+test("raw tables put missing observations last in both directions", () => {
+  const column = { numeric: true };
+  for (const ascending of [false, true]) {
+    const values = [null, 5, "", 0, 3].sort((a, b) => context.compareRawValues(column, a, b, ascending));
+    assert.deepEqual(values, ascending ? [0, 3, 5, null, ""] : [5, 3, 0, null, ""]);
+  }
+});
+
 test("the emphasised comparison column is the one the table is ranked by", () => {
   const row = {
     _id: "row-0",

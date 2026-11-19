@@ -12,7 +12,8 @@ final class CommandLog: ObservableObject {
         if pending.count > limit { pending = String(pending.suffix(limit)) }
         if flushTask == nil {
             flushTask = Task {
-                try? await Task.sleep(for: .milliseconds(100))
+                do { try await Task.sleep(for: .milliseconds(100)) }
+                catch { return }
                 flush()
             }
         }

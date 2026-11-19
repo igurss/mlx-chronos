@@ -6,7 +6,6 @@ and missing evidence are reported without certifying equivalence or causality.
 
 from __future__ import annotations
 
-import json
 import statistics
 from collections.abc import Callable
 from pathlib import Path
@@ -14,7 +13,12 @@ from typing import Literal, TypedDict
 
 from pydantic import ValidationError
 
-from mlx_chronos.integrity import IntegrityError, validate_integrity_seal
+from mlx_chronos.integrity import (
+    IntegrityError,
+    decode_result_json,
+    read_result_bytes,
+    validate_integrity_seal,
+)
 from mlx_chronos.schema import BenchmarkResult
 from mlx_chronos.stats import compute_series_stats
 
@@ -30,17 +34,19 @@ def load_result_for_compare(path: Path) -> BenchmarkResult:
     valid BenchmarkResult — a missing file, invalid JSON, or a file that
     fails schema validation.
     """
-    if not path.exists():
-        raise CompareError(f"{path}: file not found")
-    if not path.is_file():
-        raise CompareError(f"{path}: not a file")
     try:
-        raw = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as exc:
+        raw = read_result_bytes(path)
+    except FileNotFoundError as exc:
+        raise CompareError(f"{path}: file not found") from exc
+    except IsADirectoryError as exc:
+        raise CompareError(f"{path}: not a file") from exc
+    except OSError as exc:
         raise CompareError(f"{path}: could not read file: {exc}") from exc
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        data = decode_result_json(raw)
+    except UnicodeDecodeError as exc:
+        raise CompareError(f"{path}: could not read file: {exc}") from exc
+    except ValueError as exc:
         raise CompareError(f"{path}: not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise CompareError(f"{path}: result must be a JSON object")

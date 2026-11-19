@@ -690,6 +690,9 @@ If opening a PR is inconvenient, send a validated result directly:
 mlx-chronos submit --file results/local/your-result.json
 ```
 
+The default inbox uses Basin (`usebasin.com`), a third-party service that receives
+the full result JSON and any contact email you provide. `--dry-run` sends nothing.
+
 Pass `--email you@example.com` (or set `MLX_CHRONOS_SUBMITTER_EMAIL`) so
 maintainers can reply about your submission. Without it, the inbox uses an
 anonymous placeholder contact address, never the maintainer's address.
